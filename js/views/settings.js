@@ -7,6 +7,7 @@ import { icon } from '../icons.js';
 import { card, toggle } from '../components.js';
 import { signOut } from '../backends/live.js';
 import { accountPanel } from './account-ui.js';
+import { pushState, enablePush, disablePush, showHere, pushEntities } from '../push.js';
 import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS } from '../account.js';
 
 export function renderSettings(root, cleanup, { reconnect }) {
@@ -21,7 +22,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
 
   let mode = settings.mode;
   const modeTabs = h('div', { class: 'segmented', role: 'tablist' });
-  const urlInput = h('input', { class: 'input', type: 'url', value: settings.hassUrl, 'aria-label': 'Home Assistant address', placeholder: 'http://homeassistant.local' });
+  const urlInput = h('input', { class: 'input', type: 'url', value: settings.hassUrl, 'aria-label': 'Home Assistant address', placeholder: 'http://homeassistant.local:8123' });
   const urlField = h('label', { class: 'field' }, h('span', null, 'Home Assistant address'), urlInput);
   const liveHelp = h('p', { class: 'muted small' }, 'Connecting opens Home Assistant\'s own login page. Your password goes only to Home Assistant; the app keeps a sign-in token on this device.');
   const drawMode = () => {
@@ -102,6 +103,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('a', { class: 'shortcut', href: '#/devices?tab=rooms' }, icon('rooms', 20), h('span', null, 'Rooms'), icon('right', 16))),
     card({ title: 'Evra account', iconName: 'person', className: 'account-card' }, accountPanel(cleanup), accountsServerField()),
     card({ title: 'Connection', iconName: 'home' }, statusLine, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
+    notifyCard(cleanup),
     lookCard(),
     card({ title: 'Preferences', iconName: 'gear' },
       settingRow('Appearance', 'Auto follows this device\'s light or dark setting.', themeTabs),
@@ -132,6 +134,58 @@ function accountsServerField() {
     toast('Evra accounts address saved. Sign in again.');
   });
   return form;
+}
+
+// ---- notifications on this device (js/push.js) ---------------------------------------
+
+const PUSH_HINTS = {
+  unsupported: 'This browser can\'t receive notifications. On a phone, use Chrome (Android) or Safari (iPhone).',
+  insecure: 'Phones only allow notifications for apps opened over https://. Give Home Assistant a secure address (for example Home Assistant Cloud, DuckDNS or Tailscale) and open Evra through it.',
+  install: 'On an iPhone, first add Evra to the home screen (Share › Add to Home Screen), then open it from there and switch this on.',
+  blocked: 'Notifications are blocked for Evra. Allow them in the browser\'s site settings, then come back here.',
+  ready: 'Alerts from your automations (water leak, smoke, a door left open) arrive here even when Evra is closed.',
+  on: 'Alerts from your automations arrive on this device even when Evra is closed.',
+};
+
+function notifyCard(cleanup) {
+  const hint = h('small');
+  const sw = toggle('Notifications on this device', async (on) => {
+    try {
+      if (on) { await enablePush(); toast('Notifications are on for this device'); } else { await disablePush(); toast('Notifications are off for this device'); }
+    } catch (e) {
+      toast(`Couldn't switch notifications ${on ? 'on' : 'off'}: ${e.message}`, 'error');
+    } finally {
+      // Puts the switch where things really are, also after a failure.
+      draw();
+    }
+  });
+  const testBtn = h('button', { class: 'btn small', type: 'button' }, icon('bell', 16), 'Send a test');
+  testBtn.addEventListener('click', async () => {
+    const title = 'Evra test';
+    const message = 'Notifications work on this device.';
+    try {
+      if (store.backend?.mode === 'live') {
+        const targets = pushEntities();
+        if (!targets.length) { toast('Home Assistant hasn\'t listed this device yet; try again in a moment', 'error'); return; }
+        await store.call('notify', 'send_message', { entity_id: targets }, { title, message });
+        toast(targets.length > 1 ? `Sent to ${targets.length} Evra devices` : 'Sent');
+      } else if (await showHere(title, message)) toast('Sent');
+    } catch { /* store.call already said why */ }
+  });
+  const draw = () => {
+    const state = pushState();
+    hint.textContent = PUSH_HINTS[state];
+    sw.set(state === 'on', !['ready', 'on'].includes(state));
+    testBtn.hidden = state !== 'on';
+  };
+  draw();
+  // Coming back from the browser's settings (a permission may have changed).
+  const onVisible = () => { if (document.visibilityState === 'visible') draw(); };
+  document.addEventListener('visibilitychange', onVisible);
+  cleanup.push(() => document.removeEventListener('visibilitychange', onVisible));
+  return card({ title: 'Notifications', iconName: 'bell' },
+    h('div', { class: 'setting-row' }, h('div', { class: 'setting-text' }, h('strong', null, 'On this device'), hint), sw),
+    h('div', { class: 'btn-row' }, testBtn));
 }
 
 function settingRow(title, hint, control) {

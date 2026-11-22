@@ -95,6 +95,7 @@
   <section class="card">
     <h2>Notifications</h2>
     <label class="row"><input type="checkbox" id="phone"> <span>A phone with the Home Assistant app is connected (makes <code>notify.notify</code> exist)</span></label>
+    <div class="row"><span class="grow muted small" id="pushinfo"></span><button id="pushtest">Send a test to Evra</button></div>
     <div id="notes" class="log"></div>
     <div class="row"><button id="clearnotes">Clear</button></div>
   </section>
@@ -183,6 +184,9 @@ function render(s) {
   $('matter').innerHTML = s.matter.length ? s.matter.map((x) => `<div class="ent"><span class="name">${esc(x.name)}</span><code>${esc(x.code)}</code></div>`).join('') : '<p class="muted small">No Matter devices waiting.</p>';
   $('cloud').innerHTML = s.cloud.length ? `<p class="muted small">In the app these say "Link the account in Home Assistant", which opens <a href="/config/integrations/dashboard/add?domain=tuya" target="_blank" style="color:var(--accent)">this page</a>. Waiting: ${s.cloud.map((x) => esc(x.name)).join(', ')}.</p>` : '<p class="muted small">Every cloud device has been added.</p>';
   $('phone').checked = s.phone_app;
+  $('pushinfo').textContent = !s.push.ready ? 'Evra notifications need pywebpush: python -m pip install pywebpush, then restart the hub.'
+    : s.push.devices.length ? `Evra notifications on: ${s.push.devices.join(', ')}` : 'No device has switched on notifications in Evra (Settings › Notifications) yet.';
+  $('pushtest').disabled = !s.push.ready || !s.push.devices.length;
   $('notes').innerHTML = s.notifications.length ? s.notifications.map((n) => `<div class="note"><b>${esc(n.title)} <span class="tag ${n.phone ? 'phone' : ''}">${n.phone ? 'phone' : 'Home Assistant'}</span></b>${esc(n.message)}<div class="muted small">${new Date(n.at).toLocaleTimeString()}</div></div>`).join('') : '<p class="muted small">No notifications yet. Automations that "send a notification" show up here.</p>';
   $('devices').innerHTML = s.devices.map((d) => `<div class="device"><div class="row"><h3 class="grow">${esc(d.name)}</h3><span class="muted small">${esc(d.model || '')} · ${esc(d.integration || '')}${d.area ? ' · ' + esc(d.area) : ''}</span></div>
     ${d.entities.filter((e) => !e.entity_id.startsWith('button.')).map((e) => `<div class="ent"><span class="name" title="${esc(e.entity_id)}">${esc(e.name)}</span><span class="val ${valueClass(e)}">${esc(e.state)}${e.unit ? ' ' + esc(e.unit) : ''}</span>${controls(e)}</div>`).join('')}
@@ -212,6 +216,7 @@ $('join').addEventListener('click', () => act({ kind: 'join', product: $('zb').v
 $('netadd').addEventListener('click', () => act({ kind: 'network-add', product: $('wifi').value }));
 $('phone').addEventListener('change', (e) => act({ kind: 'phone', on: e.target.checked }));
 $('clearnotes').addEventListener('click', () => act({ kind: 'clear-notifications' }));
+$('pushtest').addEventListener('click', () => act({ kind: 'push-test' }));
 $('mkupdate').addEventListener('click', () => act({ kind: 'update-available' }));
 $('reset').addEventListener('click', () => { if (confirm('Reset the test home to the snapshot?')) act({ kind: 'reset' }); });
 refresh();

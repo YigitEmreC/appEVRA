@@ -292,7 +292,8 @@ function renderProduct(root, cleanup, p) {
   const before = new Set(store.devices.keys());
   const newDeviceId = () => [...store.devices.keys()].find((id) => !before.has(id));
 
-  function show(...kids) { if (alive) panel.replaceChildren(...kids); }
+  // Empty parts (no hint, no title) are skipped; replaceChildren would print them as "null".
+  function show(...kids) { if (alive) panel.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false)); }
 
   // Final step: name it and pick a room.
   function finish(deviceId) {
@@ -402,43 +403,133 @@ function renderProduct(root, cleanup, p) {
     return;
   }
 
-  // 'flow': a Home Assistant setup form.
+  // 'flow': a Home Assistant setup form. Its texts (titles, explanations, field
+  // names, help, errors) are the integration's own, from Home Assistant.
+  const domain = p.integration;
+  let tr = {};
+  const T = (key, fallback, ph) => fillIn(tr[`component.${domain}.config.${key}`] ?? fallback, ph);
   const start = h('button', { class: 'btn primary', type: 'button' }, icon('link', 16), 'Start setup');
   show(p.pairHint ? h('p', { class: 'hint' }, icon('sparkle', 16), p.pairHint) : null, start);
   start.addEventListener('click', async () => {
     if (notConnected()) return;
-    try { renderStep(await store.backend.flowStart(p.integration, p)); }
-    catch (err) { show(h('p', { class: 'error-line' }, `Couldn't start the setup: ${err.message}`), fallbackLink()); }
+    start.disabled = true;
+    show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Looking for it…'));
+    tr = await flowTexts(domain);
+    if (!(await offerFound())) begin();
   });
+
+  async function begin() {
+    try { renderStep(await store.backend.flowStart(domain, p)); }
+    catch (err) { show(h('p', { class: 'error-line' }, `Couldn't start the setup: ${err.message}`), fallbackLink()); }
+  }
+
+  // Home Assistant finds many Wi-Fi devices by itself (Tapo, Shelly, ESPHome) and
+  // keeps a setup waiting for each. Offer those first; setting the same device up
+  // again by address would stop with "already in progress".
+  async function offerFound(note) {
+    let found = [];
+    try { found = (await store.backend.flowProgress?.(domain)) || []; } catch { /* older Home Assistant: just ask for the address */ }
+    if (!alive) return true;
+    if (!found.length) return false;
+    const nameOf = (f) => { const tp = f.context?.title_placeholders || {}; return tp.name || Object.values(tp)[0] || p.name; };
+    show(
+      note ? h('p', { class: 'hint' }, icon('sparkle', 16), note) : null,
+      h('p', null, found.length === 1 ? 'Home Assistant found this one on your network:' : 'Home Assistant found these on your network:'),
+      h('div', { class: 'found-list' }, found.map((f) => h('div', { class: 'found-row' },
+        icon(p.icon, 18), h('span', { class: 'found-name' }, nameOf(f)),
+        h('button', { class: 'btn small primary', type: 'button', onclick: () => openFlow(f.flow_id) }, 'Set up')))),
+      h('button', { class: 'btn ghost', type: 'button', onclick: begin }, 'Set up a different one by its address'));
+    return true;
+  }
+
+  async function openFlow(flowId) {
+    try { renderStep(await store.backend.flowGet(flowId)); }
+    catch (err) { show(h('p', { class: 'error-line' }, `Couldn't open that setup: ${err.message}`), fallbackLink()); }
+  }
 
   function fallbackLink() {
     return store.backend?.integrationUrl
-      ? h('a', { class: 'btn', href: store.backend.integrationUrl(p.integration), target: '_blank', rel: 'noopener' }, icon('external', 16), 'Set it up in Home Assistant')
+      ? h('a', { class: 'btn', href: store.backend.integrationUrl(domain), target: '_blank', rel: 'noopener' }, icon('external', 16), 'Set it up in Home Assistant')
       : null;
   }
 
-  function renderStep(step) {
+  // The step's title and explanation, when the integration has them.
+  function heading(step) {
+    const ph = step.description_placeholders || {};
+    const title = T(`step.${step.step_id}.title`, null, ph);
+    const desc = T(`step.${step.step_id}.description`, null, ph);
+    return [title ? h('h3', { class: 'flow-title' }, title) : null, desc ? richText(desc) : null];
+  }
+
+  async function renderStep(step) {
     if (!alive || !step) return;
+    const ph = step.description_placeholders || {};
     if (step.type === 'create_entry') { awaitDevice(`${step.title || p.name} added. Waiting for its device…`); return; }
     if (step.type === 'abort') {
-      const reason = { already_configured: 'This device is already set up.', no_devices_found: 'No device was found on the network.', cannot_connect: 'Couldn\'t reach the device.' }[step.reason] || `Setup stopped: ${step.reason}`;
+      if (step.reason === 'already_in_progress' && await offerFound('Home Assistant is already setting this device up. Continue it here:')) return;
+      const reason = T(`abort.${step.reason}`, ABORTS[step.reason] || `Setup stopped: ${String(step.reason).replace(/_/g, ' ')}`, ph);
       show(h('p', { class: 'error-line' }, reason), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Start again'));
       return;
     }
     if (step.type === 'menu') {
-      show(h('p', null, 'Choose how to continue:'), h('div', { class: 'btn-row' }, (Array.isArray(step.menu_options) ? step.menu_options : Object.keys(step.menu_options || {})).map((opt) =>
-        h('button', { class: 'btn', type: 'button', onclick: async () => renderStep(await store.backend.flowSubmit(step.flow_id, { next_step_id: opt })) }, String(opt).replace(/_/g, ' ')))));
+      const opts = Array.isArray(step.menu_options) ? step.menu_options.map((o) => [o, null]) : Object.entries(step.menu_options || {});
+      show(...heading(step), h('div', { class: 'btn-row' }, opts.map(([opt, label]) =>
+        h('button', { class: 'btn', type: 'button', onclick: async () => renderStep(await store.backend.flowSubmit(step.flow_id, { next_step_id: opt })) },
+          T(`step.${step.step_id}.menu_options.${opt}`, label || pretty(opt), ph)))));
+      return;
+    }
+    // Home Assistant is busy (waiting for the device, downloading, ...): look again shortly.
+    if (step.type === 'progress') {
+      show(...heading(step), h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), T(`progress.${step.progress_action}`, 'Working on it…', ph)));
+      await sleep(2000);
+      if (alive) openFlow(step.flow_id);
+      return;
+    }
+    if (step.type === 'progress_done' || step.type === 'external_done') { openFlow(step.flow_id); return; }
+    // A sign-in on the maker's website, in another tab.
+    if (step.type === 'external') {
+      show(...heading(step),
+        h('p', null, 'This step opens the maker\'s website. Sign in there, then come back.'),
+        h('div', { class: 'btn-row' },
+          step.url ? h('a', { class: 'btn primary', href: step.url, target: '_blank', rel: 'noopener' }, icon('external', 16), 'Open the sign-in page') : null,
+          h('button', { class: 'btn', type: 'button', onclick: () => openFlow(step.flow_id) }, 'I\'ve signed in, continue')));
       return;
     }
     if (step.type !== 'form') {
       show(h('p', null, 'This step has to be finished in Home Assistant.'), fallbackLink());
       return;
     }
-    const fields = (step.data_schema || []).map((f) => formField(f, step.errors?.[f.name]));
-    const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Continue');
+
+    const sid = step.step_id;
+    const errors = step.errors || {};
+    const errorText = (code) => T(`error.${code}`, readableError(code), ph);
+    const fieldText = (f, section) => {
+      const at = section ? `step.${sid}.sections.${section}` : `step.${sid}`;
+      return {
+        label: T(`${at}.data.${f.name}`, FIELD_LABELS[f.name] || pretty(f.name), ph),
+        help: T(`${at}.data_description.${f.name}`, null, ph),
+        error: section ? (errors[section]?.[f.name] ?? errors[f.name]) : errors[f.name],
+      };
+    };
+    const fields = (step.data_schema || []).map((f) => {
+      if (f.type !== 'expandable') return formField(f, fieldText(f), errorText);
+      // A folded group of fields ("Advanced options"); its values go in their own object.
+      const kids = (f.schema || []).map((k) => formField(k, fieldText(k, f.name), errorText));
+      const box = h('details', { class: 'flow-section', open: !!f.expanded || kids.some((k) => k.hasError) },
+        h('summary', null, T(`step.${sid}.sections.${f.name}.name`, pretty(f.name), ph)),
+        T(`step.${sid}.sections.${f.name}.description`, null, ph) ? richText(T(`step.${sid}.sections.${f.name}.description`, null, ph)) : null,
+        kids.map((k) => k.el));
+      return {
+        name: f.name,
+        el: box,
+        value: () => { const o = {}; for (const k of kids) { const v = k.value(); if (v !== undefined) o[k.name] = v; } return o; },
+      };
+    });
+    const submit = h('button', { class: 'btn primary', type: 'submit' }, fields.length ? 'Continue' : 'Set it up');
     const cancel = h('button', { class: 'btn ghost', type: 'button', onclick: () => { store.backend.flowAbort(step.flow_id); renderAgain(); } }, 'Cancel');
     const form = h('form', { class: 'stack' },
-      step.errors?.base ? h('p', { class: 'error-line' }, readableError(step.errors.base)) : null,
+      ...heading(step),
+      errors.base ? h('p', { class: 'error-line' }, errorText(errors.base)) : null,
       fields.map((f) => f.el), h('div', { class: 'btn-row' }, submit, cancel));
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -458,23 +549,66 @@ function renderProduct(root, cleanup, p) {
 }
 
 const FIELD_LABELS = { host: 'IP address', port: 'Port', username: 'Username', password: 'Password', name: 'Name' };
+const ABORTS = {
+  already_configured: 'This device is already set up.',
+  already_in_progress: 'Home Assistant is already setting this device up. Finish it in Home Assistant.',
+  no_devices_found: 'No device was found on the network.',
+  cannot_connect: 'Couldn\'t reach the device.',
+};
+
+const pretty = (s) => { const t = String(s).replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
+
+// Home Assistant texts have {placeholders} for names and addresses.
+const fillIn = (text, ph) => (text == null ? text : String(text).replace(/\{(\w+)\}/g, (m, k) => (ph && ph[k] != null ? String(ph[k]) : m)));
+
+// The integration's texts once per visit (Home Assistant sends them in English).
+const textCache = new Map();
+async function flowTexts(domain) {
+  if (textCache.has(domain)) return textCache.get(domain);
+  let t = {};
+  try { t = (await store.backend.flowTranslations?.(domain)) || {}; } catch { /* fall back to plain field names */ }
+  textCache.set(domain, t);
+  return t;
+}
+
+// Explanations use a little Markdown: paragraphs, [links](https://…), `code`, **bold**.
+function richText(text) {
+  const box = h('div', { class: 'flow-desc' });
+  for (const para of String(text).split(/\n{2,}/)) {
+    const p = h('p');
+    const re = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*/g;
+    let last = 0, m;
+    while ((m = re.exec(para))) {
+      if (m.index > last) p.append(para.slice(last, m.index));
+      if (m[1]) p.append(h('a', { href: m[2], target: '_blank', rel: 'noopener' }, m[1]));
+      else if (m[3]) p.append(h('code', null, m[3]));
+      else p.append(h('strong', null, m[4]));
+      last = re.lastIndex;
+    }
+    if (last < para.length) p.append(para.slice(last));
+    box.append(p);
+  }
+  return box;
+}
 
 function readableError(code) {
   return { cannot_connect: 'Couldn\'t reach the device. Check the address.', invalid_auth: 'Wrong username or password.', unknown: 'Something went wrong.' }[code] || String(code);
 }
 
 // Turns one field of a Home Assistant form into an input.
-function formField(f, error) {
+function formField(f, { label, help, error }, errorText) {
   const sel = f.selector ? Object.keys(f.selector)[0] : null;
   const type = sel || f.type || 'string';
-  const label = FIELD_LABELS[f.name] || String(f.name).replace(/_/g, ' ');
   const required = f.required || (f.optional === false);
+  const helpEl = help ? h('small', { class: 'muted' }, help) : null;
+  const errEl = error ? h('small', { class: 'error-line' }, errorText(error)) : null;
   let input;
   if (type === 'boolean') {
     input = h('input', { type: 'checkbox', checked: !!f.default });
     return {
       name: f.name,
-      el: h('label', { class: 'check-field' }, input, h('span', null, label)),
+      hasError: !!error,
+      el: h('div', { class: 'field' }, h('label', { class: 'check-field' }, input, h('span', null, label)), helpEl, errEl),
       value: () => input.checked,
     };
   }
@@ -483,16 +617,17 @@ function formField(f, error) {
     const pairs = Array.isArray(opts) ? opts.map((o) => (Array.isArray(o) ? o : typeof o === 'object' ? [o.value, o.label] : [o, o])) : Object.entries(opts);
     input = h('select', { class: 'select' }, pairs.map(([v, l]) => h('option', { value: v, selected: v === f.default }, l)));
   } else {
-    const password = type === 'text' && f.selector?.text?.type === 'password' || f.name === 'password';
+    const password = (type === 'text' && f.selector?.text?.type === 'password') || f.name === 'password';
     const numeric = ['integer', 'float', 'number'].includes(type);
     input = h('input', { class: 'input', type: password ? 'password' : numeric ? 'number' : 'text', value: f.default ?? '', required, autocomplete: password ? 'current-password' : 'off' });
   }
   return {
     name: f.name,
-    el: h('label', { class: 'field' }, h('span', null, label, required ? '' : ' (optional)'), input, error ? h('small', { class: 'error-line' }, readableError(error)) : null),
+    hasError: !!error,
+    el: h('label', { class: 'field' }, h('span', null, label, required ? '' : ' (optional)'), input, helpEl, errEl),
     value: () => {
       if (input.value === '' && !required) return undefined;
-      if (['integer'].includes(type)) return parseInt(input.value, 10);
+      if (type === 'integer') return parseInt(input.value, 10);
       if (['float', 'number'].includes(type)) return parseFloat(input.value);
       return input.value;
     },

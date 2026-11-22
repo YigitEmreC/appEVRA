@@ -29,6 +29,22 @@ async function tokenRequest(hassUrl, params) {
   return res.json();
 }
 
+// True when something answers at the Home Assistant address. "no-cors" gives an
+// unreadable reply, but any reply at all means the server is there; a wrong name,
+// a switched-off hub or a timeout throws instead.
+async function reachable(hassUrl) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    await fetch(hassUrl + '/auth/providers', { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Returns a valid access token, refreshing it or sending the user to Home
 // Assistant's login page when needed.
 export async function getAccessToken(hassUrl, { interactive = true } = {}) {
@@ -64,6 +80,11 @@ export async function getAccessToken(hassUrl, { interactive = true } = {}) {
   }
 
   if (!interactive) throw new Error('not signed in');
+  // Only leave the app for the login page if Home Assistant answers. Otherwise the
+  // browser lands on a "can't reach this page" error and every reload does it again.
+  if (!(await reachable(hassUrl))) {
+    throw new Error(`can't reach ${hassUrl}. Check the address in Settings → Connection, or switch to Demo.`);
+  }
   const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
   try { sessionStorage.setItem(OAUTH_STATE_KEY, state); } catch { /* storage blocked */ }
   const auth = new URL(hassUrl + '/auth/authorize');
@@ -298,6 +319,25 @@ export function createLiveBackend(hassUrl) {
       }
     },
 
+    // ---- notifications on this device (js/push.js) ----
+    // Home Assistant's "HTML5 Push Notifications" integration. Its public key
+    // signs the browser's push subscription; registering makes a notify entity.
+    async pushKey() {
+      try {
+        return await send({ type: 'notify/html5/appkey' });
+      } catch (e) {
+        if (/unknown command/i.test(e.message)) {
+          throw new Error('Home Assistant needs the "HTML5 Push Notifications" integration first (Settings › Devices & services › Add integration)');
+        }
+        throw e;
+      }
+    },
+    pushRegister(subscription, name) {
+      const browser = /firefox/i.test(navigator.userAgent) ? 'firefox' : 'chrome'; // the only two Home Assistant accepts
+      return rest('POST', 'notify.html5', { subscription, browser, name });
+    },
+    pushUnregister(subscription) { return rest('DELETE', 'notify.html5', { subscription }); },
+
     // ---- pairing ----
     permitJoin(seconds) {
       return send({ type: 'call_service', domain: 'zha', service: 'permit', service_data: { duration: seconds } });
@@ -313,6 +353,22 @@ export function createLiveBackend(hassUrl) {
     },
     flowAbort(flowId) {
       return rest('DELETE', `config/config_entries/flow/${flowId}`).catch(() => {});
+    },
+    // Where a setup stands now: after a progress step, a sign-in in another tab,
+    // or to continue one Home Assistant started itself.
+    flowGet(flowId) {
+      return rest('GET', `config/config_entries/flow/${flowId}`);
+    },
+    // Setups waiting because Home Assistant found a device on the network by itself.
+    async flowProgress(handler) {
+      const all = await send({ type: 'config_entries/flow/progress' });
+      return (all || []).filter((f) => f.handler === handler);
+    },
+    // The integration's own texts for its setup: step titles and descriptions, field
+    // names and help, errors and stop reasons (keys like component.<domain>.config.…).
+    async flowTranslations(domain) {
+      const r = await send({ type: 'frontend/get_translations', language: 'en', category: 'config', integration: [domain] });
+      return r?.resources || {};
     },
     matterCommission(code) {
       return send({ type: 'matter/commission', code }, 120000);

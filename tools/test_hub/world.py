@@ -87,6 +87,8 @@ class World:
         self.notifications = []     # [{title, message, at, phone}]
         self.activity = []          # recent lines for the control panel
         self.phone_app = False      # a phone with the Home Assistant app (notify.notify)
+        self.push_regs = {}         # devices registered for Evra notifications: name -> {subscription, browser}
+        self.push = None            # push.Push, set by hub.py
         self.permit_until = 0.0
         self.listeners = []         # callables(event_type, data, context)
         self.engine = None
@@ -134,6 +136,7 @@ class World:
             "automations": self.automations, "config_entries": self.config_entries,
             "history": {k: [r for r in v if r[0] >= cutoff] for k, v in self.history.items()},
             "network": self.network, "matter": self.matter, "cloud": self.cloud, "phone_app": self.phone_app,
+            "push": self.push_regs,
         }
         tmp = self.world_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -147,6 +150,7 @@ class World:
                     for key in ("states", "devices", "areas", "entities", "automations", "config_entries", "history", "network", "matter", "cloud"):
                         setattr(self, key, data[key])
                     self.phone_app = data.get("phone_app", False)
+                    self.push_regs = data.get("push", {})
                     self.note("Loaded the saved test home")
                     return
             except (OSError, ValueError, KeyError) as e:
@@ -157,11 +161,20 @@ class World:
         for key in ("states", "devices", "areas", "entities", "automations", "config_entries", "history", "scenes"):
             setattr(self, key, {})
         self.build_from_snapshot()
+        for name in self.push_regs:
+            self._push_entity(name)
         self.save()
 
     # ---- building the home from the snapshot -----------------------------------------
 
     def build_from_snapshot(self):
+        if (self.snapshot_dir / "home.json").exists():
+            self._load_snapshot()
+        else:
+            self.note("No ha-snapshot found; started with an empty home")
+        self._add_waiting_devices()
+
+    def _load_snapshot(self):
         home = json.loads((self.snapshot_dir / "home.json").read_text(encoding="utf-8"))
         autos = json.loads((self.snapshot_dir / "automations.json").read_text(encoding="utf-8"))
         hist = json.loads((self.snapshot_dir / "history.json").read_text(encoding="utf-8"))
@@ -198,13 +211,14 @@ class World:
             self.history[eid] = [[datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp() + shift, s] for t, s in rows]
             if rows and eid in self.states:
                 self.states[eid]["last_changed"] = iso(datetime.fromtimestamp(self.history[eid][-1][0], timezone.utc))
+        self.note("Built the test home from ha-snapshot")
 
+    def _add_waiting_devices(self):
         # Devices waiting to be added, so every pairing method can be tried.
         self.network = [{"product": p, "host": f"192.168.88.{101 + i}"} for i, p in
                         enumerate(["plug", "bulb", "led-strip", "leak", "boiler-relay", "ir-kit", "camera-indoor", "camera-outdoor"])]
         self.matter = [{"product": "lock", "code": "3497-011-2332"}, {"product": "co2", "code": "0251-520-0076"}]
         self.cloud = [{"product": "siren"}, {"product": "curtain"}]
-        self.note("Built the test home from ha-snapshot")
 
     @staticmethod
     def _integration_for(d):
@@ -361,9 +375,68 @@ class World:
 
     def services(self):
         out = {d: set(s) for d, s in SERVICES.items()}
+        out["notify"] = {"send_message"}  # notify entities (Evra devices) always have it
         if self.phone_app:
-            out["notify"] = {"notify", "mobile_app_phone"}
+            out["notify"] |= {"notify", "mobile_app_phone"}
         return out
+
+    # ---- Evra notifications: the "HTML5 Push Notifications" stand-in (push.py) ----------
+
+    @staticmethod
+    def _push_entity_id(name):
+        return f"notify.{slug(name)}"
+
+    def _push_entity(self, name):
+        eid = self._push_entity_id(name)
+        self.config_entries.setdefault("entry_html5", {"entry_id": "entry_html5", "domain": "html5", "title": "HTML5 Push Notifications"})
+        self.entities[eid] = self._entity(eid, None, "entry_html5", "html5", name, False)
+        self.add_state(eid, "unknown", {"friendly_name": name, "supported_features": 1})
+        self.fire("entity_registry_updated", {"action": "create", "entity_id": eid})
+
+    def register_push(self, subscription, browser, name):
+        """Like HTML5PushRegistrationView.post: the same endpoint keeps its name."""
+        existing = next((n for n, r in self.push_regs.items() if r["subscription"].get("endpoint") == subscription.get("endpoint")), None)
+        if existing is None:
+            base = name or "unnamed device"
+            existing, n = base, 2
+            taken = {self._push_entity_id(x) for x in self.push_regs} | set(self.states)
+            while self._push_entity_id(existing) in taken:
+                existing, n = f"{base} {n}", n + 1
+            self._push_entity(existing)
+            self.note(f"Evra notifications: registered {existing} ({self._push_entity_id(existing)})")
+        self.push_regs[existing] = {"subscription": subscription, "browser": browser}
+        self.save_soon()
+
+    def unregister_push(self, subscription):
+        name = next((n for n, r in self.push_regs.items() if r["subscription"] == subscription), None)
+        if name is None:
+            return False
+        self._drop_push(name)
+        self.note(f"Evra notifications: {name} unregistered")
+        return True
+
+    def _drop_push(self, name):
+        self.push_regs.pop(name, None)
+        eid = self._push_entity_id(name)
+        if self.entities.pop(eid, None):
+            self.fire("entity_registry_updated", {"action": "remove", "entity_id": eid})
+        self.remove_state(eid)
+        self.save_soon()
+
+    async def _send_push(self, ids, data):
+        names = [n for n in self.push_regs if self._push_entity_id(n) in ids]
+        for name in names:
+            sub = self.push_regs[name]["subscription"]
+            extra = {k: v for k, v in data.items() if k not in ("title", "message")}
+            err = await asyncio.get_running_loop().run_in_executor(
+                None, self.push.send, sub, data.get("title"), data.get("message", ""), extra)
+            if err == "gone":
+                self.note(f"Evra notifications: {name} no longer accepts them; removed it")
+                self._drop_push(name)
+            elif err:
+                self.note(f"Evra notifications: couldn't reach {name}: {err}")
+            else:
+                self.note(f"Evra notifications: sent to {name}")
 
     async def call_service(self, domain, service, data=None, target=None, context=None, source="app"):
         data = dict(data or {})
@@ -378,6 +451,10 @@ class World:
         if domain == "persistent_notification":
             if service == "create":
                 self._notify(data.get("title"), data.get("message", ""), phone=False)
+            return None
+        if domain == "notify" and service == "send_message":
+            self._notify(data.get("title"), data.get("message", ""), phone=True)
+            await self._send_push(ids, data)
             return None
         if domain == "notify":
             self._notify(data.get("title"), data.get("message", ""), phone=True)

@@ -204,6 +204,8 @@ export function createDemoBackend() {
     }
     if (domain === 'persistent_notification' || domain === 'notify') {
       window.dispatchEvent(new CustomEvent('demo-notify', { detail: data.message || data.title || 'Notification' }));
+      // What would reach phones: shown on this device when its notifications are on.
+      if (domain === 'notify') window.dispatchEvent(new CustomEvent('demo-push', { detail: { title: data.title, message: data.message || '' } }));
       return;
     }
     if (domain === 'zha' && svc === 'permit') return;
@@ -673,6 +675,33 @@ export function createDemoBackend() {
       return { type: 'create_entry', title: f.product?.name || 'Device' };
     },
     async flowAbort(flowId) { flows.delete(flowId); },
+    async flowGet(flowId) {
+      const f = flows.get(flowId);
+      return f ? { ...(await this.flowStart(f.handler, f.product)), flow_id: flowId } : { type: 'abort', reason: 'unknown_flow' };
+    },
+    // Nothing is found on a pretend network.
+    async flowProgress() { return []; },
+    // A few texts, shaped like Home Assistant's translations, so demo forms read like live ones.
+    async flowTranslations(domain) {
+      const base = `component.${domain}.config`;
+      const t = {
+        [`${base}.step.user.data.host`]: 'Host',
+        [`${base}.step.user.data_description.host`]: 'The device\'s IP address on your Wi-Fi, for example 192.168.1.40.',
+        [`${base}.step.user.data.port`]: 'Port',
+        [`${base}.step.user.data.username`]: domain === 'tplink' ? 'Email' : 'Username',
+        [`${base}.step.user.data.password`]: 'Password',
+        [`${base}.step.user.data.name`]: 'Name',
+        [`${base}.error.cannot_connect`]: 'Failed to connect',
+      };
+      const intro = {
+        tplink: ['Set up a TP-Link device', 'Tapo devices need the email and password of your TP-Link account.'],
+        shelly: ['Set up a Shelly device', 'Battery-powered devices must be woken up first, by pressing their button.'],
+        esphome: ['Set up an ESPHome device', 'Please enter connection settings of your [ESPHome](https://esphome.io/) node.'],
+        onvif: ['Configure ONVIF device', 'Tapo cameras need a camera account, made in the Tapo app under Advanced settings.'],
+      }[domain];
+      if (intro) { t[`${base}.step.user.title`] = intro[0]; t[`${base}.step.user.description`] = intro[1]; }
+      return t;
+    },
     async matterCommission(code, product) {
       const digits = String(code).replace(/\D/g, '');
       if (!/^MT:/.test(code) && digits.length !== 11 && digits.length !== 21) throw new Error('A Matter code has 11 digits, or starts with MT: when taken from a QR code');
@@ -680,6 +709,12 @@ export function createDemoBackend() {
       if (product) createDevice(product);
     },
     async cloudAdd(product) { await sleep(1200); return createDevice(product); },
+
+    // Notifications on this device: nothing to register in the demo (no key);
+    // js/push.js then only remembers the choice and the demo shows them itself.
+    async pushKey() { return null; },
+    async pushRegister() {},
+    async pushUnregister() {},
 
     // demo-only controls
     simulate: {

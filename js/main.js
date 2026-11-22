@@ -1,6 +1,6 @@
 import { HOME } from './config.js';
 import { store } from './store.js';
-import { h, clockText, loadSettings, setPrefs, effectiveTheme, toast } from './util.js';
+import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, toast } from './util.js';
 import { icon } from './icons.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
@@ -18,6 +18,11 @@ import { arrangeable } from './edit.js';
 import { ensureSky } from './sky.js';
 import { renderAuthGate } from './views/auth-gate.js';
 import { member, canUseAssistant, onAccount, refreshMember } from './account.js';
+import { showHere, refreshPush } from './push.js';
+import { watchForUpdates } from './updates.js';
+
+// The Evra add-on's settings (evra-config.json) come first: everything below reads settings.
+await loadSiteConfig();
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [
@@ -236,8 +241,15 @@ store.onStatus((s) => {
 let cleanup = [];
 let lastTab = -1;
 
-// The header settles into an app bar once the page scrolls.
-const onScroll = () => document.documentElement.classList.toggle('scrolled', window.scrollY > 6);
+// The header settles into an app bar once the page scrolls. Its height change moves
+// the page by a few pixels, so it shrinks and grows back at different points; with
+// one threshold that shift crossed it again and the header flickered.
+const onScroll = () => {
+  const root = document.documentElement;
+  const y = window.scrollY;
+  if (!root.classList.contains('scrolled') && y > 48) root.classList.add('scrolled');
+  else if (root.classList.contains('scrolled') && y < 4) root.classList.remove('scrolled');
+};
 window.addEventListener('scroll', onScroll, { passive: true });
 
 function route(opts) {
@@ -281,6 +293,8 @@ window.addEventListener('evra-custom', (e) => {
 window.addEventListener('hashchange', route);
 // Notifications sent by automations in demo mode show as a toast.
 window.addEventListener('demo-notify', (e) => toast(`Notification: ${e.detail}`));
+// The ones meant for phones also appear as real notifications when they're on here.
+window.addEventListener('demo-push', (e) => { showHere(e.detail.title, e.detail.message).catch(() => {}); });
 const mq = window.matchMedia('(prefers-color-scheme: dark)');
 mq.addEventListener?.('change', applyTheme);
 
@@ -291,3 +305,12 @@ if (signedIn) showApp(); else showGate();
 if ('serviceWorker' in navigator && window.isSecureContext) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* optional */ });
 }
+// Reload by itself after an update, when nobody is using the screen (wall panels).
+watchForUpdates();
+// Once per visit, after connecting: make sure this device's notifications still reach it.
+let pushChecked = false;
+store.onStatus((s) => {
+  if (pushChecked || s.state !== 'connected') return;
+  pushChecked = true;
+  refreshPush().catch(() => { /* not critical; Settings › Notifications shows the state */ });
+});

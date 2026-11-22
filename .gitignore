@@ -3,3 +3,17 @@ tools/test_hub/data/
 # Evra member accounts (password hashes and sessions); never commit
 tools/accounts/data/
 __pycache__/
+
+# Built add-on (python tools/build_addon.py)
+dist/
+
+# Secrets: never commit keys or environment files
+.env
+.env.*
+*.pem
+*.key
+*.p12
+# Home Assistant data from a real home
+ha-snapshot/
+# The tunnel test's Cloudflare token (tools/tunnel_test/README.md); never commit
+tools/tunnel_test/token.txt

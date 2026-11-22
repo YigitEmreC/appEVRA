@@ -1,0 +1,6 @@
+# The base image for each processor: Home Assistant's own add-on base
+# (Alpine Linux with its start-up tools and bashio). Pinned, so a new base
+# can't change a release unannounced; raise it on purpose and test.
+build_from:
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.23
+  amd64: ghcr.io/home-assistant/amd64-base:3.23
