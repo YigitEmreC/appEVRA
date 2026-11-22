@@ -14,6 +14,7 @@ Evra is a smart-home PWA front end for Home Assistant. It is plain HTML, CSS and
 - Port 8000 is reserved for another project of the user's. Don't use it.
 - **Test hub** (`tools/test_hub/hub.py`, needs `aiohttp`): a Python stand-in for Home Assistant's auth, WebSocket and REST APIs, used to exercise **live mode** without the Raspberry Pi. It runs on :8123, has a control panel, also reads `../ha-snapshot`, and keeps state in `tools/test_hub/data/`. It is a test double that covers only what the app uses.
 - `python tools/make_icons.py` regenerates the PNG icons from `icons/icon.svg`.
+- `Start Evra.bat` also starts the **accounts stand-in** (`tools/accounts/server.py`, :8770, stdlib only, data in git-ignored `tools/accounts/data/`). It's only used when Settings points at it; by default the app signs in with the Evra website. `Start Evra.bat` also starts the **assistant server** (`../EvrAI/gemini_home_starter/server.py`, :8765) too, but only when that folder has a `.env` with the Gemini key. The assistant server is outside this repo.
 
 Live mode has **never been tested against the real Home Assistant**, only against the demo backend and the test hub.
 
@@ -42,6 +43,24 @@ index.html → js/main.js (shell, hash router, theme, connect())
 - `js/ideas.js`: automation idea templates. `CAPS` maps capability → catalogue products, and `buildIdea()` produces an editor template from the home's devices.
 - `js/scenes.js`: the 10 scenes. `planScene` computes the changes and `runScene` applies them. Per-scene room choices are kept in settings, not in HA. Plugs are never touched.
 - `js/views/automation-editor.js`: `fromConfig(cfg)` / `toConfig(state)` convert between HA automation YAML/JSON and the simple editor. Configs it can't represent fall back to the JSON editor, which is dev-mode only.
+
+## Assistant and accounts
+
+- **Assistant** (`js/views/chat.js`, `js/assistant-actions.js`):
+  - The app never talks to Gemini; the key lives only in the assistant server's `.env`.
+  - `chat.js` posts the question plus the home (live: HA address and token; demo: the snapshot) to `assistantUrl` (default `http://localhost:8765`).
+  - The server answers with text and **proposals**: exact actions built by its `propose_*` tools.
+  - The app shows each proposal as a card. On Approve, `runProposal()` carries it out through the normal backend (`store.call`, `backend.saveAutomation`, registry updates and so on), reads the result back, and reports it to the server's `/outcome`.
+  - **A new proposal kind needs both sides:** the tool in `EvrAI/.../proposals.py` and its handler in `assistant-actions.js`.
+- **Accounts** (`js/account.js`, `views/account-ui.js`, `views/members.js`):
+  - Members sign in under Settings → Evra account. The token goes in the `Authorization` header of every assistant request, and the assistant server checks it with the accounts service's `/me`.
+  - **Assistant access** is `features.ai`; admins always have it. `main.js` hides the Assistant tab with `assistantBlocked()` when a signed-in member lacks it, but the real check is on the server.
+  - **Base address:** `accountsUrl()`. It defaults to `WEBSITE_ACCOUNTS` (`https://evrasmarthome.com/api/accounts`), served by `lib/accounts.js` in the webEVRA repo.
+    - **Website accounts:** members sign in with their website e-mail and password (the website's `users`/`sessions` tables in D1). `features.ai` comes from the Premium plan or an admin's choice. Members are added, renamed, reset and deleted only on the website.
+    - **The stand-in** is `LOCAL_ACCOUNTS` (`tools/accounts/server.py`, usernames, admin-managed members). It's used only when the `accountsServer` setting points at it.
+    - **Telling them apart:** `/status` and `/members` return `kind: "website"` on the website, and website members have an `email`. The UI uses that to switch labels and hide the add, reset and delete controls.
+    - **Keep the two APIs in step** when either changes.
+  - **The setting key is `accountsServer`**, stored only when someone chose an address. The old key `accountsUrl` was saved with every setting, so it's ignored.
 
 ## Conventions
 

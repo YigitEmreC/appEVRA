@@ -120,6 +120,15 @@ def esc(s):
 
 # ---- the server ----------------------------------------------------------------------
 
+class Client:
+    """One connected app: its event subscriptions and outgoing messages."""
+
+    def __init__(self):
+        self.subs = {}            # subscription id -> event type (None = all)
+        self.queue = asyncio.Queue()
+        self.authed = False
+
+
 class Hub:
     def __init__(self, world: World, auth: Auth, origins):
         self.world = world
@@ -207,23 +216,23 @@ class Hub:
     def broadcast(self, event_type, data, context):
         msg_event = {"event_type": event_type, "data": data, "origin": "LOCAL", "time_fired": iso(), "context": context}
         for client in list(self.clients):
-            for sub_id, wanted in list(client["subs"].items()):
+            for sub_id, wanted in list(client.subs.items()):
                 if wanted is None or wanted == event_type:
-                    client["queue"].put_nowait({"id": sub_id, "type": "event", "event": msg_event})
+                    client.queue.put_nowait({"id": sub_id, "type": "event", "event": msg_event})
 
     async def websocket(self, request):
         ws = web.WebSocketResponse(max_msg_size=16 * 1024 * 1024)
         await ws.prepare(request)
-        client = {"subs": {}, "queue": asyncio.Queue(), "authed": False}
+        client = Client()
 
         async def writer():
             while True:
-                msg = await client["queue"].get()
+                msg = await client.queue.get()
                 if ws.closed:
                     return
                 await ws.send_str(json.dumps(msg, ensure_ascii=False))
 
-        send = client["queue"].put_nowait
+        send = client.queue.put_nowait
         writer_task = asyncio.create_task(writer())
         send({"type": "auth_required", "ha_version": HA_VERSION})
         try:
@@ -234,9 +243,9 @@ class Hub:
                     m = json.loads(msg.data)
                 except ValueError:
                     continue
-                if not client["authed"]:
+                if not client.authed:
                     if m.get("type") == "auth" and self.auth.valid(m.get("access_token")):
-                        client["authed"] = True
+                        client.authed = True
                         self.clients.add(client)
                         send({"type": "auth_ok", "ha_version": HA_VERSION})
                         self.world.note(f"App connected ({len(self.clients)} connected)")
@@ -250,7 +259,7 @@ class Hub:
         finally:
             self.clients.discard(client)
             writer_task.cancel()
-            if client["authed"]:
+            if client.authed:
                 self.world.note(f"App disconnected ({len(self.clients)} connected)")
         return ws
 
@@ -275,10 +284,10 @@ class Hub:
             elif kind == "get_services":
                 ok({d: {s: {"name": s, "description": "", "fields": {}} for s in svcs} for d, svcs in w.services().items()})
             elif kind == "subscribe_events":
-                client["subs"][mid] = m.get("event_type")
+                client.subs[mid] = m.get("event_type")
                 ok()
             elif kind == "unsubscribe_events":
-                if client["subs"].pop(m.get("subscription"), "missing") == "missing":
+                if client.subs.pop(m.get("subscription"), "missing") == "missing":
                     fail("not_found", "Subscription not found.")
                 else:
                     ok()
@@ -324,6 +333,13 @@ class Hub:
                 w.matter.remove(found)
                 w.create_device(found["product"], "matter")
                 ok(None)
+            elif kind == "repairs/list_issues":
+                ok({"issues": []})
+            elif kind == "config_entries/get":
+                ok([{"entry_id": e["entry_id"], "domain": e["domain"], "title": e["title"], "source": "user", "state": "loaded",
+                     "supports_options": False, "supports_remove_device": e["domain"] in ("zha", "matter"), "supports_unload": True,
+                     "pref_disable_new_entities": False, "pref_disable_polling": False, "disabled_by": None, "reason": None}
+                    for e in w.config_entries.values()])
             elif kind in ("auth/current_user",):
                 ok({"id": "tester", "name": "Tester", "is_owner": True, "is_admin": True, "credentials": [], "mfa_modules": []})
             else:
@@ -550,6 +566,8 @@ class Hub:
                 w.phone_app = bool(a.get("on"))
                 w.note(f"Panel: phone with the Home Assistant app {'connected' if w.phone_app else 'removed'} (notify.notify {'available' if w.phone_app else 'gone'})")
                 w.save_soon()
+            elif kind == "update-available":
+                w.make_update_available()
             elif kind == "clear-notifications":
                 w.notifications.clear()
             elif kind == "reset":
@@ -616,16 +634,23 @@ def validate_automation(cfg):
 
 
 async def main():
+    # Windows consoles default to an old code page; names like "CO₂" or "°C" must not crash the hub.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser(description="Evra test hub (stands in for Home Assistant)")
     ap.add_argument("--port", type=int, default=8123)
     ap.add_argument("--origin", action="append", help="app address allowed to use the API (default: http://localhost:8010 and http://127.0.0.1:8010)")
+    ap.add_argument("--data", help="folder for the saved home and test login (default: tools/test_hub/data); lets a second hub run separately")
     args = ap.parse_args()
     origins = args.origin or ["http://localhost:8010", "http://127.0.0.1:8010"]
 
     snapshot = HERE.parents[2] / "ha-snapshot"
     if not snapshot.exists():
         sys.exit(f"Can't find the snapshot at {snapshot}. Keep ha-snapshot next to the app folder.")
-    world = World(snapshot, HERE / "data")
+    world = World(snapshot, Path(args.data) if args.data else HERE / "data")
     world.loop = asyncio.get_running_loop()
     world.load()
     world.engine = Engine(world)

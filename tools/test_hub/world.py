@@ -64,6 +64,7 @@ SERVICES = {
     "homeassistant": {"turn_on", "turn_off", "toggle", "update_entity"},
     "persistent_notification": {"create", "dismiss"},
     "zha": {"permit", "remove"},
+    "update": {"install", "skip"},
 }
 
 
@@ -102,7 +103,10 @@ class World:
     def note(self, text):
         self.activity.append({"at": iso(), "text": text})
         del self.activity[:-200]
-        print(f"[{datetime.now():%H:%M:%S}] {text}", flush=True)
+        try:
+            print(f"[{datetime.now():%H:%M:%S}] {text}", flush=True)
+        except (OSError, UnicodeError):
+            pass  # the console window can't show it; the control panel still does
 
     # ---- persistence -------------------------------------------------------------
 
@@ -472,6 +476,25 @@ class World:
             self.set_state(eid, data["option"], context=context)
         elif domain == "number":
             self.set_state(eid, str(data["value"]), context=context)
+        elif domain == "update":
+            if service == "skip":
+                self.set_state(eid, "off", {"skipped_version": attrs.get("latest_version")}, context=context)
+            elif cur != "on":
+                raise HassError(f"{attrs.get('friendly_name', eid)} is already up to date")
+            else:
+                self.set_state(eid, "on", {"in_progress": True}, context=context)
+                self.note(f"Installing {attrs.get('friendly_name', eid)} {attrs.get('latest_version')}")
+                await asyncio.sleep(4)
+                self.set_state(eid, "off", {"in_progress": False, "installed_version": attrs.get("latest_version")})
+
+    def make_update_available(self):
+        eid = "update.home_assistant_core_update"
+        a = self.states.get(eid, {}).get("attributes")
+        if a is None:
+            raise HassError("This home has no Home Assistant update entity")
+        y, m, p = (str(a.get("installed_version") or "2026.11.1").split(".") + ["0"])[:3]
+        self.set_state(eid, "on", {"latest_version": f"{y}.{m}.{int(p) + 1}", "release_summary": "Bug fixes and small improvements.", "in_progress": False})
+        self.note(f"Update available: Home Assistant {y}.{m}.{int(p) + 1}")
 
     def _light_on(self, eid, data, context):
         a = dict(self.states[eid]["attributes"])
@@ -644,6 +667,14 @@ class World:
                     continue
                 w = 8.7 + random.random() * 0.5
                 self.set_state(s["entity_id"], f"{w:.1f}")
+                # ...and the plug's "today" energy adds up.
+                for sib in self.siblings(s["entity_id"]):
+                    st = self.states.get(sib)
+                    if st and st["attributes"].get("device_class") == "energy" and "today" in sib:
+                        try:
+                            self.set_state(sib, f"{float(st['state']) + w * 5 / 3600 / 1000:.4f}")
+                        except ValueError:
+                            pass
             if n % 9 == 0:  # every 45 s
                 heater_on = self.state_of("input_boolean.heater_on") == "on"
                 for s in list(self.states.values()):
@@ -653,7 +684,11 @@ class World:
                             t = float(s["state"])
                         except ValueError:
                             continue
-                        step = 0.1 if heater_on and random.random() < 0.6 else (-0.1 if not heater_on and random.random() < 0.5 else 0)
+                        # The heater warms the room towards about 24°, without it the room cools towards about 19°.
+                        goal = 24.0 if heater_on else 19.0
+                        step = 0.0
+                        if abs(goal - t) >= 0.1 and random.random() < 0.6:
+                            step = 0.1 if goal > t else -0.1
                         if step:
                             self.set_state(eid, f"{t + step:.1f}")
                     elif eid.startswith("climate."):

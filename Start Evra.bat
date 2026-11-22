@@ -33,6 +33,21 @@ if errorlevel 1 (
   echo The Evra server is already running on port %PORT%.
 )
 
+rem ---- Evra accounts stand-in, for working without the website (the app uses evrasmarthome.com unless Settings says This computer)
+curl -sf -o nul --max-time 2 "http://127.0.0.1:8770/api/status"
+if errorlevel 1 (
+  "%PY%" -c "import aiohttp" >nul 2>&1
+  if errorlevel 1 (
+    echo Evra accounts needs the aiohttp package:  "%PY%" -m pip install aiohttp
+  ) else (
+    start "Evra accounts - close this window to stop it" /min "%PY%" "%APP_DIR%tools\accounts\server.py"
+  )
+)
+
+rem ---- the Evra assistant, when it's set up next to the app (EvrAI folder) -------
+set "ASSISTANT_DIR=%APP_DIR%..\EvrAI\gemini_home_starter\"
+if exist "%ASSISTANT_DIR%.env" if exist "%ASSISTANT_DIR%Start assistant.bat" call "%ASSISTANT_DIR%Start assistant.bat"
+
 rem ---- open the app in its own window (Edge or Chrome), else the default browser
 set "BROWSER="
 for %%K in (msedge.exe chrome.exe) do (

@@ -221,7 +221,7 @@ function plugCard({ device, ids, cleanup, title, iconName }) {
     const s = store.get(swId), w = powerId ? store.get(powerId) : null, t = energyId ? store.get(energyId) : null;
     const on = isOn(s);
     sw.set(on, !isAvailable(s));
-    watts.replaceChildren(w && isAvailable(w) ? num(w) : (on ? 'On' : 'Off'), w ? h('small', null, ' W') : null);
+    watts.replaceChildren(...[w && isAvailable(w) ? num(w) : (on ? 'On' : 'Off'), w ? h('small', null, ' W') : null].filter(Boolean));
     const kwh = numVal(t);
     today.textContent = kwh != null ? `${kwh.toFixed(3)} kWh today · ≈ €${(kwh * loadSettings().pricePerKwh).toFixed(2)}` : '';
     c.setState(!isAvailable(s) ? 'Unavailable' : on ? 'On' : 'Off', on);

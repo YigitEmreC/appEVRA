@@ -112,7 +112,7 @@ const forMinutes = (f) => {
   if (typeof f === 'string' && !/^\d+(:\d+){0,2}$/.test(f)) return null;
   if (typeof f === 'object' && Object.values(f).some((v) => typeof v !== 'number')) return null;
   const s = toSeconds(f);
-  return Number.isFinite(s) ? Math.round(s / 6) / 10 : null;
+  return Number.isFinite(s) ? Math.round(s / 0.6) / 100 : null;
 };
 const forConfig = (m) => {
   const s = Math.round(Number(m) * 60);
@@ -187,7 +187,8 @@ export function toConfig(st) {
     else if (a.type === 'delay') cfg.actions.push({ delay: { seconds: Number(a.seconds) || 0 } });
     else if (a.type === 'notify') {
       cfg.actions.push({ action: 'persistent_notification.create', data: { title: cfg.alias, message: a.message } });
-      if (a.push) cfg.actions.push({ action: 'notify.notify', data: { title: cfg.alias, message: a.message } });
+      // Phones need the Home Assistant app; without it this step fails, which mustn't end the automation.
+      if (a.push) cfg.actions.push({ action: 'notify.notify', data: { title: cfg.alias, message: a.message }, continue_on_error: true });
     }
   }
   return cfg;
@@ -228,12 +229,14 @@ export function renderAutomationEditor(root, cleanup, configId, template = null)
   root.append(h('a', { class: 'back-link', href: '#/automations' }, icon('left', 16), 'Automations'), body, actionsBar);
 
   async function load() {
-    if (isNew && template) {
+    if (template) {
+      // A new automation from an idea, or a draft from the assistant (new or a change to this one).
       const built = fromConfig(template);
       if (built) st = built;
       else { jsonMode = true; jsonText = JSON.stringify(template, null, 2); st.alias = template.alias || ''; }
       body.replaceChildren();
-      root.insertBefore(h('p', { class: 'hint idea-hint' }, icon('sparkle', 16), 'Filled in from an idea with your devices. Change anything you like, then Save.'), body);
+      root.insertBefore(h('p', { class: 'hint idea-hint' }, icon('sparkle', 16),
+        isNew ? 'Filled in for you with your devices. Change anything you like, then Save.' : 'The assistant\'s suggested changes are filled in. Check them, then Save to replace the current version.'), body);
       draw();
       return;
     }

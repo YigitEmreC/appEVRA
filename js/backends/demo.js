@@ -249,6 +249,15 @@ export function createDemoBackend() {
           else if (svc === 'turn_off') set(id, 'off', { hvac_action: 'off' });
           else if (svc === 'turn_on') set(id, 'heat', { hvac_action: 'heating' });
           break;
+        case 'update': {
+          const a = states.get(id).attributes;
+          if (svc === 'install') {
+            if (cur !== 'on') throw new Error(`${a.friendly_name || id} is already up to date`);
+            set(id, 'on', { in_progress: true });
+            timers.push(setTimeout(() => set(id, 'off', { in_progress: false, installed_version: a.latest_version }), 3000));
+          } else if (svc === 'skip') set(id, 'off', { skipped_version: a.latest_version });
+          break;
+        }
         default:
           throw new Error(`${domain}.${svc} isn't simulated in the demo`);
       }
@@ -509,9 +518,12 @@ export function createDemoBackend() {
     timers.push(setInterval(() => {
       const t = parseFloat(stateOf(HOME.climate.temperature));
       if (Number.isFinite(t)) {
-        const heaterOn = stateOf(HOME.heater.tracker) === 'on';
-        const step = heaterOn ? (Math.random() < 0.6 ? 0.1 : 0) : (Math.random() < 0.6 ? -0.1 : 0);
-        if (step) set(HOME.climate.temperature, (t + step).toFixed(1));
+        // The heater warms the room towards about 24°, without it the room cools towards about 19°
+        // (it used to keep climbing as long as the heater was on).
+        const goal = stateOf(HOME.heater.tracker) === 'on' ? 24 : 19;
+        // A room far past the goal (from before this limit) settles quickly.
+        const size = Math.abs(goal - t) > 3 ? 0.5 : 0.1;
+        if (Math.abs(goal - t) >= 0.1 && Math.random() < 0.6) set(HOME.climate.temperature, (t + Math.sign(goal - t) * size).toFixed(1));
       }
       for (const s of states.values()) {
         if (!s.entity_id.startsWith('climate.')) continue;
@@ -690,6 +702,14 @@ export function createDemoBackend() {
         }
       },
       set(entityId, state) { set(entityId, state); },
+      // Pretend Home Assistant has a new version, to try installing updates.
+      updateAvailable() {
+        const id = 'update.home_assistant_core_update';
+        const a = states.get(id)?.attributes;
+        if (!a) return;
+        const [y, m, p] = String(a.installed_version || '2026.11.1').split('.').map(Number);
+        set(id, 'on', { latest_version: `${y}.${m}.${(p || 0) + 1}`, release_summary: 'Bug fixes and small improvements.', in_progress: false });
+      },
     },
     resetDemo() {
       clearTimeout(saveTimer);
