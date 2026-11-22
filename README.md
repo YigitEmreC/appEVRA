@@ -79,8 +79,8 @@ Customization is kept in this browser (`localStorage` key `evra.custom`), so the
 | Devices | All devices by room, the Rooms tab (create, rename, delete), device details (rename, move, remove) and **Add device** |
 | Scenes | Morning, Afternoon, Night, Sleep, Eco, Party, Movie, Entertainment, Music and Dinner. Each has room chips (All rooms or any mix) and a "What it does" list of the exact changes; only devices in the chosen rooms change. Plugs are never touched |
 | Automations | **My automations**: every automation with on/off, Run now, Edit and Delete, plus **New automation**. **Ideas**: about 40 automations the Evra range can do; ones your devices can already do open the editor filled in, the rest are faded with dashed chips for the missing products (tap one to see the product) |
-| Assistant | Chat with the Evra assistant (Gemini): answers about any device or room, and changes it prepares for you to approve (see "The assistant" below). Works in demo and live mode, for signed-in members with the assistant switched on. Needs the assistant server from `../EvrAI/gemini_home_starter`, which `Start Evra.bat` starts |
-| Settings | Evra account (sign-in, Manage members), connection (demo or live), Look and layout (opens Customize), developer mode, electricity price, batteries, demo controls and the accounts address (developer mode), shortcuts to Energy, Remotes and Rooms |
+| Assistant | Chat with Evra, the assistant (Gemini), in Turkish first: answers about any device or room, Evra's products and plans, step-by-step help pairing new devices, and changes it prepares for you to approve (see "The assistant" below). Works in demo and live mode, for signed-in members with the assistant switched on. Needs the assistant server from `../EvrAI/gemini_home_starter`, which `Start Evra.bat` starts |
+| Settings | Evra account (who's signed in, change password, sign out), connection (demo or live), Look and layout (opens Customize), developer mode, electricity price, batteries, demo controls and the accounts address (developer mode), shortcuts to Energy, Remotes and Rooms |
 | Energy, Remotes | Power, temperature and activity charts; the full TV and heater remotes, one at a time: swipe sideways or use the tabs and arrows. In the side bar on wide screens, and linked from Settings on phones |
 
 ## The Evra range
@@ -138,7 +138,7 @@ When it connects, you name it and choose its room.
 | `js/ideas.js` | Automation ideas, what each needs, and how each is built from the home's devices |
 | `js/assistant-actions.js` | Carries out changes the assistant prepared, once approved, and checks they worked |
 | `js/speech.js` | Reads the assistant's replies aloud with the browser's own voices |
-| `js/account.js`, `views/account-ui.js`, `views/members.js` | Evra accounts: sign-in, the account panel, the Members page |
+| `js/account.js`, `views/auth-gate.js`, `views/account-ui.js` | Evra accounts: the sign-in screen the app opens with, and the account panel |
 | `tools/accounts/` | A stand-in for the website's accounts, for working without the website (members, roles, assistant access) |
 | `js/scenes.js` | The ten scenes and how they're applied to the chosen rooms |
 | `js/custom.js` | Each person's theme and layout: saving it, applying it, and putting things in their chosen order |
@@ -157,11 +157,11 @@ When it connects, you name it and choose its room.
 
 ## Evra accounts (membership)
 
-**Signing in:** members sign in under **Settings → Evra account** with their **evrasmarthome.com account**, the same e-mail address and password they use on the website. They sign up there.
+**Signing in comes first:** the app opens on a sign-in screen and shows nothing else until someone signs in with their **evrasmarthome.com account** (the same e-mail address and password as on the website). **Create account** explains the sign-up on the website. Signing out (Settings → Evra account) goes back to that screen. A kept sign-in still opens the app without internet.
 
 **The assistant:**
 - It comes with the **Premium** plan.
-- An app admin can switch it on or off for anyone under **Manage members**, make other admins, and switch someone's app access off.
+- Admins, and who gets it regardless of their plan, are set in the website's database (`evra_app_access`, see the webEVRA README, step 7). The app has no screen for that.
 - Members without it don't see the Assistant tab, and the assistant server refuses them too.
 
 **Where it runs:** the website does this in `lib/accounts.js` (webEVRA repository), on its own D1 member tables. Its README, step 7, has the one-time setup, including how to make the first admin.
@@ -173,9 +173,11 @@ When it connects, you name it and choose its room.
 
 `tools/accounts/README.md` lists the differences.
 
-In the app, `js/account.js` handles accounts, with `views/account-ui.js` and `views/members.js`.
+In the app, `js/account.js` handles accounts, with `views/auth-gate.js` (the first screen) and `views/account-ui.js`.
 
 ## The assistant
+
+The assistant is called **Evra** and speaks Turkish first (it answers in English when written to in English). Besides the home, it knows Evra's whole range: products, prices, packages and plans (from `../EvrAI/gemini_home_starter/products.json`), and it walks people through pairing a new device step by step. The Assistant tab is in Turkish too.
 
 The assistant answers questions and prepares changes. You approve every change before it happens, and the app carries it out itself. It can prepare:
 - Device control: lights, plugs, TV and heater power, blinds, thermostats and valves.

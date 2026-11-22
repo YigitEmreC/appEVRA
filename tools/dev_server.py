@@ -8,6 +8,7 @@ tells the browser to re-check every file, so edits show up on a normal reload.
     python appEVRA/tools/dev_server.py 8020         to use another port
     python appEVRA/tools/dev_server.py --lan        phone mode: phones on the same Wi-Fi can open it too
     python appEVRA/tools/dev_server.py --show-address   prints the address for a phone, then stops
+    python appEVRA/tools/dev_server.py --phone-port     prints the port phone mode should use, then stops
 
 Phone mode ("Start Evra on phone.bat") listens on the home network as well. Other
 devices only get the app and the demo data (/appEVRA/ without tools/, and
@@ -17,6 +18,7 @@ This computer itself still gets everything, as in normal mode.
 """
 import argparse
 import functools
+import http.client
 import http.server
 import ipaddress
 import socket
@@ -59,6 +61,34 @@ def lan_addresses() -> list[str]:
         pass
     home = [ip for ip in found if ipaddress.ip_address(ip).is_private and not ip.startswith(("127.", "169.254."))]
     return sorted(home, key=lambda ip: (not ip.startswith("192.168."), not ip.startswith("10."), ip))
+
+
+def evra_for_phones_at(port: int):
+    """True: Evra runs there in phone mode. False: something else (or Evra for this computer only). None: nothing."""
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+        conn.request("HEAD", f"/{APP}/index.html")
+        return conn.getresponse().getheader("X-Evra-Lan") == "1"
+    except OSError:
+        return None
+
+
+def port_is_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("0.0.0.0", port))
+            return True
+        except OSError:
+            return False
+
+
+def phone_port(start: int) -> int:
+    """For "Start Evra on phone.bat": a port where Evra already runs for phones, or a free one."""
+    for port in range(start, start + 10):
+        found = evra_for_phones_at(port)
+        if found or (found is None and port_is_free(port)):
+            return port
+    return start
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
@@ -119,7 +149,11 @@ def main() -> None:
     ap.add_argument("port", nargs="?", type=int, default=8010)
     ap.add_argument("--lan", action="store_true", help="phone mode: also answer phones on the home network (app and demo data only)")
     ap.add_argument("--show-address", action="store_true", help="print the address to open on a phone, then stop")
+    ap.add_argument("--phone-port", action="store_true", help="print the port phone mode should use (this one, or the next free one), then stop")
     args = ap.parse_args()
+    if args.phone_port:
+        print(phone_port(args.port))
+        return
     phone_urls = [f"http://{ip}:{args.port}/{APP}/" for ip in lan_addresses()]
     if args.show_address:
         print("\n".join(phone_urls) if phone_urls else "No home-network address found. Is this computer on Wi-Fi?")

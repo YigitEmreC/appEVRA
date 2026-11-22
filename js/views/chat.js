@@ -22,13 +22,14 @@ import { accountPanel } from './account-ui.js';
 
 const CHAT_KEY = 'evra.chat';
 const MAX_KEPT = 60; // messages kept for this browser tab
+// Evra speaks Turkish first (it answers in English when written to in English).
 const SUGGESTIONS = [
-  'What\'s going on at home right now?',
-  'Is any window open?',
-  'Make the LED warm white at 40%',
-  'Switch the lights off every night at midnight',
-  'Any updates or problems?',
-  'Add a smart plug',
+  'Evde şu an neler oluyor?',
+  'Açık pencere var mı?',
+  'LED\'i %40 sıcak beyaz yap',
+  'Her gece yarısı ışıkları kapat',
+  'Yeni bir cihaz eklemek istiyorum',
+  'Bebek odası için ne önerirsin?',
 ];
 
 const newSession = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -133,20 +134,20 @@ function richText(text) {
 // Signed out, or a membership without the assistant: say why, and how to fix it.
 function lockedView(root, cleanup) {
   const u = member();
-  root.append(h('section', { class: 'chat chat-locked', 'aria-label': 'Evra assistant' },
+  root.append(h('section', { class: 'chat chat-locked', 'aria-label': 'Evra' },
     h('header', { class: 'chat-head' },
       h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
-      h('div', { class: 'chat-titles' }, h('h2', null, 'Evra assistant'),
-        h('p', { class: 'chat-status' }, icon('lock', 14), u ? 'Not included in your membership' : 'For Evra members'))),
+      h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
+        h('p', { class: 'chat-status' }, icon('lock', 14), u ? 'Üyeliğinizde yok' : 'Evra üyeleri için'))),
     u
       ? h('div', { class: 'card' },
-        h('p', null, `Your account (${u.username}) doesn't include the assistant.`),
+        h('p', null, `Hesabınız (${u.username}) Evra asistanını içermiyor.`),
         h('p', { class: 'muted small' }, u.email
-          ? 'The assistant comes with the Premium plan. An Evra admin can also switch it on for you.'
-          : 'Ask an admin to switch it on for you under Settings → Evra account → Manage members.'),
-        h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/settings' }, icon('person', 16), 'Your account')))
+          ? 'Evra asistanı Premium planla gelir.'
+          : 'Bir yöneticiden asistanı sizin için açmasını isteyin.'),
+        h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/settings' }, icon('person', 16), 'Hesabınız')))
       : h('div', { class: 'card' },
-        h('p', null, 'Sign in with your Evra account to use the assistant.'),
+        h('p', null, 'Evra\'yı kullanmak için Evra hesabınızla giriş yapın.'),
         accountPanel(cleanup))));
 }
 
@@ -169,7 +170,7 @@ export function renderChat(root, cleanup) {
 
 // Where to start the assistant: on this computer, or (opened on a phone) on the computer serving the app.
 const onThisComputer = () => ['localhost', '127.0.0.1', ''].includes(location.hostname);
-const startHint = () => (onThisComputer() ? 'start it with "Start Evra.bat"' : 'on the computer, start Evra with "Start Evra on phone.bat"');
+const startHint = () => (onThisComputer() ? '"Start Evra.bat" ile başlatın' : 'bilgisayarda Evra\'yı "Start Evra on phone.bat" ile başlatın');
 
 function chatView(root, cleanup) {
   const base = loadSettings().assistantUrl.replace(/\/+$/, '');
@@ -178,15 +179,15 @@ function chatView(root, cleanup) {
   let alive = true;
   cleanup.push(() => { alive = false; });
 
-  const status = h('p', { class: 'chat-status', role: 'status' }, h('span', { class: 'status-dot connecting' }), 'Checking the assistant…');
-  const newChat = h('button', { class: 'btn ghost small', type: 'button' }, icon('refresh', 14), 'New chat');
+  const status = h('p', { class: 'chat-status', role: 'status' }, h('span', { class: 'status-dot connecting' }), 'Evra\'ya bağlanılıyor…');
+  const newChat = h('button', { class: 'btn ghost small', type: 'button' }, icon('refresh', 14), 'Yeni sohbet');
   // Read aloud: new replies are spoken as they arrive (each reply also has its own Listen button).
   const voiceBtn = canSpeak() ? h('button', { class: 'btn ghost small voice-btn', type: 'button' }) : null;
   const paintVoice = () => {
     const on = loadSettings().speakReplies;
     voiceBtn.setAttribute('aria-pressed', String(on));
-    voiceBtn.title = on ? 'New replies are read aloud' : 'Read new replies aloud';
-    voiceBtn.replaceChildren(icon(on ? 'volume' : 'mute', 14), 'Read aloud');
+    voiceBtn.title = on ? 'Yeni yanıtlar sesli okunuyor' : 'Yeni yanıtları sesli oku';
+    voiceBtn.replaceChildren(icon(on ? 'volume' : 'mute', 14), 'Sesli oku');
   };
   if (voiceBtn) {
     paintVoice();
@@ -200,32 +201,32 @@ function chatView(root, cleanup) {
   cleanup.push(stopSpeaking); // leaving the tab stops the voice
   const head = h('header', { class: 'chat-head' },
     h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
-    h('div', { class: 'chat-titles' }, h('h2', null, 'Evra assistant'), status),
+    h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'), status),
     h('div', { class: 'chat-head-actions' }, ...[voiceBtn, newChat].filter(Boolean)));
 
   const intro = h('div', { class: 'msg assistant intro' },
-    h('div', { class: 'msg-body' }, h('p', null, 'Hi! Ask me anything about your home, or tell me what to change: devices, scenes, automations, rooms, new devices or updates.'),
-      h('p', { class: 'muted small' }, 'I prepare each change as a card; nothing happens until you tap Approve.')));
-  const log = h('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions', 'aria-label': 'Conversation with the Evra assistant', tabindex: '0' });
-  const suggest = h('div', { class: 'chat-suggest', role: 'group', 'aria-label': 'Suggested questions' },
+    h('div', { class: 'msg-body' }, h('p', null, 'Merhaba, ben Evra! Eviniz hakkında her şeyi sorabilir ya da neyi değiştirmek istediğinizi söyleyebilirsiniz: cihazlar, sahneler, otomasyonlar, odalar, yeni cihaz eşleştirme, Evra ürünleri.'),
+      h('p', { class: 'muted small' }, 'Her değişikliği bir kart olarak hazırlarım; siz Onayla\'ya basmadan hiçbir şey olmaz.')));
+  const log = h('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions', 'aria-label': 'Evra ile sohbet', tabindex: '0' });
+  const suggest = h('div', { class: 'chat-suggest', role: 'group', 'aria-label': 'Önerilen sorular' },
     SUGGESTIONS.map((q) => h('button', { type: 'button', class: 'room-chip small', onclick: () => ask(q) }, q)));
 
   const input = h('textarea', {
-    id: 'chat-input', class: 'chat-input', rows: 1, maxlength: 1500, placeholder: 'Ask about your home…',
+    id: 'chat-input', class: 'chat-input', rows: 1, maxlength: 1500, placeholder: 'Evra\'ya sorun…',
     'aria-describedby': 'chat-note', enterkeyhint: 'send', autocomplete: 'off',
   });
-  const send = h('button', { class: 'btn primary chat-send', type: 'submit' }, icon('send', 18), h('span', { class: 'sr-only' }, 'Send'));
+  const send = h('button', { class: 'btn primary chat-send', type: 'submit' }, icon('send', 18), h('span', { class: 'sr-only' }, 'Gönder'));
   const form = h('form', { class: 'chat-form' },
-    h('label', { for: 'chat-input', class: 'sr-only' }, 'Message to the Evra assistant'), input, send);
+    h('label', { for: 'chat-input', class: 'sr-only' }, 'Evra\'ya mesaj'), input, send);
   const note = h('p', { id: 'chat-note', class: 'chat-note muted small' },
-    'To answer, your question and your devices\' names, rooms and states are sent to Google Gemini.');
+    'Yanıt için sorunuz ve cihazlarınızın adları, odaları ve durumları Google Gemini\'ye gönderilir.');
 
   // ---- changes the assistant prepared: nothing happens until Approve ----
   const KIND_ICON = { control: 'power', press: 'remote', scene: 'scenes', automation: 'robot', room: 'rooms', device: 'devices', update: 'refresh', setting: 'gear' };
   function proposalCard(p, m) {
     const result = h('p', { class: 'proposal-result', role: 'status', tabindex: '-1' });
     const buttons = h('div', { class: 'proposal-actions' });
-    const card = h('div', { class: `proposal${p.danger ? ' danger' : ''}`, role: 'group', 'aria-label': `Prepared change: ${p.title}` },
+    const card = h('div', { class: `proposal${p.danger ? ' danger' : ''}`, role: 'group', 'aria-label': `Hazırlanan değişiklik: ${p.title}` },
       h('div', { class: 'proposal-head' }, h('span', { class: 'proposal-icon', 'aria-hidden': 'true' }, icon(KIND_ICON[p.kind] || 'sparkle', 16)), h('strong', null, p.title)),
       p.details?.length ? h('ul', { class: 'proposal-details' }, p.details.map((d) => h('li', null, d))) : null,
       buttons, result);
@@ -243,20 +244,20 @@ function chatView(root, cleanup) {
     function draw() {
       card.dataset.status = p.status || 'pending';
       if (!p.status || p.status === 'pending') {
-        const approve = h('button', { class: `btn small ${p.danger ? 'danger' : 'primary'}`, type: 'button' }, icon('check', 14), 'Approve', h('span', { class: 'sr-only' }, `: ${p.title}`));
-        const cancel = h('button', { class: 'btn small ghost', type: 'button' }, 'Cancel', h('span', { class: 'sr-only' }, `: ${p.title}`));
-        const review = p.editable ? h('button', { class: 'btn small ghost', type: 'button' }, icon('edit', 14), 'Review in editor') : null;
+        const approve = h('button', { class: `btn small ${p.danger ? 'danger' : 'primary'}`, type: 'button' }, icon('check', 14), 'Onayla', h('span', { class: 'sr-only' }, `: ${p.title}`));
+        const cancel = h('button', { class: 'btn small ghost', type: 'button' }, 'İptal', h('span', { class: 'sr-only' }, `: ${p.title}`));
+        const review = p.editable ? h('button', { class: 'btn small ghost', type: 'button' }, icon('edit', 14), 'Düzenleyicide incele') : null;
         approve.addEventListener('click', async () => {
           buttons.querySelectorAll('button').forEach((x) => { x.disabled = true; });
-          result.textContent = 'Working on it…';
+          result.textContent = 'Yapılıyor…';
           const r = await runProposal(p);
           report(r.ok ? 'done' : 'failed', r.detail);
           finish(r.ok ? 'done' : 'failed', r.detail);
         });
-        cancel.addEventListener('click', () => { report('cancelled', ''); finish('cancelled', 'Cancelled'); });
+        cancel.addEventListener('click', () => { report('cancelled', ''); finish('cancelled', 'İptal edildi'); });
         review?.addEventListener('click', () => {
-          report('done', 'Opened in the automation editor; the person will check and save it there (not saved yet)');
-          p.status = 'review'; p.result = 'Opened in the editor'; saveChat(chat);
+          report('done', 'Otomasyon düzenleyicide açıldı; kişi orada kontrol edip kaydedecek (henüz kaydedilmedi)');
+          p.status = 'review'; p.result = 'Düzenleyicide açıldı'; saveChat(chat);
           openInEditor(p);
         });
         buttons.replaceChildren(...[approve, cancel, review].filter(Boolean));
@@ -264,7 +265,7 @@ function chatView(root, cleanup) {
       } else {
         buttons.replaceChildren();
         result.replaceChildren(icon(p.status === 'done' || p.status === 'review' ? 'check' : p.status === 'failed' ? 'alert' : 'close', 14),
-          ` ${p.status === 'failed' ? 'Didn\'t work: ' : ''}${p.result || ''}`);
+          ` ${p.status === 'failed' ? 'Olmadı: ' : ''}${p.result || ''}`);
       }
     }
     draw();
@@ -287,7 +288,7 @@ function chatView(root, cleanup) {
     const btn = h('button', { class: 'btn small ghost msg-listen', type: 'button' });
     const paint = (on) => {
       btn.setAttribute('aria-pressed', String(on));
-      btn.replaceChildren(icon(on ? 'stop' : 'volume', 14), on ? 'Stop' : 'Listen', h('span', { class: 'sr-only' }, on ? ' reading' : ' to this reply'));
+      btn.replaceChildren(icon(on ? 'stop' : 'volume', 14), on ? 'Durdur' : 'Dinle', h('span', { class: 'sr-only' }, on ? ' okumayı' : ' (bu yanıtı)'));
     };
     paint(speakingId() === m);
     speakers.set(m, paint);
@@ -297,7 +298,7 @@ function chatView(root, cleanup) {
 
   function bubble(m) {
     const el = h('div', { class: `msg ${m.role}${m.error ? ' error' : ''}` },
-      h('span', { class: 'sr-only' }, m.role === 'user' ? 'You: ' : 'Evra assistant: '),
+      h('span', { class: 'sr-only' }, m.role === 'user' ? 'Siz: ' : 'Evra: '),
       h('div', { class: 'msg-body' }, m.role === 'assistant' && !m.error ? richText(m.text) : h('p', null, m.text)),
       m.proposals?.length ? h('div', { class: 'proposals' }, m.proposals.map((p) => proposalCard(p, m))) : null,
       m.role === 'assistant' && !m.error && canSpeak() ? listenButton(m) : null);
@@ -305,7 +306,7 @@ function chatView(root, cleanup) {
       el.append(h('button', {
         class: 'btn small', type: 'button',
         onclick: () => { chat.messages.splice(chat.messages.indexOf(m), 1); el.remove(); saveChat(chat); ask(m.retry, true); },
-      }, icon('refresh', 14), 'Try again'));
+      }, icon('refresh', 14), 'Tekrar dene'));
     }
     return el;
   }
@@ -335,7 +336,7 @@ function chatView(root, cleanup) {
     log.setAttribute('aria-busy', 'true');
     const thinking = h('div', { class: 'msg assistant thinking' },
       h('span', { class: 'dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
-      h('span', { class: 'sr-only' }, 'The assistant is thinking…'));
+      h('span', { class: 'sr-only' }, 'Evra düşünüyor…'));
     log.append(thinking);
     reveal(thinking);
     try {
@@ -348,7 +349,7 @@ function chatView(root, cleanup) {
       if (!res.ok) {
         // Signed out or access switched off: refresh the account, which locks the tab if needed.
         if (j.code === 'signin' || j.code === 'no_access') refreshMember();
-        throw new Error(j.error || `The assistant answered with an error (${res.status}).`);
+        throw new Error(j.error || `Evra bir hatayla yanıt verdi (${res.status}).`);
       }
       if (alive) {
         const reply = { role: 'assistant', text: j.reply, proposals: (j.proposals || []).map((p) => ({ ...p, status: 'pending' })) };
@@ -357,7 +358,7 @@ function chatView(root, cleanup) {
       }
     } catch (e) {
       const message = e instanceof TypeError
-        ? `I can't reach the assistant. It runs on ${onThisComputer() ? 'this computer' : 'the computer that serves the app'}: ${startHint()}.`
+        ? `Evra'ya ulaşılamıyor. ${onThisComputer() ? 'Bu bilgisayarda' : 'Uygulamayı açan bilgisayarda'} çalışır: ${startHint()}.`
         : e.message;
       if (alive) add({ role: 'assistant', text: message, error: true, retry: text });
     } finally {
@@ -395,19 +396,19 @@ function chatView(root, cleanup) {
   });
 
   async function checkHealth() {
-    const where = store.backend?.mode === 'live' ? 'Answers from Home Assistant' : 'Answers from the demo home';
+    const where = store.backend?.mode === 'live' ? 'Evinizden yanıtlar' : 'Örnek evden yanıtlar';
     try {
       const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
       const j = await res.json();
       if (!alive) return;
-      status.replaceChildren(h('span', { class: `status-dot ${j.key ? 'connected' : 'error'}` }), j.key ? `Ready · ${where}` : 'The assistant has no Gemini key');
+      status.replaceChildren(h('span', { class: `status-dot ${j.key ? 'connected' : 'error'}` }), j.key ? `Hazır · ${where}` : 'Evra\'nın Gemini anahtarı yok');
     } catch {
       if (!alive) return;
-      status.replaceChildren(h('span', { class: 'status-dot error' }), `Not running. To fix it, ${startHint()}.`);
+      status.replaceChildren(h('span', { class: 'status-dot error' }), `Çalışmıyor. ${startHint()}.`);
     }
   }
 
-  root.append(h('section', { class: 'chat', 'aria-label': 'Evra assistant' }, head, log, suggest, h('div', { class: 'chat-dock' }, form, note)));
+  root.append(h('section', { class: 'chat', 'aria-label': 'Evra' }, head, log, suggest, h('div', { class: 'chat-dock' }, form, note)));
   drawAll();
   checkHealth();
   if (chat.messages.length) reveal(log.lastElementChild);
