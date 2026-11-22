@@ -16,6 +16,8 @@ import { openCustomizer } from './views/customize.js';
 import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_NAV, HEADER_ITEMS } from './custom.js';
 import { arrangeable } from './edit.js';
 import { ensureSky } from './sky.js';
+import { renderMembers } from './views/members.js';
+import { member, canUseAssistant, onAccount, refreshMember } from './account.js';
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [
@@ -27,6 +29,8 @@ const VIEWS = [
   { id: 'remotes', label: 'Remotes', icon: 'remote', render: renderRemotes, title: 'Remotes', mobile: false },
   { id: 'chat', label: 'Assistant', icon: 'devil', render: renderChat, title: 'Assistant' },
   { id: 'settings', label: 'Settings', icon: 'gear', render: renderSettings, title: 'Settings' },
+  // Reached from Settings, not shown in the navigation.
+  { id: 'members', label: 'Members', icon: 'person', render: renderMembers, title: 'Members', nav: false },
 ];
 const SUBTITLES = { 'devices/add': 'Add a device', 'automations/new': 'New automation', 'automations/edit': 'Edit automation' };
 
@@ -129,11 +133,17 @@ const main = h('main', { id: 'view', tabindex: '-1' });
 const nav = h('nav', { class: 'nav', 'aria-label': 'Main' });
 const brand = h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra home', title: 'Evra' }, icon('evra', 22));
 
+// Members whose account doesn't include the assistant don't get its tab. (Signed
+// out, it stays so people can find out they need to sign in. The assistant
+// server checks membership itself either way.)
+const assistantBlocked = () => !!member() && !canUseAssistant();
+
 // Tabs in the person's chosen order, without the ones they hid (while
-// editing, hidden tabs show faded so they can be brought back).
+// editing, hidden tabs show faded so they can be brought back). Screens like
+// Members (nav: false) are reached from Settings and never get a tab.
 function buildNav() {
   const { nav: cfg } = getCustom();
-  const all = ordered(VIEWS, cfg);
+  const all = ordered(VIEWS.filter((v) => v.nav !== false && !(v.id === 'chat' && assistantBlocked())), cfg);
   const tabs = all.filter((v) => isEditing() || LOCKED_NAV.includes(v.id) || !isHidden(cfg, v.id));
   nav.replaceChildren(brand, ...tabs.map((v) => h('a', { href: `#/${v.id}`, 'data-view': v.id, 'data-id': v.id, 'data-name': v.label, class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}` }, h('span', { class: 'nav-icon' }, icon(v.icon, 22)), h('span', { class: 'nav-label' }, v.label))));
   arrangeable(nav, 'nav', { whole: true, locked: LOCKED_NAV, all: all.map((v) => v.id) });
@@ -142,6 +152,15 @@ function buildNav() {
 function markActive() {
   for (const a of nav.querySelectorAll('.nav-item')) a.classList.toggle('active', a.dataset.view === currentView?.id);
 }
+
+// A change of account (or of what it may use) re-draws the tabs.
+let lastBlocked = assistantBlocked();
+onAccount(() => {
+  if (assistantBlocked() !== lastBlocked) { lastBlocked = assistantBlocked(); buildNav(); }
+});
+refreshMember();
+// Pick up access changes an admin made, when the app comes back into view.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshMember(); });
 
 document.getElementById('app').replaceChildren(
   h('header', { class: 'top' }, topLeft, topRight),

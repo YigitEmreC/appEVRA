@@ -259,7 +259,8 @@ export const PRODUCTS = [
   {
     id: 'energy-meter', category: 'energy', kind: 'plug', icon: 'bolt',
     name: 'Energy meter module', nameTr: 'Enerji Ölçer Modülü',
-    model: 'Sonoff MINI-ZB1GP', protocol: 'Zigbee', pairing: 'zigbee', match: ['MINI-ZB', 'ZB1GP'],
+    // Not "MINI-ZB" on its own: that would also match the MINI-ZBRBS shutter module.
+    model: 'Sonoff MINI-ZB1GP', protocol: 'Zigbee', pairing: 'zigbee', match: ['MINI-ZB1GP', 'ZB1GP'],
     summary: 'Measures and switches the power of a circuit or a hard-wired appliance such as a water heater or oven, showing how much it uses.',
     setup: ['Power off; a qualified technician does this.', 'Wire the module into the appliance\'s circuit.', 'Pair it with the hub.'],
     pairHint: 'Hold the module\'s button for 5 seconds until the light blinks.',
@@ -277,7 +278,7 @@ export const PRODUCTS = [
   {
     id: 'blind-tube', category: 'covers', kind: 'cover', icon: 'blind', coverClass: 'shade',
     name: 'Tubular blind motor', nameTr: 'Akıllı Boru Motor (Stor/Zebra)',
-    model: 'Zigbee tubular motor (Zemismart / Tuya)', protocol: 'Zigbee', pairing: 'zigbee', match: [],
+    model: 'Zigbee tubular motor (Zemismart / Tuya)', protocol: 'Zigbee', pairing: 'zigbee', match: ['tubular'],
     summary: 'Quiet motor hidden inside the tube of a roller or zebra blind; the blind goes up and down by motor instead of by hand.',
     setup: ['Measure the blind\'s tube diameter and choose the matching motor.', 'Fit the motor inside the tube and wire it.', 'Set the limits and pair it with the hub.'],
     pairHint: 'Hold the motor\'s programming button until it jogs.',
@@ -285,7 +286,7 @@ export const PRODUCTS = [
   {
     id: 'curtain', category: 'covers', kind: 'cover', icon: 'curtain', coverClass: 'curtain',
     name: 'Curtain track motor', nameTr: 'Akıllı Klasik Perde Motoru (Kornişli)',
-    model: 'Şımart smart curtain motor (Wi-Fi)', protocol: 'Wi-Fi (cloud)', pairing: 'cloud', integration: 'tuya', match: [],
+    model: 'Şımart smart curtain motor (Wi-Fi)', protocol: 'Wi-Fi (cloud)', pairing: 'cloud', integration: 'tuya', match: ['curtain motor', 'curtain robot'],
     summary: 'Motorised track that opens and closes classic sheer and blackout curtains to both sides; also moves if pulled by hand.',
     setup: ['Measure the window and cut the track to length.', 'Mount the track, fit the motor and hang the curtains.', 'Connect it to Wi-Fi and add it to the hub.'],
     note: 'Connects through the maker\'s cloud; remote control doesn\'t work without internet.',

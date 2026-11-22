@@ -149,6 +149,12 @@ export function loadSettings() {
     remote: saved.remote,
     sceneRooms: saved.sceneRooms,
     lastScene: saved.lastScene,
+    // The Evra assistant server (EvrAI/gemini_home_starter), on this computer.
+    assistantUrl: saved.assistantUrl || 'http://localhost:8765',
+    // Evra accounts address, only when someone chose one; unset means the Evra website
+    // (accountsUrl() in js/account.js). Older versions saved "accountsUrl" with every
+    // setting, so that key is ignored and dropped on the next save.
+    accountsServer: saved.accountsServer || undefined,
   };
 }
 export function saveSettings(patch) {

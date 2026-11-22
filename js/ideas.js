@@ -121,7 +121,9 @@ const lightOn = (entity, pct, kelvin, hs) => act(entity, 'turn_on', lightData(en
 const press = (entity) => ({ action: 'button.press', target: { entity_id: entity } });
 const wait = (seconds) => ({ delay: { seconds } });
 const note = (title, message) => ({ action: 'persistent_notification.create', data: { title, message } });
-const urgent = (title, message) => [note(title, message), { action: 'notify.notify', data: { title, message } }];
+// Also to phones. Without the Home Assistant app on a phone, notify.notify doesn't
+// exist; continue_on_error stops that from ending the automation.
+const urgent = (title, message) => [note(title, message), { action: 'notify.notify', data: { title, message }, continue_on_error: true }];
 const minutes = (m) => (m ? { for: { minutes: m } } : {});
 const when = (entity, to, forMin) => ({ trigger: 'state', entity_id: entity, ...(to != null ? { to } : {}), ...minutes(forMin) });
 const drops = (entity, below, forMin) => ({ trigger: 'numeric_state', entity_id: entity, below, ...minutes(forMin) });
@@ -299,14 +301,14 @@ export const IDEAS = [
     title: 'Smoke: alert everyone and light the way out',
     text: 'Smoke sends an urgent alert to the family\'s phones, turns every light on full and sounds the siren.',
     build: (x) => ({ alias: 'Smoke alarm', mode: 'single', triggers: [when(x.smoke, 'on')], conditions: [],
-      actions: [...urgent('Smoke detected', `Smoke in ${x.room}. If there is a fire, call 112.`), ...x.all('light').map((l) => lightOn(l, 100, KELVIN_COOL)), ...(x.has('siren') ? [act(x.siren, 'turn_on')] : [])] }),
+      actions: [...(x.has('siren') ? [act(x.siren, 'turn_on')] : []), ...x.all('light').map((l) => lightOn(l, 100, KELVIN_COOL)), ...urgent('Smoke detected', `Smoke in ${x.room}. If there is a fire, call 112.`)] }),
   },
   {
     id: 'gas-alarm', category: 'Safety', icon: 'alert', needs: ['gas'], optional: ['siren'],
     title: 'Gas leak alarm',
     text: 'Gas sends an urgent alert with what to do, and sounds the siren.',
     build: (x) => ({ alias: 'Gas leak alarm', mode: 'single', triggers: [when(x.gas, 'on')], conditions: [],
-      actions: [...urgent('Gas detected', `Gas in ${x.room}. No flames, don't touch switches, open the windows and call 187.`), ...(x.has('siren') ? [act(x.siren, 'turn_on')] : [])] }),
+      actions: [...(x.has('siren') ? [act(x.siren, 'turn_on')] : []), ...urgent('Gas detected', `Gas in ${x.room}. No flames, don't touch switches, open the windows and call 187.`)] }),
   },
   {
     id: 'leak-alert', category: 'Safety', icon: 'droplet', needs: ['leak'],
@@ -325,7 +327,7 @@ export const IDEAS = [
     title: 'Emergency button alerts the family',
     text: 'A press of the emergency button sends an urgent alert and turns the lights on, so helpers can see.',
     build: (x) => ({ alias: 'Emergency button pressed', mode: 'single', triggers: [when(x.sos, null)], conditions: [],
-      actions: [...urgent('Emergency button', `The emergency button in ${x.room} was pressed.`), ...x.all('light').map((l) => lightOn(l, 100, KELVIN_COOL))] }),
+      actions: [...x.all('light').map((l) => lightOn(l, 100, KELVIN_COOL)), ...urgent('Emergency button', `The emergency button in ${x.room} was pressed.`)] }),
   },
   {
     id: 'inactivity', category: 'Safety', icon: 'radar', needs: ['presence'],

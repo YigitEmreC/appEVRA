@@ -1,0 +1,5 @@
+# The test hub's saved home and its test login, made on each PC
+tools/test_hub/data/
+# Evra member accounts (password hashes and sessions); never commit
+tools/accounts/data/
+__pycache__/

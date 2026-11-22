@@ -284,7 +284,15 @@ export function createLiveBackend(hassUrl) {
         try {
           await send({ type: 'config/device_registry/remove_config_entry', device_id: deviceId, config_entry_id: entryId });
         } catch {
-          // Integrations that don't support removing single devices: remove the whole entry.
+          // The integration can't remove single devices. Deleting its whole entry is
+          // fine when this is its only device (TP-Link, ESPHome: one entry each),
+          // but a shared entry (a Tuya or Smart Life account) would take every
+          // other device with it.
+          const all = await send({ type: 'config/device_registry/list' });
+          const others = all.filter((d) => d.id !== deviceId && (d.config_entries || []).includes(entryId)).length;
+          if (others) {
+            throw new Error(`it shares its connection with ${others} other device${others === 1 ? '' : 's'}, so it can't be removed on its own. Remove it in its maker's app (for example Smart Life) instead`);
+          }
           await rest('DELETE', `config/config_entries/entry/${entryId}`);
         }
       }

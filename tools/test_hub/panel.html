@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evra test hub</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0E1322; --card: #151B2E; --card-2: #1C2440; --line: rgb(205 215 240 / 0.10); --line-strong: rgb(205 215 240 / 0.18);
+    --text: #EDEEFB; --muted: #9AA5C6; --accent: #9AAFDD; --ok: #B3C6B3; --warn: #E9BE7C; --bad: #F27D89; --cool: #9ED5FD;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 20px 20px 8px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 10px; }
+  h3 { font-size: 15px; margin: 0; }
+  main { max-width: 1200px; margin: 0 auto; padding: 8px 16px 40px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); align-items: start; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .wide { grid-column: 1 / -1; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; background: var(--card-2); font-weight: 650; font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.on .dot { background: var(--ok); box-shadow: 0 0 0 3px rgb(179 198 179 / .25); }
+  button, select, input { font: inherit; color: var(--text); }
+  button { background: var(--card-2); border: 1px solid var(--line-strong); border-radius: 10px; padding: 6px 11px; font-weight: 650; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: #10162A; border-color: transparent; }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: .45; cursor: default; }
+  select { background: var(--card-2); border: 1px solid var(--line-strong); border-radius: 10px; padding: 6px 8px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .row .grow { flex: 1; min-width: 0; }
+  .device { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .device:first-of-type { border-top: 0; padding-top: 0; }
+  .ent { display: flex; align-items: center; gap: 8px; }
+  .ent .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .val { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .val.on { color: var(--ok); } .val.alarm { color: var(--bad); }
+  code { background: var(--card-2); padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+  .login { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; }
+  .log { max-height: 360px; overflow: auto; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+  .log div { display: flex; gap: 8px; }
+  .log time { color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+  .note { padding: 8px 10px; border-radius: 10px; background: var(--card-2); }
+  .note b { display: block; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: rgb(154 175 221 / .2); }
+  .tag.phone { background: rgb(158 213 253 / .2); }
+  .count { font-size: 28px; font-weight: 300; font-variant-numeric: tabular-nums; }
+  ol { margin: 0; padding-left: 18px; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--card-2); border: 1px solid var(--line-strong); padding: 10px 14px; border-radius: 12px; opacity: 0; transition: opacity .2s; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Evra test hub</h1>
+    <div class="muted">Stands in for Home Assistant <span id="ver"></span>, so the app's live mode can be tried without the Raspberry Pi.</div>
+  </div>
+  <span class="pill" id="clients"><span class="dot"></span><span>–</span></span>
+</header>
+<main>
+  <section class="card">
+    <h2>Connect the app</h2>
+    <ol>
+      <li>Open Evra, go to <b>Settings</b> and pick <b>Live</b>.</li>
+      <li>Enter the address <code id="addr"></code> and press <b>Connect</b>.</li>
+      <li>Log in on the test hub's page with:</li>
+    </ol>
+    <div class="login">
+      <span class="muted">Username</span><code id="user"></code><button data-copy="user">Copy</button>
+      <span class="muted">Password</span><code id="pass"></code><button data-copy="pass">Copy</button>
+    </div>
+    <p class="muted small" id="origins"></p>
+  </section>
+
+  <section class="card">
+    <h2>Add devices</h2>
+    <div class="row"><h3 class="grow">Zigbee</h3><span class="pill" id="permit"><span class="dot"></span><span>Pairing closed</span></span></div>
+    <p class="muted small">Start pairing in the app (Add device → a Zigbee product), then make a device join here.</p>
+    <div class="row"><select id="zb" class="grow"></select><button id="join" class="primary">Join</button></div>
+    <h3>Wi-Fi, by IP address</h3>
+    <p class="muted small">In the app, pick the product and type its IP address when asked.</p>
+    <div id="network"></div>
+    <div class="row"><select id="wifi" class="grow"></select><button id="netadd">Put one on the network</button></div>
+    <h3>Matter, by code</h3>
+    <div id="matter"></div>
+    <h3>Cloud account (Tuya)</h3>
+    <div id="cloud"></div>
+  </section>
+
+  <section class="card">
+    <h2>Notifications</h2>
+    <label class="row"><input type="checkbox" id="phone"> <span>A phone with the Home Assistant app is connected (makes <code>notify.notify</code> exist)</span></label>
+    <div id="notes" class="log"></div>
+    <div class="row"><button id="clearnotes">Clear</button></div>
+  </section>
+
+  <section class="card wide">
+    <h2>Sensors and devices <span class="muted small">(make things happen in the room)</span></h2>
+    <div id="devices" style="display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr))"></div>
+  </section>
+
+  <section class="card">
+    <h2>Helpers</h2>
+    <div id="helpers"></div>
+  </section>
+
+  <section class="card">
+    <h2>Activity</h2>
+    <div id="activity" class="log"></div>
+  </section>
+
+  <section class="card">
+    <h2>Updates</h2>
+    <p class="muted small">Pretend Home Assistant has a new version, to try installing updates from the app or the assistant.</p>
+    <div class="row"><button id="mkupdate">Make an update available</button></div>
+  </section>
+
+  <section class="card">
+    <h2>Start over</h2>
+    <p class="muted small">Puts the test home back to the snapshot: devices, rooms, automations and states. The login stays.</p>
+    <div class="row"><button id="reset" class="danger">Reset the test home</button></div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let last = null;
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+async function act(body) {
+  const res = await fetch('/panel/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) toast(j.error || 'That didn\'t work'); else refresh();
+}
+
+function controls(e) {
+  const d = e.entity_id.split('.')[0], dc = e.device_class;
+  if (d === 'binary_sensor') {
+    if (['occupancy', 'motion', 'presence'].includes(dc)) return `<button data-act="trigger" data-id="${e.entity_id}">Detect</button>`;
+    if (['opening', 'door', 'window', 'garage_door'].includes(dc)) return `<button data-act="trigger" data-id="${e.entity_id}">${e.state === 'on' ? 'Close' : 'Open'}</button>`;
+    if (['smoke', 'gas', 'moisture'].includes(dc)) return `<button data-act="trigger" data-id="${e.entity_id}" class="${e.state === 'on' ? '' : 'danger'}">${e.state === 'on' ? 'Clear' : 'Raise alarm'}</button>`;
+    return `<button data-act="trigger" data-id="${e.entity_id}">Toggle</button>`;
+  }
+  if (d === 'event') return `<button data-act="trigger" data-id="${e.entity_id}">Press</button>`;
+  if (d === 'sensor') {
+    const step = { temperature: 0.5, humidity: 5, carbon_dioxide: 200, power: 10 }[dc];
+    if (step && Number.isFinite(parseFloat(e.state))) return `<button data-act="nudge" data-id="${e.entity_id}" data-delta="${-step}">−</button><button data-act="nudge" data-id="${e.entity_id}" data-delta="${step}">+</button>`;
+  }
+  if (d === 'lock') return `<button data-act="set" data-id="${e.entity_id}" data-state="${e.state === 'locked' ? 'unlocked' : 'locked'}">${e.state === 'locked' ? 'Unlock by hand' : 'Lock by hand'}</button>`;
+  return '';
+}
+
+function valueClass(e) {
+  if (['on', 'open', 'unlocked', 'heat'].includes(e.state)) return ['smoke', 'gas', 'moisture'].includes(e.device_class) && e.state === 'on' ? 'alarm' : 'on';
+  return '';
+}
+
+function render(s) {
+  last = s;
+  $('ver').textContent = s.version;
+  $('clients').classList.toggle('on', s.clients > 0);
+  $('clients').lastElementChild.textContent = s.clients ? `${s.clients} app${s.clients === 1 ? '' : 's'} connected` : 'No app connected';
+  $('addr').textContent = location.origin;
+  $('user').textContent = s.login.username;
+  $('pass').textContent = s.login.password;
+  $('origins').textContent = `The app must run at ${s.origins.join(' or ')} (start the hub with --origin to allow another address).`;
+  $('permit').classList.toggle('on', s.permit_left > 0);
+  $('permit').lastElementChild.textContent = s.permit_left > 0 ? `Pairing open · ${Math.floor(s.permit_left / 60)}:${String(s.permit_left % 60).padStart(2, '0')}` : 'Pairing closed';
+  $('join').disabled = s.permit_left <= 0;
+  if (!$('zb').options.length) $('zb').innerHTML = s.zigbee_products.map((p) => `<option value="${p.id}">${esc(p.name)} (${esc(p.model)})</option>`).join('');
+  if (!$('wifi').options.length) $('wifi').innerHTML = s.wifi_products.map((p) => `<option value="${p.id}">${esc(p.name)} (${esc(p.model)})</option>`).join('');
+  $('network').innerHTML = s.network.length ? s.network.map((x) => `<div class="ent"><span class="name">${esc(x.name)} <span class="small">(${esc(x.model)}, ${esc(x.handler)})</span></span><code>${esc(x.host)}</code></div>`).join('') : '<p class="muted small">Nothing waiting on the network.</p>';
+  $('matter').innerHTML = s.matter.length ? s.matter.map((x) => `<div class="ent"><span class="name">${esc(x.name)}</span><code>${esc(x.code)}</code></div>`).join('') : '<p class="muted small">No Matter devices waiting.</p>';
+  $('cloud').innerHTML = s.cloud.length ? `<p class="muted small">In the app these say "Link the account in Home Assistant", which opens <a href="/config/integrations/dashboard/add?domain=tuya" target="_blank" style="color:var(--accent)">this page</a>. Waiting: ${s.cloud.map((x) => esc(x.name)).join(', ')}.</p>` : '<p class="muted small">Every cloud device has been added.</p>';
+  $('phone').checked = s.phone_app;
+  $('notes').innerHTML = s.notifications.length ? s.notifications.map((n) => `<div class="note"><b>${esc(n.title)} <span class="tag ${n.phone ? 'phone' : ''}">${n.phone ? 'phone' : 'Home Assistant'}</span></b>${esc(n.message)}<div class="muted small">${new Date(n.at).toLocaleTimeString()}</div></div>`).join('') : '<p class="muted small">No notifications yet. Automations that "send a notification" show up here.</p>';
+  $('devices').innerHTML = s.devices.map((d) => `<div class="device"><div class="row"><h3 class="grow">${esc(d.name)}</h3><span class="muted small">${esc(d.model || '')} · ${esc(d.integration || '')}${d.area ? ' · ' + esc(d.area) : ''}</span></div>
+    ${d.entities.filter((e) => !e.entity_id.startsWith('button.')).map((e) => `<div class="ent"><span class="name" title="${esc(e.entity_id)}">${esc(e.name)}</span><span class="val ${valueClass(e)}">${esc(e.state)}${e.unit ? ' ' + esc(e.unit) : ''}</span>${controls(e)}</div>`).join('')}
+    ${d.entities.some((e) => e.entity_id.startsWith('button.')) ? `<p class="muted small">${d.entities.filter((e) => e.entity_id.startsWith('button.')).length} remote buttons (pressed from the app)</p>` : ''}</div>`).join('');
+  $('helpers').innerHTML = s.helpers.map((h) => `<div class="ent"><span class="name" title="${esc(h.entity_id)}">${esc(h.name || h.entity_id)}</span><span class="val ${['on', 'above_horizon'].includes(h.state) ? 'on' : ''}">${esc(h.state)}</span>${
+    h.entity_id.startsWith('input_boolean.') ? `<button data-act="set" data-id="${h.entity_id}" data-state="${h.state === 'on' ? 'off' : 'on'}">Flip</button>` :
+    h.entity_id === 'sun.sun' ? `<button data-act="set" data-id="sun.sun" data-state="${h.state === 'above_horizon' ? 'below_horizon' : 'above_horizon'}">${h.state === 'above_horizon' ? 'Make it dark' : 'Make it day'}</button>` : ''}</div>`).join('');
+  $('activity').innerHTML = s.activity.map((a) => `<div><time>${new Date(a.at).toLocaleTimeString()}</time><span>${esc(a.text)}</span></div>`).join('');
+}
+
+async function refresh() {
+  try {
+    const res = await fetch('/panel/api/state');
+    render(await res.json());
+  } catch { $('clients').lastElementChild.textContent = 'Hub not running'; }
+}
+
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  if (b.dataset.copy) { navigator.clipboard?.writeText($(b.dataset.copy).textContent).then(() => toast('Copied')); return; }
+  if (b.dataset.act === 'trigger') act({ kind: 'trigger', entity_id: b.dataset.id });
+  if (b.dataset.act === 'nudge') act({ kind: 'nudge', entity_id: b.dataset.id, delta: b.dataset.delta });
+  if (b.dataset.act === 'set') act({ kind: 'set', entity_id: b.dataset.id, state: b.dataset.state });
+});
+$('join').addEventListener('click', () => act({ kind: 'join', product: $('zb').value }));
+$('netadd').addEventListener('click', () => act({ kind: 'network-add', product: $('wifi').value }));
+$('phone').addEventListener('change', (e) => act({ kind: 'phone', on: e.target.checked }));
+$('clearnotes').addEventListener('click', () => act({ kind: 'clear-notifications' }));
+$('mkupdate').addEventListener('click', () => act({ kind: 'update-available' }));
+$('reset').addEventListener('click', () => { if (confirm('Reset the test home to the snapshot?')) act({ kind: 'reset' }); });
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>

@@ -4,9 +4,16 @@ import { icon } from '../icons.js';
 import { toggle } from '../components.js';
 import { renderAutomationEditor } from './automation-editor.js';
 import { CAPS, CATEGORIES, ideasForHome, buildIdea } from '../ideas.js';
+import { takeTemplate } from '../assistant-actions.js';
 
 export function renderAutomations(root, cleanup, ctx) {
   const [first, second] = ctx.params;
+  // Prepared by the assistant ("Review in editor").
+  if (ctx.query.get('template') === 'assistant') {
+    const template = takeTemplate();
+    if (!template) toast('That draft is no longer available.', 'error');
+    return renderAutomationEditor(root, cleanup, first === 'edit' && second ? decodeURIComponent(second) : null, template);
+  }
   if (first === 'new') {
     const ideaId = ctx.query.get('idea');
     if (!ideaId) return renderAutomationEditor(root, cleanup, null);

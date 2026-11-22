@@ -6,6 +6,8 @@ import { PALETTES } from '../themes.js';
 import { icon } from '../icons.js';
 import { card, toggle } from '../components.js';
 import { signOut } from '../backends/live.js';
+import { accountPanel } from './account-ui.js';
+import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS } from '../account.js';
 
 export function renderSettings(root, cleanup, { reconnect }) {
   const settings = loadSettings();
@@ -14,7 +16,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
   const statusLine = h('p', { class: 'status-line' });
   cleanup.push(store.onStatus((s) => {
     const label = { connected: 'Connected', connecting: 'Connecting…', reconnecting: 'Reconnecting…', error: 'Problem', idle: 'Not connected' }[s.state] || s.state;
-    statusLine.replaceChildren(h('span', { class: `status-dot ${s.state}` }), `${s.mode === 'demo' ? 'Demo' : 'Live'} · ${label}`, s.message ? h('span', { class: 'muted' }, ` — ${s.message}`) : null);
+    statusLine.replaceChildren(...[h('span', { class: `status-dot ${s.state}` }), `${s.mode === 'demo' ? 'Demo' : 'Live'} · ${label}`, s.message ? h('span', { class: 'muted' }, ` — ${s.message}`) : null].filter(Boolean));
   }));
 
   let mode = settings.mode;
@@ -49,7 +51,8 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('button', { class: 'btn', type: 'button', onclick: () => store.backend?.simulate?.toggleWindow() }, icon('window', 16), 'Open / close window'),
       h('button', { class: 'btn', type: 'button', onclick: () => store.backend?.simulate?.walkIn() }, icon('person', 16), 'Someone walks in'),
       h('button', { class: 'btn', type: 'button', onclick: () => store.backend?.simulate?.nudgeTemperature(-0.5) }, icon('minus', 16), '0.5°'),
-      h('button', { class: 'btn', type: 'button', onclick: () => store.backend?.simulate?.nudgeTemperature(0.5) }, icon('plus', 16), '0.5°')),
+      h('button', { class: 'btn', type: 'button', onclick: () => store.backend?.simulate?.nudgeTemperature(0.5) }, icon('plus', 16), '0.5°'),
+      h('button', { class: 'btn', type: 'button', onclick: () => { store.backend?.simulate?.updateAvailable(); toast('A Home Assistant update is now available'); } }, icon('refresh', 16), 'Make an update available')),
     h('p', { class: 'muted small' }, 'Devices, rooms and automations you change in the demo are kept on this device.'),
     h('div', { class: 'btn-row' },
       h('button', { class: 'btn danger', type: 'button', onclick: () => {
@@ -97,6 +100,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('a', { class: 'shortcut', href: '#/energy' }, icon('chart', 20), h('span', null, 'Energy & climate'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/remotes' }, icon('remote', 20), h('span', null, 'Remotes'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/devices?tab=rooms' }, icon('rooms', 20), h('span', null, 'Rooms'), icon('right', 16))),
+    card({ title: 'Evra account', iconName: 'person', className: 'account-card' }, accountPanel(cleanup), accountsServerField()),
     card({ title: 'Connection', iconName: 'home' }, statusLine, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
     lookCard(),
     card({ title: 'Preferences', iconName: 'gear' },
@@ -107,6 +111,27 @@ export function renderSettings(root, cleanup, { reconnect }) {
     card({ title: 'Sensor batteries', iconName: 'battery' }, batteryList),
     h('p', { class: 'muted small about' }, 'Evra · runs on Home Assistant', h('span', { class: 'dev-only' }, ' · the product range is in js/catalog.js')),
   );
+}
+
+// Developer mode: where Evra accounts live. The local service on this computer,
+// or the Evra website, whose members are in Cloudflare D1.
+function accountsServerField() {
+  const input = h('input', { class: 'input', id: 'accounts-url', type: 'url', value: accountsUrl(), placeholder: WEBSITE_ACCOUNTS, spellcheck: 'false' });
+  const save = h('button', { class: 'btn small', type: 'submit' }, 'Use this address');
+  const pick = (url, label) => h('button', { class: 'btn small ghost', type: 'button', onclick: () => { input.value = url; form.requestSubmit(); } }, label);
+  const form = h('form', { class: 'stack dev-only accounts-server' },
+    h('div', { class: 'field' }, h('label', { for: 'accounts-url' }, 'Evra accounts address'), input,
+      h('small', { class: 'muted' }, `The Evra website (its member accounts, in Cloudflare D1): ${WEBSITE_ACCOUNTS}. The stand-in on this computer, for working without the website: ${LOCAL_ACCOUNTS}. The assistant's ACCOUNTS_URL must match. Changing it signs you out here.`)),
+    h('div', { class: 'btn-row' }, save, pick(WEBSITE_ACCOUNTS, 'Evra website'), pick(LOCAL_ACCOUNTS, 'This computer')));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const url = input.value.trim();
+    if (!/^https?:\/\/[^\s]+$/.test(url)) { toast('Enter an address starting with http:// or https://', 'error'); return; }
+    if (url.replace(/\/+$/, '') === accountsUrl()) { toast('Already using that address'); return; }
+    useAccountsServer(url);
+    toast('Evra accounts address saved. Sign in again.');
+  });
+  return form;
 }
 
 function settingRow(title, hint, control) {
