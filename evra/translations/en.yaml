@@ -1,0 +1,15 @@
+configuration:
+  home_assistant_url:
+    name: Home Assistant address
+    description: >-
+      Leave empty to use this Pi (port 8123). Fill in only if phones and panels
+      reach Home Assistant at another address, for example https://ha.example.com.
+  internet_home_assistant_url:
+    name: Home Assistant's internet address
+    description: >-
+      Only if Evra is also reachable over https:// from the internet (for example
+      through Cloudflare Tunnel): Home Assistant's own https:// address, such as
+      https://ha.example.com. Evra uses it when opened over https://; at home
+      (http://<Pi>:8099, wall panels) it keeps talking to the Pi directly.
+network:
+  8099/tcp: Evra app (open this on phones, computers and the NS Panel)

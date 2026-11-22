@@ -31,7 +31,8 @@ rem ---- start the hub, unless it's already running ----------------------------
 call :hub_up
 if errorlevel 1 (
   echo Starting the Evra test hub on port %HUB_PORT%...
-  start "Evra test hub - close this window to stop it" "%PY%" "%APP_DIR%tools\test_hub\hub.py" --port %HUB_PORT%
+  rem cmd /k keeps the window open if the hub stops, so its error stays readable.
+  start "Evra test hub - close this window to stop it" cmd /k ""%PY%" "%APP_DIR%tools\test_hub\hub.py" --port %HUB_PORT%"
   for /l %%N in (1,1,15) do (
     call :hub_up && goto :hub_ready
     ping -n 2 127.0.0.1 >nul

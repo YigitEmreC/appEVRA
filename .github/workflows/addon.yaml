@@ -1,0 +1,117 @@
+# The Evra Home Assistant add-on (evra/).
+#   Every push and pull request: Home Assistant's add-on linter, and a test build
+#   of the add-on folder.
+#   A tag like v0.1.0: also builds the images for the Pi (aarch64) and PCs
+#   (amd64) and publishes them as ghcr.io/yigitemrec/<arch>-addon-evra:<version>,
+#   which Home Assistant downloads when someone installs or updates Evra.
+# The tag must match "version" in evra/config.yaml.
+name: Home Assistant add-on
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check the add-on
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Home Assistant add-on linter
+        uses: frenck/action-addon-linter@v2
+        with:
+          path: ./evra
+
+      - name: Build the add-on folder
+        run: python3 tools/build_addon.py --out build
+
+      # Build the PC image here and try its web server, so a broken nginx setting
+      # shows up on GitHub instead of on someone's Pi.
+      - uses: docker/setup-buildx-action@v4
+      - name: Build a test image
+        uses: docker/build-push-action@v7
+        with:
+          context: build/evra
+          load: true
+          tags: evra-test:latest
+          build-args: |
+            BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.23
+            BUILD_ARCH=amd64
+            BUILD_VERSION=test
+      - name: Smoke test the web server
+        run: |
+          docker run --rm --entrypoint nginx evra-test:latest -t
+          docker run -d --name evra-test -p 8099:8099 --entrypoint nginx evra-test:latest -g 'daemon off;'
+          sleep 2
+          curl -fsS http://localhost:8099/ | grep -q 'js/boot.js'
+          curl -fsSI http://localhost:8099/ | grep -qi '^content-security-policy:.*script-src .self.'
+          curl -fsSI http://localhost:8099/js/main.js | grep -qi '^content-type:.*javascript'
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8099/.env)
+          [ "$code" = "404" ] || { echo "::error::Hidden files must not be served (got $code)"; exit 1; }
+          docker rm -f evra-test
+
+      - name: The tag matches the version in evra/config.yaml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -nE 's/^version: *"?([^"]+)"?/\1/p' evra/config.yaml)
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match version ${version} in evra/config.yaml"
+            exit 1
+          fi
+
+  publish:
+    name: Publish ${{ matrix.arch }} image
+    needs: check
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            platform: linux/arm64
+          - arch: amd64
+            platform: linux/amd64
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the add-on folder
+        run: python3 tools/build_addon.py --out build
+
+      - name: Version and base image
+        id: meta
+        run: |
+          echo "version=$(sed -nE 's/^version: *"?([^"]+)"?/\1/p' evra/config.yaml)" >> "$GITHUB_OUTPUT"
+          echo "base=$(sed -nE 's/^ *${{ matrix.arch }}: *([^ ]+)/\1/p' evra/build.yaml)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v7
+        with:
+          context: build/evra
+          platforms: ${{ matrix.platform }}
+          push: true
+          build-args: |
+            BUILD_FROM=${{ steps.meta.outputs.base }}
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ steps.meta.outputs.version }}
+          tags: |
+            ghcr.io/yigitemrec/${{ matrix.arch }}-addon-evra:${{ steps.meta.outputs.version }}
+            ghcr.io/yigitemrec/${{ matrix.arch }}-addon-evra:latest

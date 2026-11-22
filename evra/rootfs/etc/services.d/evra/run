@@ -1,0 +1,33 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Writes Evra's settings file from the add-on's options, then serves the app.
+# The app reads evra-config.json at start (loadSiteConfig in js/util.js), so
+# phones and wall panels connect to this Home Assistant without any setup.
+
+www=/var/www/evra
+
+if bashio::config.has_value 'home_assistant_url'; then
+  hass="$(bashio::config 'home_assistant_url')"
+  hass="${hass%/}"
+else
+  hass="auto"   # this Pi's address, port 8123
+fi
+
+# Home Assistant's internet address, for when Evra is opened over https://
+# (for example through Cloudflare Tunnel). Empty: not reachable from outside.
+internet=""
+if bashio::config.has_value 'internet_home_assistant_url'; then
+  internet="$(bashio::config 'internet_home_assistant_url')"
+  internet="${internet%/}"
+fi
+
+jq -n --arg hass "${hass}" --arg internet "${internet}" \
+  '{mode: "live", hassUrl: $hass} + (if $internet != "" then {hassUrlHttps: $internet} else {} end)' \
+  > "${www}/evra-config.json"
+# Opened from Home Assistant's sidebar: Home Assistant is the page's own address.
+jq -n '{mode: "live", hassUrl: "origin"}' > "${www}/evra-config.ingress.json"
+
+port="$(bashio::addon.port 8099)"
+bashio::log.info "Evra is ready: open http://<this Pi's address>:${port:-8099}/ (Home Assistant address: ${hass}${internet:+, over the internet: ${internet}})"
+
+exec nginx -g 'daemon off;'

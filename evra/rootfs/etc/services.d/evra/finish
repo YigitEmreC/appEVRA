@@ -1,0 +1,8 @@
+#!/usr/bin/env bashio
+# shellcheck shell=bash
+# The web server stopped. Unless that was on purpose, stop the add-on so Home
+# Assistant's watchdog notices and starts it again.
+if [[ "${1}" -ne 0 ]] && [[ "${1}" -ne 256 ]]; then
+  bashio::log.warning "Evra's web server stopped unexpectedly (code ${1})"
+  exec /run/s6/basedir/bin/halt
+fi

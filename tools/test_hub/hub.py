@@ -27,6 +27,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from engine import Engine  # noqa: E402
+from push import AVAILABLE as PUSH_AVAILABLE, Push  # noqa: E402
 from products import BY_ID, PRODUCTS  # noqa: E402
 from world import HA_VERSION, HassError, ServiceNotFound, World, iso, new_id  # noqa: E402
 
@@ -142,6 +143,11 @@ class Hub:
 
     @web.middleware
     async def cors(self, request, handler):
+        # Reached through the internet (Cloudflare Tunnel, tools/tunnel_test): the
+        # control panel shows the test login and changes the home, so it stays on this PC.
+        through_tunnel = request.headers.get("Cf-Ray") or request.headers.get("Cf-Connecting-Ip")
+        if through_tunnel and (request.path == "/" or request.path.startswith("/panel")):
+            return web.Response(status=403, text="The test hub's control panel only opens on the computer running it.")
         origin = request.headers.get("Origin")
         allowed = origin in self.origins
         cors_path = request.path.startswith("/api/") or request.path == "/auth/token"
@@ -333,6 +339,18 @@ class Hub:
                 w.matter.remove(found)
                 w.create_device(found["product"], "matter")
                 ok(None)
+            elif kind == "notify/html5/appkey":
+                key = w.push.public_key()
+                if not key:
+                    w.note("The app asked for the push key, but sending needs pywebpush: python -m pip install pywebpush, then restart the hub")
+                    return fail("unknown_command", "Unknown command.")
+                ok(key)
+            elif kind == "frontend/get_translations":
+                wanted = m.get("integration") or []
+                wanted = [wanted] if isinstance(wanted, str) else wanted
+                ok({"resources": self.flow_texts(wanted) if m.get("category") == "config" else {}})
+            elif kind == "config_entries/flow/progress":
+                ok(self.discovered_flows())
             elif kind == "repairs/list_issues":
                 ok({"issues": []})
             elif kind == "config_entries/get":
@@ -355,6 +373,25 @@ class Hub:
             raise
 
     # ---- REST API ----
+
+    async def push_registration(self, request):
+        """POST adds a device for Evra notifications, DELETE removes it (like /api/notify.html5)."""
+        self.need_auth(request)
+        try:
+            body = await request.json()
+        except ValueError:
+            return web.json_response({"message": "Invalid JSON."}, status=400)
+        sub = body.get("subscription") if isinstance(body, dict) else None
+        keys = (sub or {}).get("keys") or {}
+        if not isinstance(sub, dict) or not str(sub.get("endpoint", "")).startswith("http") or not keys.get("auth") or not keys.get("p256dh"):
+            return web.json_response({"message": "Invalid subscription."}, status=400)
+        if request.method == "DELETE":
+            done = self.world.unregister_push(sub)
+            return web.json_response({"message": "Push notification subscriber unregistered." if done else "Registration not found."})
+        if body.get("browser") not in ("chrome", "firefox"):
+            return web.json_response({"message": "value must be one of ['chrome', 'firefox'] for dictionary value @ data['browser']"}, status=400)
+        self.world.register_push(sub, body["browser"], body.get("name"))
+        return web.json_response({"message": "Push notification subscriber registered."})
 
     async def api_root(self, request):
         self.need_auth(request)
@@ -409,19 +446,145 @@ class Hub:
         return web.json_response({"result": "ok"})
 
     # ---- integrations: setup flows (Wi-Fi devices by IP) ----
+    # Shaped like Home Assistant's config flows over REST, with the parts the app
+    # must cope with: devices Home Assistant discovered by itself (a waiting flow
+    # at "discovery_confirm"; starting another for the same device aborts with
+    # already_in_progress), a second step (TP-Link account), a folded section
+    # (ONVIF's advanced options) and a progress step (ESPHome waiting for the device).
+    # The steps are simplified; they exercise the app, they don't copy each integration.
 
+    PASSWORD = {"name": "password", "required": True, "type": "string", "selector": {"text": {"type": "password"}}}
     FLOW_STEPS = {
         "tplink": [{"name": "host", "required": True, "type": "string"}],
         "shelly": [{"name": "host", "required": True, "type": "string"}, {"name": "port", "optional": True, "type": "integer", "default": 80}],
         "esphome": [{"name": "host", "required": True, "type": "string"}, {"name": "port", "optional": True, "type": "integer", "default": 6053}],
         "onvif": [{"name": "name", "required": True, "type": "string", "default": "Camera"}, {"name": "host", "required": True, "type": "string"},
-                  {"name": "port", "required": True, "type": "integer", "default": 2020}, {"name": "username", "required": True, "type": "string"},
-                  {"name": "password", "required": True, "type": "string"}],
+                  {"name": "username", "required": True, "type": "string"}, PASSWORD,
+                  {"name": "advanced", "type": "expandable", "required": True, "expanded": False,
+                   "schema": [{"name": "port", "required": True, "type": "integer", "default": 2020}]}],
+    }
+    AUTH_STEP = [{"name": "username", "required": True, "type": "string"}, PASSWORD]
+    DISCOVERABLE = ("tplink", "shelly", "esphome")  # found by zeroconf / DHCP in Home Assistant
+
+    # Texts like frontend/get_translations returns them (category "config"), before flattening.
+    FLOW_TEXT = {
+        "tplink": {
+            "step": {
+                "user": {"title": "Set up a TP-Link device",
+                         "description": "Enter the address of your Tapo or Kasa device. Set it up in the Tapo app first, so it is on your Wi-Fi.",
+                         "data": {"host": "Host"}, "data_description": {"host": "The device's IP address, for example 192.168.1.40."}},
+                "user_auth_confirm": {"title": "TP-Link account", "description": "Tapo devices need the email and password of your TP-Link account.",
+                                      "data": {"username": "Email", "password": "Password"}},
+                "discovery_confirm": {"description": "Do you want to set up {name} ({host})?"},
+            },
+            "error": {"cannot_connect": "Failed to connect", "invalid_auth": "Invalid authentication"},
+            "abort": {"already_configured": "Device is already configured", "already_in_progress": "Configuration flow is already in progress"},
+        },
+        "shelly": {
+            "step": {
+                "user": {"title": "Set up a Shelly device", "description": "Battery-powered devices must be woken up first, by pressing their button.",
+                         "data": {"host": "Host", "port": "Port"}, "data_description": {"host": "The Shelly's IP address."}},
+                "discovery_confirm": {"description": "Do you want to set up the {name} at {host}?"},
+            },
+            "error": {"cannot_connect": "Failed to connect"},
+            "abort": {"already_in_progress": "Configuration flow is already in progress"},
+        },
+        "esphome": {
+            "step": {
+                "user": {"title": "Set up an ESPHome device", "description": "Please enter connection settings of your [ESPHome](https://esphome.io/) node.",
+                         "data": {"host": "Host", "port": "Port"}},
+                "discovery_confirm": {"title": "Discovered ESPHome node", "description": "Do you want to add the ESPHome node `{name}` to Home Assistant?"},
+            },
+            "progress": {"wait_for_device": "Waiting for the device to answer..."},
+            "error": {"cannot_connect": "Can't connect to the ESP. Make sure its YAML file contains an api: line."},
+            "abort": {"already_in_progress": "Configuration flow is already in progress"},
+        },
+        "onvif": {
+            "step": {
+                "user": {"title": "Configure ONVIF device", "description": "Tapo cameras need a camera account, made in the Tapo app under Advanced settings.",
+                         "data": {"name": "Name", "host": "Host", "username": "Username", "password": "Password"},
+                         "sections": {"advanced": {"name": "Advanced options", "data": {"port": "Port"},
+                                                   "data_description": {"port": "2020 for Tapo cameras; often 80 or 8000 for others."}}}},
+            },
+            "error": {"cannot_connect": "Failed to connect", "invalid_auth": "Invalid authentication"},
+        },
     }
 
-    def form(self, flow_id, handler, step_id, schema, errors=None):
+    @classmethod
+    def flow_texts(cls, domains):
+        out = {}
+
+        def walk(prefix, node):
+            for k, v in node.items():
+                if isinstance(v, dict):
+                    walk(f"{prefix}.{k}", v)
+                else:
+                    out[f"{prefix}.{k}"] = v
+        for d in domains:
+            walk(f"component.{d}.config", cls.FLOW_TEXT.get(d, {}))
+        return out
+
+    def form(self, flow_id, handler, step_id, schema, errors=None, placeholders=None):
         return {"type": "form", "flow_id": flow_id, "handler": handler, "step_id": step_id, "data_schema": schema, "errors": errors or {},
-                "description_placeholders": None, "last_step": None, "preview": None}
+                "description_placeholders": placeholders, "last_step": None, "preview": None}
+
+    def discovered_flows(self):
+        """Waiting Wi-Fi devices Home Assistant would find by itself get a discovery flow."""
+        w = self.world
+        have = {id(f.get("device")) for f in self.flows.values() if f.get("source") != "user"}
+        for dev in w.network:
+            handler = _handler_for(dev["product"])
+            if handler in self.DISCOVERABLE and id(dev) not in have:
+                self.flows[new_id()] = {"handler": handler, "step": "discovery_confirm", "source": "zeroconf", "device": dev}
+        # Forget flows for devices that are gone.
+        for fid in [fid for fid, f in self.flows.items() if f.get("source") != "user" and f.get("device") not in w.network]:
+            self.flows.pop(fid)
+        return [{"flow_id": fid, "handler": f["handler"], "step_id": f["step"],
+                 "context": {"source": f["source"], "unique_id": f["device"]["host"],
+                             "title_placeholders": {"name": BY_ID[f["device"]["product"]][1]}}}
+                for fid, f in self.flows.items() if f.get("source") != "user"]
+
+    def current_step(self, flow_id):
+        """What Home Assistant answers for a flow right now (GET, or a POST with nothing new)."""
+        f = self.flows[flow_id]
+        handler, step = f["handler"], f["step"]
+        if step == "discovery_confirm":
+            dev = f["device"]
+            return self.form(flow_id, handler, step, [], placeholders={"name": BY_ID[dev["product"]][1], "host": dev["host"]})
+        if step == "user_auth_confirm":
+            return self.form(flow_id, handler, step, self.AUTH_STEP)
+        if step == "progress":
+            if time.time() < f["until"]:
+                return {"type": "progress", "flow_id": flow_id, "handler": handler, "step_id": "wait", "progress_action": "wait_for_device",
+                        "description_placeholders": None}
+            f["step"] = "finish"
+            return {"type": "progress_done", "flow_id": flow_id, "handler": handler, "step_id": "finish"}
+        if step == "finish":
+            return self.finish_flow(flow_id)
+        return self.form(flow_id, handler, "user", self.FLOW_STEPS[handler])
+
+    def finish_flow(self, flow_id):
+        f = self.flows.pop(flow_id)
+        handler, device, w = f["handler"], f["device"], self.world
+        if device in w.network:
+            w.network.remove(device)
+        name = BY_ID[device["product"]][1]
+        asyncio.get_running_loop().call_later(1.0, lambda: w.create_device(device["product"], handler, device["host"]))
+        entry = {"entry_id": new_id(), "domain": handler, "title": name, "source": f.get("source", "user"), "state": "loaded"}
+        return {"type": "create_entry", "flow_id": flow_id, "handler": handler, "title": name, "description": None,
+                "description_placeholders": None, "context": {"source": f.get("source", "user")}, "version": 1, "minor_version": 1,
+                "options": {}, "result": entry}
+
+    def after_device_found(self, flow_id):
+        """The device answered: TP-Link asks for the account, ESPHome waits a moment, others are done."""
+        f = self.flows[flow_id]
+        if f["handler"] == "tplink":
+            f["step"] = "user_auth_confirm"
+            return self.form(flow_id, "tplink", "user_auth_confirm", self.AUTH_STEP)
+        if f["handler"] == "esphome":
+            f["step"], f["until"] = "progress", time.time() + 3
+            return self.current_step(flow_id)
+        return self.finish_flow(flow_id)
 
     async def flow_start(self, request):
         self.need_auth(request)
@@ -430,7 +593,7 @@ class Hub:
         if handler not in self.FLOW_STEPS:
             return web.json_response({"message": "Invalid handler specified"}, status=404)
         flow_id = new_id()
-        self.flows[flow_id] = {"handler": handler, "step": "user", "host": None}
+        self.flows[flow_id] = {"handler": handler, "step": "user", "source": "user"}
         self.world.note(f"Setup started for {handler}")
         return web.json_response(self.form(flow_id, handler, "user", self.FLOW_STEPS[handler]))
 
@@ -443,37 +606,34 @@ class Hub:
             return web.json_response({"message": "Flow aborted"})
         if not f:
             return web.json_response({"message": "Invalid flow specified"}, status=404)
-        data = await request.json()
-        handler, w = f["handler"], self.world
-        if f["step"] == "user":
+        if request.method == "GET":
+            return web.json_response(self.current_step(flow_id))
+        data = (await request.json() if request.can_read_body else None) or {}
+        handler, w, step = f["handler"], self.world, f["step"]
+        if step == "user":
             host = str(data.get("host", "")).strip()
             waiting = next((x for x in w.network if x["host"] == host and _handler_for(x["product"]) == handler), None)
             if not waiting:
                 return web.json_response(self.form(flow_id, handler, "user", self.FLOW_STEPS[handler], {"base": "cannot_connect"}))
+            # Home Assistant found this one already and is waiting for a yes: like the real one, stop here.
+            if any(o is not f and o.get("source") != "user" and o.get("device") is waiting for o in self.flows.values()):
+                self.flows.pop(flow_id, None)
+                return web.json_response({"type": "abort", "flow_id": flow_id, "handler": handler, "reason": "already_in_progress",
+                                          "description_placeholders": None})
+            if handler == "onvif" and not isinstance(data.get("advanced"), dict):
+                return web.json_response(self.form(flow_id, handler, "user", self.FLOW_STEPS[handler], {"base": "unknown"}))
             f["device"] = waiting
-            if handler == "tplink":
-                # TP-Link asks for the TP-Link account after finding the device.
-                f["step"] = "user_auth_confirm"
-                return web.json_response(self.form(flow_id, handler, "user_auth_confirm", [
-                    {"name": "username", "required": True, "type": "string"},
-                    {"name": "password", "required": True, "type": "string", "selector": {"text": {"type": "password"}}}]))
-        elif f["step"] == "user_auth_confirm":
+            await asyncio.sleep(0.8)
+            return web.json_response(self.after_device_found(flow_id))
+        if step == "discovery_confirm":
+            await asyncio.sleep(0.5)
+            return web.json_response(self.after_device_found(flow_id))
+        if step == "user_auth_confirm":
             if not data.get("username") or not data.get("password"):
-                return web.json_response(self.form(flow_id, handler, "user_auth_confirm", [
-                    {"name": "username", "required": True, "type": "string"},
-                    {"name": "password", "required": True, "type": "string", "selector": {"text": {"type": "password"}}}], {"base": "invalid_auth"}))
-        device = f["device"]
-        await asyncio.sleep(1.2)
-        self.flows.pop(flow_id, None)
-        if device in w.network:
-            w.network.remove(device)
-        name = BY_ID[device["product"]][1]
-        loop = asyncio.get_running_loop()
-        loop.call_later(1.0, lambda: w.create_device(device["product"], handler, device["host"]))
-        entry = {"entry_id": new_id(), "domain": handler, "title": name, "source": "user", "state": "loaded"}
-        return web.json_response({"type": "create_entry", "flow_id": flow_id, "handler": handler, "title": name, "description": None,
-                                  "description_placeholders": None, "context": {"source": "user"}, "version": 1, "minor_version": 1,
-                                  "options": {}, "result": entry})
+                return web.json_response(self.form(flow_id, handler, "user_auth_confirm", self.AUTH_STEP, {"base": "invalid_auth"}))
+            await asyncio.sleep(1.0)
+            return web.json_response(self.finish_flow(flow_id))
+        return web.json_response(self.current_step(flow_id))
 
     async def delete_entry(self, request):
         self.need_auth(request)
@@ -521,6 +681,7 @@ class Hub:
         return web.json_response({
             "version": HA_VERSION, "clients": len(self.clients), "login": self.auth.user, "origins": sorted(self.origins),
             "permit_left": max(0, round(w.permit_until - time.time())), "phone_app": w.phone_app,
+            "push": {"ready": PUSH_AVAILABLE, "devices": sorted(w.push_regs)},
             "zigbee_products": [{"id": p[0], "name": p[1], "model": p[3]} for p in PRODUCTS if p[5] == "zigbee"],
             "wifi_products": [{"id": p[0], "name": p[1], "model": p[3]} for p in PRODUCTS if p[5] == "wifi"],
             "network": [{**x, "name": BY_ID[x["product"]][1], "model": BY_ID[x["product"]][3], "handler": _handler_for(x["product"])} for x in w.network],
@@ -566,6 +727,11 @@ class Hub:
                 w.phone_app = bool(a.get("on"))
                 w.note(f"Panel: phone with the Home Assistant app {'connected' if w.phone_app else 'removed'} (notify.notify {'available' if w.phone_app else 'gone'})")
                 w.save_soon()
+            elif kind == "push-test":
+                if not w.push_regs:
+                    raise HassError("No device has switched on Evra notifications yet")
+                await w.call_service("notify", "send_message", {"title": "Test hub", "message": "A test from the control panel."},
+                                     {"entity_id": [w._push_entity_id(n) for n in w.push_regs]}, source="panel")
             elif kind == "update-available":
                 w.make_update_available()
             elif kind == "clear-notifications":
@@ -602,6 +768,8 @@ class Hub:
         app.router.add_post("/auth/token", self.token)
         app.router.add_get("/api/websocket", self.websocket)
         app.router.add_get("/api/", self.api_root)
+        app.router.add_route("POST", "/api/notify.html5", self.push_registration)
+        app.router.add_route("DELETE", "/api/notify.html5", self.push_registration)
         app.router.add_route("*", "/api/config/automation/config/{cid}", self.automation_config)
         app.router.add_post("/api/config/config_entries/flow", self.flow_start)
         app.router.add_route("*", "/api/config/config_entries/flow/{flow_id}", self.flow_step)
@@ -648,10 +816,12 @@ async def main():
     origins = args.origin or ["http://localhost:8010", "http://127.0.0.1:8010"]
 
     snapshot = HERE.parents[2] / "ha-snapshot"
-    if not snapshot.exists():
-        sys.exit(f"Can't find the snapshot at {snapshot}. Keep ha-snapshot next to the app folder.")
+    if not (snapshot / "home.json").exists():
+        print(f"No snapshot at {snapshot}; starting with an empty home. "
+              "Add devices from the control panel or the app's pairing screens.", flush=True)
     world = World(snapshot, Path(args.data) if args.data else HERE / "data")
     world.loop = asyncio.get_running_loop()
+    world.push = Push(world.data_dir)
     world.load()
     world.engine = Engine(world)
     auth = Auth(world.data_dir)
@@ -664,6 +834,8 @@ async def main():
     print(f"  Control panel:  http://localhost:{args.port}   (the test login is shown there)")
     print(f"  In Evra: Settings > Connection > Live, address http://localhost:{args.port}")
     print(f"  Allowed app addresses: {', '.join(origins)}")
+    if not PUSH_AVAILABLE:
+        print("  Evra notifications can't be sent: python -m pip install pywebpush, then restart the hub.")
     print("  Close this window or press Ctrl+C to stop.\n", flush=True)
     tasks = [asyncio.create_task(world.tick()), asyncio.create_task(world.engine.clock())]
     try:

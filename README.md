@@ -245,6 +245,17 @@ Testing against it found and fixed four things that would also have happened on 
 - The shutter module was taken for an energy meter.
 - Without the phone app, the "send to phones" step stopped safety automations before they turned lights and sirens on.
 
+## Install on Home Assistant (add-on)
+
+Evra runs on the Pi as a Home Assistant add-on, so phones, computers and wall panels open it from the home network, even with no computer on. Needs Home Assistant OS (Settings › About › Installation type).
+
+1. In Home Assistant: **Settings › Add-ons › Add-on store › ⋮ › Repositories**, add `https://github.com/YigitEmreC/appEVRA`.
+2. Install **Evra** and start it.
+3. Follow the add-on's **Documentation** tab: reserve the Pi's address in your router and add the `cors_allowed_origins` line for `http://<Pi's address>:8099`.
+4. Open `http://<Pi's address>:8099` on any device. On phones, **Add to Home Screen**.
+
+**Releasing a new version (for developers):** raise `version` in `evra/config.yaml`, add a line to `evra/CHANGELOG.md`, push, then tag the commit (`git tag v0.1.1 && git push --tags`). GitHub checks it, builds the images and publishes them; Home Assistant then offers the update. To try a version on the Pi before releasing it, run `python tools/build_addon.py` and copy `dist/addon/evra` to the Pi's `addons` share (it then appears under Local add-ons).
+
 ## Live mode (when the Pi is back)
 
 None of live mode has been tested against the real Home Assistant yet, because the Pi has been offline since everything was built. That includes connecting, pairing, room changes, removing devices and saving automations. The demo mode follows the same calls, but expect to fix small things on first contact.

@@ -2,3 +2,7 @@
 * text=auto
 # Windows batch files must keep CRLF line endings, or cmd can misread them.
 *.bat text eol=crlf
+# The add-on's start scripts and settings run on Linux and need LF line endings.
+evra/** text eol=lf
+repository.yaml text eol=lf
+.github/** text eol=lf

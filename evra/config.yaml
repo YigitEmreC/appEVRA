@@ -1,0 +1,31 @@
+# The Evra add-on: serves the Evra app from the Pi that runs Home Assistant.
+# For every release: raise "version", add it to CHANGELOG.md, push, then tag
+# the commit v<version> (for example v0.1.0). GitHub builds the images
+# (.github/workflows/addon.yaml) and Home Assistant offers the update.
+name: Evra
+version: "0.1.0"
+slug: evra
+description: The Evra smart home app, served from your Home Assistant for phones, computers and wall panels.
+url: https://github.com/YigitEmreC/appEVRA
+# Ready-made images from GitHub, so the Pi doesn't build anything.
+# tools/build_addon.py leaves this out of local test copies.
+image: ghcr.io/yigitemrec/{arch}-addon-evra
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: Evra app (open this on phones, computers and the NS Panel)
+# Evra in Home Assistant's sidebar too.
+ingress: true
+ingress_port: 8098
+panel_icon: mdi:home-heart
+panel_title: Evra
+options: {}
+schema:
+  home_assistant_url: url?
+  internet_home_assistant_url: url?

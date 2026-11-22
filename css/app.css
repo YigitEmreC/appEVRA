@@ -948,6 +948,22 @@ a.list-row:hover { background: var(--card-2); }
 .check-field { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
 .check-field input { width: 18px; height: 18px; accent-color: var(--accent); }
 
+/* Home Assistant setup forms (Add device): its texts, found devices, folded sections. */
+.flow-title { margin: 0; font-size: 16px; }
+.flow-desc { color: var(--muted); font-size: 14px; }
+.flow-desc p { margin: 0 0 6px; }
+.flow-desc a { color: var(--accent); }
+.flow-desc code { font-size: 13px; padding: 1px 5px; border-radius: 6px; background: var(--card-2); }
+.field small.muted { font-size: 12px; }
+.found-list { display: flex; flex-direction: column; gap: 8px; }
+.found-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--card-2); border: 1px solid var(--line); }
+.found-row .icon { color: var(--accent); flex: none; }
+.found-name { flex: 1; min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-section { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+.flow-section > summary { cursor: pointer; font-weight: 650; font-size: 14px; }
+.flow-section[open] { display: flex; flex-direction: column; gap: 12px; }
+.flow-section[open] > summary { margin-bottom: 2px; }
+
 /* =========================================================================
    Automation editor
    ========================================================================= */

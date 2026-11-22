@@ -135,16 +135,60 @@ export function toast(message, kind = 'info') {
 
 // Settings live in localStorage, wrapped so private windows still work.
 const SETTINGS_KEY = 'smarthome.settings';
+
+// Defaults from the place serving the app. The Evra add-on on the Pi writes
+// evra-config.json next to index.html, so phones and wall panels need no setup:
+//   mode          "live"
+//   hassUrl       "auto" = this host on port 8123, "origin" = this very address
+//                 (Home Assistant's sidebar), or a full address
+//   hassUrlHttps  Home Assistant's internet address, used instead when Evra
+//                 itself was opened over https:// (see siteHassUrl)
+//   assistantUrl  the assistant's address, may be relative ("/assistant")
+// Elsewhere (the dev server on a PC) there is no file and nothing changes.
+// main.js loads it before anything reads the settings.
+let site = {};
+export async function loadSiteConfig() {
+  try {
+    const res = await fetch('evra-config.json', { cache: 'no-store' });
+    const data = res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
+    site = data && typeof data === 'object' ? data : {};
+  } catch { site = {}; }
+}
+function siteHassUrl() {
+  // Opened through the secure internet address (e.g. https://home.example.com via
+  // Cloudflare Tunnel): Home Assistant's own internet address. Opened on the home
+  // network (http://<Pi>:8099, wall panels): straight to the Pi, no internet needed.
+  if (location.protocol === 'https:' && site.hassUrlHttps) return String(site.hassUrlHttps).replace(/\/+$/, '');
+  const v = site.hassUrl;
+  if (!v) return null;
+  if (v === 'origin') return location.origin;
+  if (v === 'auto') return `${location.protocol}//${location.hostname}:8123`;
+  return String(v).replace(/\/+$/, '');
+}
+function siteAssistantUrl() {
+  try { return site.assistantUrl ? new URL(site.assistantUrl, location.href).href.replace(/\/+$/, '') : null; } catch { return null; }
+}
+
 // The assistant runs on the computer that serves the app: localhost on that computer,
 // its home-network address on a phone (phone mode, "Start Evra on phone.bat").
-const defaultAssistantUrl = () => `http://${location.hostname || 'localhost'}:8765`;
+const defaultAssistantUrl = () => siteAssistantUrl() || `http://${location.hostname || 'localhost'}:8765`;
+// What these settings are when nobody chose them. They depend on where the app was
+// opened, so they're never saved: moving the Pi or the add-on can't leave stale ones.
+function placeDefaults() {
+  const servedByHa = location.pathname.startsWith('/local/') || location.hostname === 'homeassistant.local';
+  return {
+    mode: site.mode === 'live' || site.mode === 'demo' ? site.mode : (servedByHa ? 'live' : 'demo'),
+    hassUrl: siteHassUrl() || (servedByHa ? location.origin : 'http://homeassistant.local:8123'),
+    assistantUrl: defaultAssistantUrl(),
+  };
+}
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { saved = {}; }
-  const servedByHa = location.pathname.startsWith('/local/') || location.hostname === 'homeassistant.local';
+  const place = placeDefaults();
   return {
-    mode: saved.mode || (servedByHa ? 'live' : 'demo'),
-    hassUrl: saved.hassUrl || (servedByHa ? location.origin : 'http://homeassistant.local'),
+    mode: saved.mode || place.mode,
+    hassUrl: saved.hassUrl || place.hassUrl,
     theme: saved.theme || 'auto',
     devMode: saved.devMode === true,
     pricePerKwh: saved.pricePerKwh ?? 0.30,
@@ -157,6 +201,8 @@ export function loadSettings() {
     assistantUrl: (saved.assistantUrl && saved.assistantUrl !== 'http://localhost:8765') ? saved.assistantUrl : defaultAssistantUrl(),
     // Read the assistant's new replies aloud (js/speech.js).
     speakReplies: saved.speakReplies === true,
+    // Notifications on this device are switched on (js/push.js).
+    notifyHere: saved.notifyHere === true,
     // Evra accounts address, only when someone chose one; unset means the Evra website
     // (accountsUrl() in js/account.js). Older versions saved "accountsUrl" with every
     // setting, so that key is ignored and dropped on the next save.
@@ -165,9 +211,11 @@ export function loadSettings() {
 }
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
-  // The default assistant address depends on where the app is opened, so it isn't saved.
-  const { assistantUrl, ...kept } = next;
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(assistantUrl === defaultAssistantUrl() ? kept : next)); } catch { /* not persisted */ }
+  // Mode and addresses that equal this place's defaults aren't saved (see placeDefaults).
+  const place = placeDefaults();
+  const kept = { ...next };
+  for (const key of ['mode', 'hassUrl', 'assistantUrl']) if (kept[key] === place[key]) delete kept[key];
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(kept)); } catch { /* not persisted */ }
   return next;
 }
 

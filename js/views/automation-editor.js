@@ -6,6 +6,21 @@ import { store, entityArea, areaName } from '../store.js';
 import { h, toast, isDev, setPrefs } from '../util.js';
 import { icon } from '../icons.js';
 import { card } from '../components.js';
+import { pushEntities } from '../push.js';
+
+// notify.notify (the Home Assistant app), or notify.send_message to the devices
+// registered from Evra (any other send_message target is an ordinary action).
+function isPhoneStep(a) {
+  const svc = a?.action || a?.service;
+  if (svc === 'notify.notify') return true;
+  if (svc !== 'notify.send_message') return false;
+  const ids = [].concat(a.target?.entity_id ?? a.data?.entity_id ?? []);
+  // A device that has since been removed counts too; saving again drops it.
+  return ids.length > 0 && ids.every((id) => {
+    const e = store.entities.get(id);
+    return e ? e.platform === 'html5' : id.startsWith('notify.');
+  });
+}
 
 // ---- entity lists for the pickers ------------------------------------------------
 
@@ -146,11 +161,12 @@ export function fromConfig(cfg) {
       const svc = a.action || a.service;
       if (a.delay != null && Object.keys(a).length === 1) { state.actions.push({ type: 'delay', seconds: toSeconds(a.delay) }); continue; }
       if (!svc) return null;
-      if (svc === 'persistent_notification.create' || svc === 'notify.notify') {
+      if (svc === 'persistent_notification.create' || isPhoneStep(a)) {
+        // One "Send a notification" step is up to three actions: Home Assistant's
+        // own notification, then (to phones) Evra devices and the Home Assistant app.
         const msg = a.data?.message || '';
-        const next = acts[i + 1];
-        const push = svc === 'notify.notify' || ((next?.action || next?.service) === 'notify.notify' && next.data?.message === msg);
-        if (svc === 'persistent_notification.create' && push) i++;
+        let push = svc !== 'persistent_notification.create';
+        while (isPhoneStep(acts[i + 1]) && acts[i + 1].data?.message === msg) { push = true; i++; }
         state.actions.push({ type: 'notify', message: msg, push });
         continue;
       }
@@ -187,8 +203,14 @@ export function toConfig(st) {
     else if (a.type === 'delay') cfg.actions.push({ delay: { seconds: Number(a.seconds) || 0 } });
     else if (a.type === 'notify') {
       cfg.actions.push({ action: 'persistent_notification.create', data: { title: cfg.alias, message: a.message } });
-      // Phones need the Home Assistant app; without it this step fails, which mustn't end the automation.
-      if (a.push) cfg.actions.push({ action: 'notify.notify', data: { title: cfg.alias, message: a.message }, continue_on_error: true });
+      if (a.push) {
+        // Devices that switched on notifications in Evra (Settings › Notifications).
+        // First, so they're reached even if the next step fails.
+        const evra = pushEntities();
+        if (evra.length) cfg.actions.push({ action: 'notify.send_message', target: { entity_id: evra }, data: { title: cfg.alias, message: a.message }, continue_on_error: true });
+        // Phones with the Home Assistant app; without one this step fails, which mustn't end the automation.
+        cfg.actions.push({ action: 'notify.notify', data: { title: cfg.alias, message: a.message }, continue_on_error: true });
+      }
     }
   }
   return cfg;
@@ -443,7 +465,7 @@ export function renderAutomationEditor(root, cleanup, configId, template = null)
     }
     return [typeSel,
       input(a.message, (v) => { a.message = v; }, { placeholder: 'Message, for example "The window is still open"', 'aria-label': 'Message' }),
-      h('label', { class: 'check-field' }, h('input', { type: 'checkbox', checked: !!a.push, onchange: (e) => { a.push = e.target.checked; } }), h('span', null, 'Also send to phones with the Home Assistant app'))];
+      h('label', { class: 'check-field' }, h('input', { type: 'checkbox', checked: !!a.push, onchange: (e) => { a.push = e.target.checked; } }), h('span', null, 'Also send to phones (Evra notifications or the Home Assistant app)'))];
   }
 
   load();

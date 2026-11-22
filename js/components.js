@@ -227,6 +227,10 @@ export function sortable(container, { item, handle, ignore, onEnd, anywhere = fa
     if (e.pointerType === 'touch') lift();
     let scroll = 0;
     const scroller = setInterval(() => { if (scroll) window.scrollBy(0, scroll); }, 16);
+    // The item just swapped with. When items differ in size, the pointer is often
+    // still over it after the swap; swapping again would flip them back and forth
+    // (the flicker). It's ignored until the pointer has left it.
+    let skip = null;
     const move = (ev) => {
       if (ev.pointerId !== e.pointerId) return;
       if (!lifted) { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return; lift(); }
@@ -234,9 +238,11 @@ export function sortable(container, { item, handle, ignore, onEnd, anywhere = fa
       // The child of this container under the pointer (things can be nested).
       let over = document.elementFromPoint(ev.clientX, ev.clientY);
       while (over && over.parentElement !== container) over = over.parentElement;
-      if (!over || over === el || !over.matches(item)) return;
+      if (over !== skip) skip = null;
+      if (!over || over === el || over === skip || !over.matches(item)) return;
       const later = el.compareDocumentPosition(over) & Node.DOCUMENT_POSITION_FOLLOWING;
       container.insertBefore(el, later ? over.nextSibling : over);
+      skip = over;
     };
     const end = (ev) => {
       if (ev.pointerId !== e.pointerId) return;
