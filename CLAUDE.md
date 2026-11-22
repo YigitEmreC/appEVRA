@@ -16,6 +16,11 @@ Evra is a smart-home PWA front end for Home Assistant. It is plain HTML, CSS and
 - `python tools/make_icons.py` regenerates the PNG icons from `icons/icon.svg`.
 - `Start Evra.bat` also starts the **accounts stand-in** (`tools/accounts/server.py`, :8770, stdlib only, data in git-ignored `tools/accounts/data/`). It's only used when Settings points at it; by default the app signs in with the Evra website. `Start Evra.bat` also starts the **assistant server** (`../EvrAI/gemini_home_starter/server.py`, :8765) too, but only when that folder has a `.env` with the Gemini key. The assistant server is outside this repo.
 
+- **Phone mode:** `Start Evra on phone.bat` runs `Start Evra.bat` with `EVRA_PHONE=1`.
+  - The dev server then runs with `--lan` (it listens on 0.0.0.0 and adds an `X-Evra-Lan` header), and the assistant with `--lan` (`ASSISTANT_LAN=1`; it allows `http://<LAN IP>:<EVRA_APP_PORT>` as an origin).
+  - Requests from other devices may only open `/appEVRA/` (not `tools/`) and `/ha-snapshot/`. Dot-paths and folder listings get 404; see `phone_may_open()` in `tools/dev_server.py`. Keep it that way: SMART also holds the Gemini key and account data.
+  - The app's default `assistantUrl` is `http://<location.hostname>:8765`, so a phone reaches the PC. That default is never saved to settings.
+
 Live mode has **never been tested against the real Home Assistant**, only against the demo backend and the test hub.
 
 ## Architecture
@@ -52,6 +57,8 @@ index.html → js/main.js (shell, hash router, theme, connect())
   - The server answers with text and **proposals**: exact actions built by its `propose_*` tools.
   - The app shows each proposal as a card. On Approve, `runProposal()` carries it out through the normal backend (`store.call`, `backend.saveAutomation`, registry updates and so on), reads the result back, and reports it to the server's `/outcome`.
   - **A new proposal kind needs both sides:** the tool in `EvrAI/.../proposals.py` and its handler in `assistant-actions.js`.
+  - **Read aloud** is `js/speech.js` (Web Speech API, sentence by sentence, Turkish voice for Turkish text). `chat.js` adds a Listen button per reply and the header's Read aloud switch (setting `speakReplies`). Speech stops on a new question, New chat and leaving the tab.
+  - **The owner's instructions** are `EvrAI/gemini_home_starter/instructions.txt`, appended to the system instruction by `system_instruction()` in `home_ai.py` whenever a chat is created.
 - **Accounts** (`js/account.js`, `views/account-ui.js`, `views/members.js`):
   - Members sign in under Settings → Evra account. The token goes in the `Authorization` header of every assistant request, and the assistant server checks it with the accounts service's `/me`.
   - **Assistant access** is `features.ai`; admins always have it. `main.js` hides the Assistant tab with `assistantBlocked()` when a signed-in member lacks it, but the real check is on the server.

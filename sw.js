@@ -1,6 +1,6 @@
 // Keeps the app's own files cached so it opens instantly and even without a
 // connection. Home Assistant data is never cached.
-const CACHE = 'evra-v18';
+const CACHE = 'evra-v20';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css', './icons/icon.svg',
   './js/main.js', './js/config.js', './js/catalog.js', './js/store.js', './js/util.js', './js/icons.js', './js/components.js',
@@ -8,7 +8,7 @@ const SHELL = [
   // Look and layout (themes, moving backgrounds, on-screen editing)
   './js/custom.js', './js/themes.js', './js/sky.js', './js/sky-scenes.js', './js/edit.js', './js/views/customize.js',
   // The assistant's changes, and Evra accounts
-  './js/assistant-actions.js', './js/account.js', './js/views/account-ui.js', './js/views/members.js',
+  './js/assistant-actions.js', './js/speech.js', './js/account.js', './js/views/account-ui.js', './js/views/members.js',
   './js/backends/demo.js', './js/backends/live.js', './js/devices/cards.js',
   './js/views/home.js', './js/views/devices.js', './js/views/remotes.js', './js/views/energy.js',
   './js/views/automations.js', './js/views/automation-editor.js', './js/views/chat.js', './js/views/settings.js',

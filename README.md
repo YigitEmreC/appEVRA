@@ -16,6 +16,25 @@ python appEVRA/tools/dev_server.py
 
 Then open http://localhost:8010/appEVRA/. Port 8000 is left alone because your website project uses it. The server serves the whole `SMART` folder because demo mode reads `../ha-snapshot`, so a copy of this repository on its own has no demo data.
 
+### On your phone
+
+1. Close the Evra windows if it's already running, then double-click **`Start Evra on phone.bat`**.
+2. Its window shows the address to open on your phone, for example `http://192.168.88.122:8010/appEVRA/`.
+3. Your phone must be on the same Wi-Fi as this computer.
+
+**The first time:** Windows asks whether Python may use the network. Tick **Private networks** and press **Allow**, or the phone can't connect.
+
+**What works:**
+- The app on the phone works like on this computer: demo mode, the Assistant tab, and signing in with your evrasmarthome.com account.
+- The phone gets only the app and the demo data. Everything else in `SMART` stays on this computer: the assistant's `.env` with the Gemini key, account and test hub data, and `.git`.
+- Read aloud uses the phone's own voices.
+
+**Limits:**
+- The phone opens the app over plain `http`, so it can't be installed as an app from there.
+- Live mode on the phone needs Home Assistant to allow the phone's address.
+
+For the phone view without a phone, open the app in Edge or Brave, press **F12** and then **Ctrl+Shift+M**, and pick a phone.
+
 The app starts in **demo mode**: a pretend Home Assistant built from the snapshot in `../ha-snapshot`, taken on 13 November 2026. Everything works in demo mode: adding and removing any catalogue product, rooms, and automations, which actually run. Changes are kept in the browser; **Settings → Reset demo** goes back to the snapshot (Reset demo is under Demo controls, which only show in developer mode).
 
 **Developer mode** (Settings → Preferences, off by default) shows the technical details: the Entities list on device pages, maker, model and firmware numbers, the JSON automation editor, the demo controls and the "pretend it fired" buttons on sensor tiles. Anything marked with the `dev-only` class is hidden while it's off. Automations the simple editor can't show (all five original ones) can only be edited in developer mode.
@@ -118,6 +137,7 @@ When it connects, you name it and choose its room.
 | `js/store.js` | States, devices, rooms and entities; helpers used by every screen |
 | `js/ideas.js` | Automation ideas, what each needs, and how each is built from the home's devices |
 | `js/assistant-actions.js` | Carries out changes the assistant prepared, once approved, and checks they worked |
+| `js/speech.js` | Reads the assistant's replies aloud with the browser's own voices |
 | `js/account.js`, `views/account-ui.js`, `views/members.js` | Evra accounts: sign-in, the account panel, the Members page |
 | `tools/accounts/` | A stand-in for the website's accounts, for working without the website (members, roles, assistant access) |
 | `js/scenes.js` | The ten scenes and how they're applied to the chosen rooms |
@@ -163,6 +183,12 @@ The assistant answers questions and prepares changes. You approve every change b
 - Automations: create, edit, delete, switch on or off, or run now.
 - Rooms, and devices: rename, move, remove, or open the setup page for a new one.
 - Updates and the app's theme.
+
+**Read aloud:** each reply has a **Listen** button. **Read aloud** at the top of the Assistant tab reads every new reply as it arrives, and the choice is kept on this device.
+- It uses the browser's own text to speech, so nothing extra is sent anywhere.
+- Turkish replies get a Turkish voice when the device has one. Edge has natural-sounding online voices, including Turkish. On Windows, more voices can be added under Settings → Time & language → Speech.
+
+**Your own instructions** for the assistant go in `../EvrAI/gemini_home_starter/instructions.txt`, as plain sentences. Its README explains the file.
 
 **How it works:** each change arrives as a card that says exactly what will happen (written from the action itself, not by the AI), with **Approve** and **Cancel**. Automations also get **Review in editor**. On Approve, `js/assistant-actions.js` runs the change through the same backend the screens use (demo or live). It checks the result, for example by reading the light or the saved automation back, shows it on the card, and reports it to the assistant. Risky changes (removing, deleting, updates) are in red. Locks, cameras and alarms are never available to it.
 
