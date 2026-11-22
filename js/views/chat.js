@@ -10,12 +10,13 @@
 
 import { HOME } from '../config.js';
 import { store } from '../store.js';
-import { h, loadSettings } from '../util.js';
+import { h, loadSettings, saveSettings } from '../util.js';
 import { icon } from '../icons.js';
 import { getAccessToken } from '../backends/live.js';
 import { PRODUCTS, PAIRING_LABEL } from '../catalog.js';
 import { SCENES } from '../scenes.js';
 import { runProposal, openInEditor } from '../assistant-actions.js';
+import { canSpeak, speak, stopSpeaking, speakingId, guessLang } from '../speech.js';
 import { member, accountToken, canUseAssistant, onAccount, refreshMember } from '../account.js';
 import { accountPanel } from './account-ui.js';
 
@@ -166,6 +167,10 @@ export function renderChat(root, cleanup) {
   refreshMember();
 }
 
+// Where to start the assistant: on this computer, or (opened on a phone) on the computer serving the app.
+const onThisComputer = () => ['localhost', '127.0.0.1', ''].includes(location.hostname);
+const startHint = () => (onThisComputer() ? 'start it with "Start Evra.bat"' : 'on the computer, start Evra with "Start Evra on phone.bat"');
+
 function chatView(root, cleanup) {
   const base = loadSettings().assistantUrl.replace(/\/+$/, '');
   const chat = loadChat();
@@ -175,10 +180,28 @@ function chatView(root, cleanup) {
 
   const status = h('p', { class: 'chat-status', role: 'status' }, h('span', { class: 'status-dot connecting' }), 'Checking the assistant…');
   const newChat = h('button', { class: 'btn ghost small', type: 'button' }, icon('refresh', 14), 'New chat');
+  // Read aloud: new replies are spoken as they arrive (each reply also has its own Listen button).
+  const voiceBtn = canSpeak() ? h('button', { class: 'btn ghost small voice-btn', type: 'button' }) : null;
+  const paintVoice = () => {
+    const on = loadSettings().speakReplies;
+    voiceBtn.setAttribute('aria-pressed', String(on));
+    voiceBtn.title = on ? 'New replies are read aloud' : 'Read new replies aloud';
+    voiceBtn.replaceChildren(icon(on ? 'volume' : 'mute', 14), 'Read aloud');
+  };
+  if (voiceBtn) {
+    paintVoice();
+    voiceBtn.addEventListener('click', () => {
+      const on = !loadSettings().speakReplies;
+      saveSettings({ speakReplies: on });
+      if (!on) stopSpeaking();
+      paintVoice();
+    });
+  }
+  cleanup.push(stopSpeaking); // leaving the tab stops the voice
   const head = h('header', { class: 'chat-head' },
     h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
     h('div', { class: 'chat-titles' }, h('h2', null, 'Evra assistant'), status),
-    newChat);
+    h('div', { class: 'chat-head-actions' }, ...[voiceBtn, newChat].filter(Boolean)));
 
   const intro = h('div', { class: 'msg assistant intro' },
     h('div', { class: 'msg-body' }, h('p', null, 'Hi! Ask me anything about your home, or tell me what to change: devices, scenes, automations, rooms, new devices or updates.'),
@@ -248,11 +271,36 @@ function chatView(root, cleanup) {
     return card;
   }
 
+  // ---- reading replies aloud ----
+  const speakers = new WeakMap(); // message -> its Listen button's painter
+  // The reply, then the prepared changes, in the reply's language.
+  const spokenText = (m) => {
+    const n = m.proposals?.length || 0;
+    if (!n) return m.text;
+    const titles = m.proposals.map((p) => p.title).join('; ');
+    return guessLang(m.text || '') === 'tr-TR'
+      ? `${m.text}\n${n === 1 ? 'Hazırlanan değişiklik' : 'Hazırlanan değişiklikler'}: ${titles}. Onaylamak için aşağıya bakın.`
+      : `${m.text}\n${n === 1 ? 'Prepared change' : 'Prepared changes'}: ${titles}. Approve below to go ahead.`;
+  };
+  const speakMessage = (m) => speak(spokenText(m), { id: m, onstart: () => speakers.get(m)?.(true), onend: () => speakers.get(m)?.(false) });
+  function listenButton(m) {
+    const btn = h('button', { class: 'btn small ghost msg-listen', type: 'button' });
+    const paint = (on) => {
+      btn.setAttribute('aria-pressed', String(on));
+      btn.replaceChildren(icon(on ? 'stop' : 'volume', 14), on ? 'Stop' : 'Listen', h('span', { class: 'sr-only' }, on ? ' reading' : ' to this reply'));
+    };
+    paint(speakingId() === m);
+    speakers.set(m, paint);
+    btn.addEventListener('click', () => { if (speakingId() === m) stopSpeaking(); else speakMessage(m); });
+    return h('div', { class: 'msg-tools' }, btn);
+  }
+
   function bubble(m) {
     const el = h('div', { class: `msg ${m.role}${m.error ? ' error' : ''}` },
       h('span', { class: 'sr-only' }, m.role === 'user' ? 'You: ' : 'Evra assistant: '),
       h('div', { class: 'msg-body' }, m.role === 'assistant' && !m.error ? richText(m.text) : h('p', null, m.text)),
-      m.proposals?.length ? h('div', { class: 'proposals' }, m.proposals.map((p) => proposalCard(p, m))) : null);
+      m.proposals?.length ? h('div', { class: 'proposals' }, m.proposals.map((p) => proposalCard(p, m))) : null,
+      m.role === 'assistant' && !m.error && canSpeak() ? listenButton(m) : null);
     if (m.error && m.retry) {
       el.append(h('button', {
         class: 'btn small', type: 'button',
@@ -281,6 +329,7 @@ function chatView(root, cleanup) {
     text = String(text || '').trim();
     if (!text || busy) return;
     if (!isRetry) add({ role: 'user', text });
+    stopSpeaking();
     busy = true;
     send.disabled = true;
     log.setAttribute('aria-busy', 'true');
@@ -301,10 +350,14 @@ function chatView(root, cleanup) {
         if (j.code === 'signin' || j.code === 'no_access') refreshMember();
         throw new Error(j.error || `The assistant answered with an error (${res.status}).`);
       }
-      if (alive) add({ role: 'assistant', text: j.reply, proposals: (j.proposals || []).map((p) => ({ ...p, status: 'pending' })) });
+      if (alive) {
+        const reply = { role: 'assistant', text: j.reply, proposals: (j.proposals || []).map((p) => ({ ...p, status: 'pending' })) };
+        add(reply);
+        if (loadSettings().speakReplies) speakMessage(reply);
+      }
     } catch (e) {
       const message = e instanceof TypeError
-        ? 'I can\'t reach the assistant. It runs on this computer: start it with "Start Evra.bat".'
+        ? `I can't reach the assistant. It runs on ${onThisComputer() ? 'this computer' : 'the computer that serves the app'}: ${startHint()}.`
         : e.message;
       if (alive) add({ role: 'assistant', text: message, error: true, retry: text });
     } finally {
@@ -333,6 +386,7 @@ function chatView(root, cleanup) {
 
   newChat.addEventListener('click', () => {
     fetch(`${base}/reset`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ session: chat.session }) }).catch(() => {});
+    stopSpeaking();
     chat.session = newSession();
     chat.messages = [];
     saveChat(chat);
@@ -349,7 +403,7 @@ function chatView(root, cleanup) {
       status.replaceChildren(h('span', { class: `status-dot ${j.key ? 'connected' : 'error'}` }), j.key ? `Ready · ${where}` : 'The assistant has no Gemini key');
     } catch {
       if (!alive) return;
-      status.replaceChildren(h('span', { class: 'status-dot error' }), 'Not running. Start it with "Start Evra.bat".');
+      status.replaceChildren(h('span', { class: 'status-dot error' }), `Not running. To fix it, ${startHint()}.`);
     }
   }
 

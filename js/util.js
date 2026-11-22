@@ -135,6 +135,9 @@ export function toast(message, kind = 'info') {
 
 // Settings live in localStorage, wrapped so private windows still work.
 const SETTINGS_KEY = 'smarthome.settings';
+// The assistant runs on the computer that serves the app: localhost on that computer,
+// its home-network address on a phone (phone mode, "Start Evra on phone.bat").
+const defaultAssistantUrl = () => `http://${location.hostname || 'localhost'}:8765`;
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { saved = {}; }
@@ -149,8 +152,11 @@ export function loadSettings() {
     remote: saved.remote,
     sceneRooms: saved.sceneRooms,
     lastScene: saved.lastScene,
-    // The Evra assistant server (EvrAI/gemini_home_starter), on this computer.
-    assistantUrl: saved.assistantUrl || 'http://localhost:8765',
+    // The Evra assistant server (EvrAI/gemini_home_starter). Older versions saved the
+    // default with every setting; that value counts as "not chosen".
+    assistantUrl: (saved.assistantUrl && saved.assistantUrl !== 'http://localhost:8765') ? saved.assistantUrl : defaultAssistantUrl(),
+    // Read the assistant's new replies aloud (js/speech.js).
+    speakReplies: saved.speakReplies === true,
     // Evra accounts address, only when someone chose one; unset means the Evra website
     // (accountsUrl() in js/account.js). Older versions saved "accountsUrl" with every
     // setting, so that key is ignored and dropped on the next save.
@@ -159,7 +165,9 @@ export function loadSettings() {
 }
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* not persisted */ }
+  // The default assistant address depends on where the app is opened, so it isn't saved.
+  const { assistantUrl, ...kept } = next;
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(assistantUrl === defaultAssistantUrl() ? kept : next)); } catch { /* not persisted */ }
   return next;
 }
 

@@ -988,12 +988,18 @@ textarea.json {
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .chat { display: flex; flex-direction: column; gap: 12px; max-width: 760px; width: 100%; margin: 0 auto; }
-.chat-head { display: flex; align-items: center; gap: 12px; }
+.chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .chat-avatar {
   width: 48px; height: 48px; border-radius: 16px; flex: none; display: grid; place-items: center;
   color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, var(--card));
 }
-.chat-titles { flex: 1; min-width: 0; }
+.chat-titles { flex: 1 1 180px; min-width: 0; }
+/* On a phone the buttons move to their own row instead of squeezing the title. */
+.chat-head-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.voice-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.msg-tools { display: flex; margin-top: 6px; }
+.msg-listen { padding: 4px 10px; min-height: 30px; font-size: 13px; }
+.msg-listen[aria-pressed="true"] { color: var(--accent); }
 .chat-titles h2 { font-size: 18px; }
 .chat-status { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
 .chat-log { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
