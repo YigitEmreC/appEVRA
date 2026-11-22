@@ -13,9 +13,8 @@ image: ghcr.io/yigitemrec/{arch}-addon-evra
 arch:
   - aarch64
   - amd64
+# Home Assistant's defaults apply: starts with the Pi (boot: auto), as an app (startup: application).
 init: false
-startup: application
-boot: auto
 ports:
   8099/tcp: 8099
 ports_description:
@@ -25,7 +24,6 @@ ingress: true
 ingress_port: 8098
 panel_icon: mdi:home-heart
 panel_title: Evra
-options: {}
 schema:
   home_assistant_url: url?
   internet_home_assistant_url: url?

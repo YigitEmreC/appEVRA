@@ -22,4 +22,5 @@ LABEL \
   io.hass.version="${BUILD_VERSION}" \
   org.opencontainers.image.title="Evra" \
   org.opencontainers.image.source="https://github.com/YigitEmreC/appEVRA" \
-  org.opencontainers.image.version="${BUILD_VERSION}"
+  org.opencontainers.image.version="${BUILD_VERSION}" \
+  org.opencontainers.image.licenses="LicenseRef-Evra-All-Rights-Reserved"

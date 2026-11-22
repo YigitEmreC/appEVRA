@@ -1,0 +1,26 @@
+Copyright (c) 2026 Evra. All rights reserved.
+
+This repository is public so that its code can be read. Reading it gives no
+permission to use it beyond what is written here.
+
+What you may do:
+
+  - Read the code and view it on GitHub, as GitHub's Terms of Service allow.
+  - Install and run the Evra app and the Evra Home Assistant add-on, as published
+    by Evra in this repository, on your own devices for your own home.
+
+What you may not do without written permission from Evra:
+
+  - Copy, change, or build on the code, in whole or in part.
+  - Share, publish, sell, rent, or sublicense the code or anything made from it.
+  - Offer the code, or software made from it, as a product or service to others.
+  - Remove or change this notice.
+
+Third-party parts keep their own licences. In particular, the add-on's
+container image contains Home Assistant's base image, Alpine Linux and nginx,
+which are covered by their own licences, not by this notice.
+
+The software is provided "as is", without warranty of any kind. Evra is not
+liable for any damage arising from its use, to the extent the law allows.
+
+For permission or questions, contact Evra through https://evrasmarthome.com.
