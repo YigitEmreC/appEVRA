@@ -12,6 +12,10 @@ import { renderSettings } from './views/settings.js';
 import { renderDevices } from './views/devices.js';
 import { renderChat } from './views/chat.js';
 import { renderScenes } from './views/scenes.js';
+import { openCustomizer } from './views/customize.js';
+import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_NAV, HEADER_ITEMS } from './custom.js';
+import { arrangeable } from './edit.js';
+import { ensureSky } from './sky.js';
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [
@@ -32,6 +36,37 @@ const SUBTITLES = { 'devices/add': 'Add a device', 'automations/new': 'New autom
 const themeBtn = h('button', { class: 'theme-btn', type: 'button' });
 themeBtn.addEventListener('click', () => setPrefs({ theme: effectiveTheme() === 'dark' ? 'light' : 'dark' }));
 
+// One button at the top right for everything about the look: it opens the
+// Customize panel (themes, buttons, layout). From there, "Move things on the
+// screen" starts moving mode; while moving, this button reads "Done" and a
+// "Customize" button next to it goes back to the panel.
+const customBtn = h('button', { class: 'theme-btn custom-btn', type: 'button' });
+customBtn.addEventListener('click', () => { if (isEditing()) setEditing(false); else openPanel(); });
+const backBtn = h('button', { class: 'theme-btn cz-back-btn', type: 'button', hidden: true, title: 'Back to Customize', 'aria-label': 'Back to Customize' },
+  h('span', { class: 'custom-btn-icon' }, icon('palette', 16)), h('span', null, 'Customize'));
+backBtn.addEventListener('click', () => { setEditing(false); openPanel(); });
+function paintCustomBtn() {
+  const on = isEditing();
+  customBtn.replaceChildren(...[h('span', { class: 'custom-btn-icon' }, icon(on ? 'check' : 'palette', 18)), on ? h('span', null, 'Done') : null].filter(Boolean));
+  customBtn.setAttribute('aria-pressed', String(on));
+  customBtn.setAttribute('aria-label', on ? 'Done moving things' : 'Customize: themes, buttons and layout');
+  customBtn.title = on ? 'Done' : 'Customize';
+  if (on) customBtn.removeAttribute('aria-haspopup'); else customBtn.setAttribute('aria-haspopup', 'dialog');
+  backBtn.hidden = !on;
+}
+// The Customize panel. Settings opens it too, with this event; detail.tab picks the tab.
+const openPanel = (tab) => openCustomizer({ button: customBtn, tab });
+window.addEventListener('evra-customize', (e) => { setEditing(false); openPanel(e.detail?.tab); });
+// The panel's "Move things on the screen" asks for moving mode with this event.
+window.addEventListener('evra-move', () => {
+  setEditing(true);
+  toast('Drag things to move them. Tap an eye to hide one. Done is at the top.');
+});
+// Escape while moving goes back to the panel.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && isEditing() && !document.querySelector('.cz-panel')) { setEditing(false); openPanel(); }
+});
+
 function applyTheme() {
   const { theme, devMode } = loadSettings();
   if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
@@ -43,6 +78,27 @@ function applyTheme() {
   themeBtn.replaceChildren(icon(dark ? 'sun' : 'moon', 18));
   themeBtn.setAttribute('aria-label', label);
   themeBtn.title = label;
+  // The person's own theme, background, shapes and spacing.
+  ensureSky();
+  applyLook(dark);
+  layoutHeader();
+}
+
+// The top bar in the person's order: the greeting and the date on the left,
+// the light/dark button and connection status on the right (the customize
+// and edit buttons always stay last). While editing, all of them show.
+function layoutHeader() {
+  const { header } = getCustom();
+  const editing = isEditing();
+  const parts = { title, clock: sub, mode: themeBtn, status: pill };
+  for (const [id, el] of Object.entries(parts)) { el.dataset.id = id; el.hidden = !editing && isHidden(header, id); }
+  const order = ordered(HEADER_ITEMS, header).map((i) => i.id);
+  topLeft.replaceChildren(...order.filter((id) => id === 'title' || id === 'clock').map((id) => parts[id]));
+  topRight.replaceChildren(...order.filter((id) => id === 'mode' || id === 'status').map((id) => parts[id]), backBtn, customBtn);
+  const names = Object.fromEntries(HEADER_ITEMS.map((i) => [i.id, i.label]));
+  arrangeable(topLeft, 'header', { whole: true, all: order, names });
+  arrangeable(topRight, 'header', { whole: true, all: order, names });
+  paintCustomBtn();
 }
 window.addEventListener('evra-prefs', applyTheme);
 
@@ -60,16 +116,35 @@ function connect() {
 
 // ---- shell ------------------------------------------------------------------
 
-const title = h('h1', { class: 'top-title' });
-const sub = h('p', { class: 'top-sub' });
-const pill = h('a', { class: 'status-pill', href: '#/settings' });
+// Text sits in inner spans, so edit handles added next to it survive updates.
+const titleText = h('span');
+const subText = h('span');
+const pillBody = h('span', { class: 'status-body' });
+const title = h('h1', { class: 'top-title' }, titleText);
+const sub = h('p', { class: 'top-sub' }, subText);
+const pill = h('a', { class: 'status-pill', href: '#/settings' }, pillBody);
+const topLeft = h('div', { class: 'top-left' });
+const topRight = h('div', { class: 'top-right' });
 const main = h('main', { id: 'view', tabindex: '-1' });
-const nav = h('nav', { class: 'nav', 'aria-label': 'Main' },
-  h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra home', title: 'Evra' }, icon('evra', 22)),
-  VIEWS.map((v) => h('a', { href: `#/${v.id}`, 'data-view': v.id, class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}` }, h('span', { class: 'nav-icon' }, icon(v.icon, 22)), h('span', { class: 'nav-label' }, v.label))));
+const nav = h('nav', { class: 'nav', 'aria-label': 'Main' });
+const brand = h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra home', title: 'Evra' }, icon('evra', 22));
+
+// Tabs in the person's chosen order, without the ones they hid (while
+// editing, hidden tabs show faded so they can be brought back).
+function buildNav() {
+  const { nav: cfg } = getCustom();
+  const all = ordered(VIEWS, cfg);
+  const tabs = all.filter((v) => isEditing() || LOCKED_NAV.includes(v.id) || !isHidden(cfg, v.id));
+  nav.replaceChildren(brand, ...tabs.map((v) => h('a', { href: `#/${v.id}`, 'data-view': v.id, 'data-id': v.id, 'data-name': v.label, class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}` }, h('span', { class: 'nav-icon' }, icon(v.icon, 22)), h('span', { class: 'nav-label' }, v.label))));
+  arrangeable(nav, 'nav', { whole: true, locked: LOCKED_NAV, all: all.map((v) => v.id) });
+  markActive();
+}
+function markActive() {
+  for (const a of nav.querySelectorAll('.nav-item')) a.classList.toggle('active', a.dataset.view === currentView?.id);
+}
 
 document.getElementById('app').replaceChildren(
-  h('header', { class: 'top' }, h('div', { class: 'top-left' }, title, sub), h('div', { class: 'top-right' }, themeBtn, pill)),
+  h('header', { class: 'top' }, topLeft, topRight),
   nav,
   main,
 );
@@ -83,8 +158,8 @@ let currentTitle = '';
 function drawHeader() {
   if (!currentView) return;
   const date = new Date().toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
-  title.textContent = currentView.id === 'home' ? greeting() : currentTitle || currentView.title;
-  sub.textContent = currentView.id === 'home' ? `${HOME.room} · ${date} · ${clockText()}` : `${date} · ${clockText()}`;
+  titleText.textContent = currentView.id === 'home' ? greeting() : currentTitle || currentView.title;
+  subText.textContent = currentView.id === 'home' ? `${HOME.room} · ${date} · ${clockText()}` : `${date} · ${clockText()}`;
 }
 setInterval(drawHeader, 15000);
 
@@ -103,8 +178,9 @@ store.onStatus((s) => {
   const text = s.mode === 'demo'
     ? (s.state === 'error' ? 'Demo · problem' : 'Demo')
     : { connected: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', error: 'Offline', idle: 'Offline' }[s.state] || s.state;
-  pill.className = `status-pill ${s.mode === 'demo' && s.state === 'connected' ? 'demo' : s.state}`;
-  pill.replaceChildren(h('span', { class: 'status-dot' }), text);
+  pill.classList.remove('demo', 'connected', 'connecting', 'reconnecting', 'error', 'idle');
+  pill.classList.add(s.mode === 'demo' && s.state === 'connected' ? 'demo' : s.state);
+  pillBody.replaceChildren(h('span', { class: 'status-dot' }), text);
   pill.title = s.message || text;
 });
 
@@ -112,7 +188,8 @@ store.onStatus((s) => {
 
 let cleanup = [];
 
-function route() {
+function route(opts) {
+  const keepScroll = opts?.keepScroll ? window.scrollY : null;
   const raw = location.hash.replace(/^#\/?/, '') || 'home';
   const [path, qs] = raw.split('?');
   const [id, ...params] = path.split('/').filter(Boolean);
@@ -125,11 +202,18 @@ function route() {
   currentTitle = SUBTITLES[`${view.id}/${params[0]}`] || (view.id === 'devices' && params[0] ? 'Device' : '');
   drawHeader();
   document.title = `${currentTitle || view.label} · Evra`;
-  for (const a of nav.querySelectorAll('.nav-item')) a.classList.toggle('active', a.dataset.view === view.id);
+  markActive();
   view.render(main, cleanup, { reconnect: connect, applyTheme, params, query: new URLSearchParams(qs || '') });
   main.scrollTop = 0;
-  window.scrollTo(0, 0);
+  window.scrollTo(0, keepScroll ?? 0);
 }
+
+// Customize changes: new look, new tab order, and the open screen re-drawn in place.
+window.addEventListener('evra-custom', (e) => {
+  applyTheme();
+  buildNav();
+  if (e.detail?.rerender !== false) route({ keepScroll: true });
+});
 
 window.addEventListener('hashchange', route);
 // Notifications sent by automations in demo mode show as a toast.
@@ -138,6 +222,7 @@ const mq = window.matchMedia('(prefers-color-scheme: dark)');
 mq.addEventListener?.('change', applyTheme);
 
 applyTheme();
+buildNav();
 connect();
 route();
 

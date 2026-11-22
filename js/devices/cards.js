@@ -14,10 +14,11 @@ import { toggle, slider, irButton, deviceCard, sparkline } from '../components.j
 // Light Neutral Green #DAE7D1. Heating stays warm amber, alarms stay red.
 const HEAT = '#E9BE7C';
 const ALARM = '#F27D89';
+// Pastels refer to the --p-* tokens so colour themes (js/themes.js) recolour the tiles.
 const TONES = {
-  plug: '#B3C6B3', relay: HEAT, cover: '#B3C6EA', climate: HEAT, lock: '#B3C6B3', valve: '#9ED5FD',
-  siren: ALARM, camera: '#CFDBE7', motion: '#9AAFDD', presence: '#9AAFDD', contact: '#B8CBE4', alarm: ALARM,
-  button: ALARM, co2: '#B3C6B3', ir: '#9ED5FD', 'climate-sensor': '#DAE7D1', generic: '#CDD7F0',
+  plug: 'var(--p-seawash)', relay: HEAT, cover: 'var(--p-denim)', climate: HEAT, lock: 'var(--p-seawash)', valve: 'var(--p-splash)',
+  siren: ALARM, camera: 'var(--p-stlouis-2)', motion: 'var(--p-sky)', presence: 'var(--p-sky)', contact: 'var(--p-gentle)', alarm: ALARM,
+  button: ALARM, co2: 'var(--p-seawash)', ir: 'var(--p-splash)', 'climate-sensor': 'var(--p-mint)', generic: 'var(--p-stlouis)',
 };
 const KIND_ICON = {
   light: 'bulb', plug: 'plug', relay: 'toggle', cover: 'blind', climate: 'thermostat', lock: 'lock', valve: 'valve', siren: 'siren',

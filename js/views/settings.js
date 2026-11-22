@@ -1,6 +1,8 @@
 import { HOME } from '../config.js';
 import { store } from '../store.js';
-import { h, num, numVal, isAvailable, loadSettings, saveSettings, setPrefs, toast } from '../util.js';
+import { h, num, numVal, isAvailable, loadSettings, saveSettings, setPrefs, toast, effectiveTheme } from '../util.js';
+import { getCustom, setCustom } from '../custom.js';
+import { PALETTES } from '../themes.js';
 import { icon } from '../icons.js';
 import { card, toggle } from '../components.js';
 import { signOut } from '../backends/live.js';
@@ -96,6 +98,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('a', { class: 'shortcut', href: '#/remotes' }, icon('remote', 20), h('span', null, 'Remotes'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/devices?tab=rooms' }, icon('rooms', 20), h('span', null, 'Rooms'), icon('right', 16))),
     card({ title: 'Connection', iconName: 'home' }, statusLine, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
+    lookCard(),
     card({ title: 'Preferences', iconName: 'gear' },
       settingRow('Appearance', 'Auto follows this device\'s light or dark setting.', themeTabs),
       settingRow('Developer mode', 'Shows technical details: entity lists, model and firmware numbers, JSON editing and demo tools.', devSwitch),
@@ -110,4 +113,33 @@ function settingRow(title, hint, control) {
   return h('div', { class: 'setting-row' },
     h('div', { class: 'setting-text' }, h('strong', null, title), hint ? h('small', null, hint) : null),
     control);
+}
+
+// ---- look and layout ----------------------------------------------------------------
+
+// Themes to tap straight from Settings, and the ways into the Customize panel.
+function lookCard() {
+  const c = getCustom();
+  const dark = effectiveTheme() === 'dark';
+  const open = (tab) => window.dispatchEvent(new CustomEvent('evra-customize', { detail: { tab } }));
+  const themes = h('div', { class: 'look-themes', role: 'radiogroup', 'aria-label': 'Theme' }, PALETTES.map((p) => {
+    const m = dark ? p.dark : p.light;
+    const active = c.palette === p.id;
+    return h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(active), class: `cz-palette${active ? ' active' : ''}`,
+      onclick: () => setCustom({ palette: p.id, background: 'auto', effects: [] }), // a theme always brings its own effects
+    },
+    h('span', { class: `cz-preview${p.motion ? ' moving' : ''}`, style: p.motion ? { background: m.bg, '--m1': p.m[0], '--m2': p.m[1], '--m3': p.m[2] } : { background: m.bg } },
+      p.motion ? h('i', { class: 'cz-preview-glow' }) : null,
+      h('span', { class: 'cz-preview-card', style: { background: m.card } }, [p.p.sky, p.p.splash, p.p.seawash].map((col) => h('i', { style: { background: col } })))),
+    h('span', { class: 'cz-palette-name' }, active ? icon('check', 14) : null, p.name));
+  }));
+  return card({ title: 'Look and layout', iconName: 'palette' },
+    h('p', { class: 'muted small' }, 'Tap a theme to use it. Moving themes have effects behind them, like the Evra website. The palette button at the top right opens all of this from any screen.'),
+    themes,
+    h('div', { class: 'look-actions' },
+      h('button', { class: 'btn primary', type: 'button', onclick: () => { location.hash = '#/home'; setTimeout(() => window.dispatchEvent(new CustomEvent('evra-move')), 50); } }, icon('move', 16), 'Move things on Home'),
+      h('button', { class: 'btn', type: 'button', onclick: () => open('theme') }, icon('sparkle', 16), 'Themes and effects'),
+      h('button', { class: 'btn', type: 'button', onclick: () => open('buttons') }, icon('toggle', 16), 'Buttons'),
+      h('button', { class: 'btn', type: 'button', onclick: () => open('layout') }, icon('devices', 16), 'Layout and hidden things')));
 }

@@ -22,6 +22,36 @@ The app starts in **demo mode**: a pretend Home Assistant built from the snapsho
 
 The sun/moon button in the header switches between light and dark; Settings → Appearance also has **Auto**, which follows the device.
 
+## Customize
+
+The colourful **palette button** at the top right opens **Customize**. So does Settings → **Look and layout**, which also has a theme picker you can swipe through and shortcuts to each part. Every change shows straight away.
+
+At the top of Customize is **Move things on the screen**. Tap it and the panel closes so you can rearrange Home (and the tabs, top bar and Scenes). While moving, the top right shows **Customize** (back to the panel) and **Done**; Escape also goes back to the panel. Everything that can move gets a dashed outline:
+
+- **Drag it** to a new place. Small things (buttons, chips, readings, tabs, top-bar items) are dragged by themselves. Big things (Home's sections, device tiles, scenes) can be dragged anywhere on them with a mouse, or by press-and-hold with a finger, so a normal swipe still scrolls the page. They also have a handle.
+- **Tap its eye** to hide it. Hidden things stay on screen, faded, until you tap **Done**, so you can bring them back.
+- **Home's sections** also have a **↔** button for half width: two half-width sections sit side by side on big screens. Room climate and Quick actions start that way.
+- **Tiles** can also be made wide or small.
+- **With a keyboard or touchpad:** Tab to a movable thing, then use the arrow keys to move it and **H** to hide or show it. On touch screens and small screens, the handles and eyes are bigger.
+
+What can be moved and hidden: Home's sections, the quick action buttons, the climate card's readings and chips (including the optional *power in use* and *lights on*), the room chips (hiding a room takes its tiles off Home), the device tiles, the scenes, the navigation tabs (Home and Settings can't be hidden) and the top bar's greeting, date, light/dark button and connection status. Safety alerts can't be moved or hidden.
+
+The panel's tabs:
+
+- **Theme:** light, dark or auto.
+  - Fifteen *moving themes*: **Night sky** (the Evra website's night background: northern lights, stars and lines of light), **Northern lights** (with mountains), **Gold lines** (the website's showcase lines), **Connected**, **Ember glow** (with rising embers), **Deep sea** (waves and stars), **Winter** (snow over mountains), **Fireflies**, **Colour flow**, **Cosmos**, **Fireplace** (flickering flames, logs and embers), **Galaxy** (a slowly turning spiral), **Retro** (a striped sun over a rolling neon grid), **Bosphorus** (Istanbul at night: the shore with its mosques, the bridge lights, the moon and Kız Kulesi on the water) and **Kız Kulesi** (the Maiden's Tower at sunset, with seagulls). On a phone, the Istanbul themes show Kız Kulesi.
+  - Seven still themes: Evra, Ocean, Forest, Sunset, Lavender, Graphite and High contrast.
+  - **Background effects** can be mixed freely behind any theme: top glow, northern lights, mountains, stars, lines of light, gold lines, connections, glowing lights, embers, waves, snow, fireflies, colour flow, fireplace, galaxy, retro sun, Istanbul, moon, seagulls and sunset glow. Each has a strength and a movement setting (still, calm, lively).
+  - Also an accent colour, corners, spacing, text size, and whether tiles that are on fill with their colour.
+  - Alarms stay red and heating stays amber in every theme. A device set to reduce motion gets a still background.
+- **Buttons:**
+  - **All buttons:** shape (pill, rounded, square), main button style (filled, soft, outline), size, depth (flat, soft, raised, glow) and the press effect (still, subtle, bouncy).
+  - **Quick action buttons:** look (card, tinted, outline, solid), icon style, and with or without the description.
+  - **Each quick action** can have its own name, colour and icon.
+- **Layout:** a list of everything hidden (tap one to show it again), group tiles by room or one list, full or compact tiles, tiles per row (1–4 on tablets and computers), names under tab icons, Energy and Remotes in the phone's tab bar, section headings, and centred or full-width pages.
+
+Customization is kept in this browser (`localStorage` key `evra.custom`), so the phone and the wall panel can look different. **Copy setup** and **Paste a setup** move a look from one screen to another; **Reset everything** goes back to the original.
+
 ## Screens
 
 | Screen | What's on it |
@@ -88,6 +118,12 @@ When it connects, you name it and choose its room.
 | `js/store.js` | States, devices, rooms and entities; helpers used by every screen |
 | `js/ideas.js` | Automation ideas, what each needs, and how each is built from the home's devices |
 | `js/scenes.js` | The ten scenes and how they're applied to the chosen rooms |
+| `js/custom.js` | Each person's theme and layout: saving it, applying it, and putting things in their chosen order |
+| `js/themes.js` | The colour themes (still and moving), moving backgrounds and accent colours |
+| `js/sky.js` | The moving background layer |
+| `js/sky-scenes.js` | The illustrated backgrounds: Istanbul (Bosphorus, the bridge, Kız Kulesi), the fireplace, the mountains, the retro horizon |
+| `js/edit.js` | Editing the layout on the screen: dragging and hiding |
+| `js/views/customize.js` | The Customize panel |
 | `Start Evra.bat` | Starts the local server and opens the app |
 | `js/devices/cards.js` | The device tiles, one builder per kind |
 | `js/backends/demo.js` | The demo Home Assistant, including a small automation engine |

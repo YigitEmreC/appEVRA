@@ -172,6 +172,89 @@ export function sparkline(rows, { start, end, height = 48, cls = '' }) {
   return svg;
 }
 
+// Drag to reorder the direct children of container that match `item`.
+// Works with a mouse, a finger or a pen. A press on `handle` starts at once.
+// With `anywhere`, the whole item can be dragged too: straight away with a
+// mouse, and after a short press-and-hold with a finger, so the page still
+// scrolls when someone just swipes. onEnd(el) runs after a drop that changed
+// the order. Presses on `ignore` (buttons inside an item) never start a drag.
+// When containers are nested, the innermost one that can drag wins.
+export function sortable(container, { item, handle, ignore, onEnd, anywhere = false }) {
+  let active = false;
+  // Stops the page scrolling under a finger that's dragging. It has to be
+  // there before the touch starts, so it's always on and checks `active`.
+  container.addEventListener('touchmove', (ev) => { if (active) ev.preventDefault(); }, { passive: false });
+  container.addEventListener('contextmenu', (ev) => { if (active || container.classList.contains('edit-zone')) ev.preventDefault(); });
+
+  container.addEventListener('pointerdown', (e) => {
+    if (e.button > 0 || e.evraSorted) return;
+    if (ignore && e.target.closest(ignore)) return;
+    const grip = e.target.closest(handle);
+    let el = grip?.closest(item);
+    const byHandle = !!el && el.parentElement === container && el.matches(item);
+    if (!byHandle) {
+      if (!anywhere) return;
+      el = e.target;
+      while (el && el.parentElement !== container) el = el.parentElement;
+      if (!el || !el.matches(item)) return;
+    }
+    e.evraSorted = true;
+    if (byHandle || e.pointerType !== 'touch') { e.preventDefault(); start(e, el, byHandle ? grip : el); return; }
+
+    // A finger on the item itself: wait for press-and-hold.
+    const sx = e.clientX, sy = e.clientY;
+    const timer = setTimeout(() => { stopWaiting(); navigator.vibrate?.(12); start(e, el, el); }, 380);
+    const moved = (ev) => { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8) stopWaiting(); };
+    function stopWaiting() {
+      clearTimeout(timer);
+      window.removeEventListener('pointermove', moved);
+      window.removeEventListener('pointerup', stopWaiting);
+      window.removeEventListener('pointercancel', stopWaiting);
+    }
+    window.addEventListener('pointermove', moved);
+    window.addEventListener('pointerup', stopWaiting);
+    window.addEventListener('pointercancel', stopWaiting);
+  });
+
+  function start(e, el, captor) {
+    try { captor.setPointerCapture(e.pointerId); } catch { /* not supported or already gone */ }
+    active = true;
+    const before = [...container.children].indexOf(el);
+    const sx = e.clientX, sy = e.clientY;
+    let lifted = false;
+    // A finger that held on gets the lifted look straight away; a mouse after it moves a little.
+    const lift = () => { lifted = true; el.classList.add('dragging'); container.classList.add('sorting'); };
+    if (e.pointerType === 'touch') lift();
+    let scroll = 0;
+    const scroller = setInterval(() => { if (scroll) window.scrollBy(0, scroll); }, 16);
+    const move = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      if (!lifted) { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return; lift(); }
+      scroll = ev.clientY < 90 ? -10 : ev.clientY > window.innerHeight - 130 ? 10 : 0;
+      // The child of this container under the pointer (things can be nested).
+      let over = document.elementFromPoint(ev.clientX, ev.clientY);
+      while (over && over.parentElement !== container) over = over.parentElement;
+      if (!over || over === el || !over.matches(item)) return;
+      const later = el.compareDocumentPosition(over) & Node.DOCUMENT_POSITION_FOLLOWING;
+      container.insertBefore(el, later ? over.nextSibling : over);
+    };
+    const end = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      active = false;
+      clearInterval(scroller);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      el.classList.remove('dragging');
+      container.classList.remove('sorting');
+      if ([...container.children].indexOf(el) !== before) onEnd(el);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }
+}
+
 // A device tile: coloured icon, name, state line and an optional switch.
 // Returns the card with .setState(text, on).
 export function deviceCard({ title, iconName, tone, sw, className = '' }, ...body) {

@@ -2,33 +2,59 @@ import { HOME } from '../config.js';
 import { store, runQuickAction, userDevices, sortedAreas, entityArea, deviceName, areaName } from '../store.js';
 import { h, num, numVal, relTime, isOn, isAvailable, toast, loadSettings, saveSettings } from '../util.js';
 import { icon } from '../icons.js';
-import { chip } from '../components.js';
+import { chip, sortable } from '../components.js';
 import { deviceCardFor } from '../devices/cards.js';
+import { getCustom, setCustom, ordered, isHidden, withFlag, mergeOrder, isEditing, SECTIONS, INDICATORS } from '../custom.js';
+import { arrangeable } from '../edit.js';
 
+// Home follows the person's layout (js/custom.js). In edit mode everything
+// here can be dragged and hidden on the screen itself: the sections, the quick
+// action buttons, the climate card's readings and chips, the room chips and
+// the device tiles (which can also be made wide or small).
 export function renderHome(root, cleanup) {
-  let room = loadSettings().room || 'all';
+  const custom = getCustom();
+  const editing = isEditing();
+  const shown = (cfg, id) => editing || !isHidden(cfg, id);
+  const sections = ordered(SECTIONS, custom.sections).filter((s) => shown(custom.sections, s.id));
+  const shows = (id) => sections.some((s) => s.id === id);
+  // The rooms in the chosen order; hidden rooms leave Home (not the Devices screen).
+  const rooms = () => ordered(sortedAreas(), getCustom().rooms, (a) => a.area_id).filter((a) => shown(getCustom().rooms, a.area_id));
+  // Without the room chips there's no way to pick a room, so show them all.
+  let room = shows('rooms') && !isHidden(custom.sections, 'rooms') ? loadSettings().room || 'all' : 'all';
   const alerts = h('div', { class: 'alerts' });
   const heroSlot = h('div', { class: 'hero-slot' });
   const chips = h('div', { class: 'room-chips', role: 'tablist', 'aria-label': 'Rooms' });
   const devicesSlot = h('div', { class: 'devices-slot' });
   let local = [];
 
-  root.append(
-    alerts,
-    h('div', { class: 'home-top' }, heroSlot, quickActions()),
-    h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, 'Rooms'),
-      h('a', { class: 'link', href: '#/devices/add' }, icon('plus', 14), 'Add device')),
-    chips,
-    devicesSlot,
-  );
+  const parts = {
+    climate: heroSlot,
+    quick: quickActions(custom, editing),
+    rooms: [h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, 'Rooms'),
+      h('a', { class: 'link', href: '#/devices/add' }, icon('plus', 14), 'Add device')), chips],
+    devices: devicesSlot,
+  };
+  // Each section is a block. On wide screens a "half" block sits next to
+  // another half one. While editing, blocks can be dragged anywhere on them.
+  const blocks = h('div', { class: 'home-blocks' });
+  for (const s of sections) {
+    if (!parts[s.id]) continue;
+    blocks.append(h('div', { class: `home-block${custom.sections.half.includes(s.id) ? ' half' : ''}`, 'data-id': s.id, 'data-name': s.label }, parts[s.id]));
+  }
+  arrangeable(blocks, 'sections', {
+    all: ordered(SECTIONS, custom.sections).map((s) => s.id),
+    big: true,
+    flag: { field: 'half', cls: 'half', icon: 'widen', label: 'Half width (side by side on big screens)' },
+  });
+  root.append(alerts, blocks);
 
   function draw() {
     for (const fn of local) { try { fn(); } catch { /* ignore */ } }
     local = [];
-    if (room !== 'all' && !store.areas.has(room)) room = 'all';
-    drawChips();
-    heroSlot.replaceChildren(hero(room, local));
-    drawDevices();
+    if (room !== 'all' && !rooms().some((a) => a.area_id === room)) room = 'all';
+    if (shows('rooms')) drawChips();
+    if (shows('climate')) heroSlot.replaceChildren(hero(room, local, custom.indicators, editing));
+    if (shows('devices')) drawDevices();
   }
 
   function drawChips() {
@@ -36,30 +62,103 @@ export function renderHome(root, cleanup) {
     const count = (areaId) => devs.filter((d) => (d.area_id || null) === areaId).length;
     const pickRoom = (id) => { room = id; saveSettings({ room: id }); draw(); };
     chips.replaceChildren(
-      roomChip('All rooms', devs.length, room === 'all', () => pickRoom('all')),
-      ...sortedAreas().map((a) => roomChip(a.name, count(a.area_id), room === a.area_id, () => pickRoom(a.area_id))),
+      roomChip(null, 'All rooms', devs.length, room === 'all', () => pickRoom('all')),
+      ...rooms().map((a) => roomChip(a.area_id, a.name, count(a.area_id), room === a.area_id, () => pickRoom(a.area_id))),
       h('a', { class: 'room-chip add', href: '#/devices?tab=rooms' }, icon('plus', 14), 'Room'),
     );
+    arrangeable(chips, 'rooms', { whole: true, all: ordered(sortedAreas(), getCustom().rooms, (a) => a.area_id).map((a) => a.area_id) });
   }
+
+  // Tiles in the chosen order; hidden ones only show (faded) while editing.
+  const visible = (list) => {
+    const t = getCustom().tiles;
+    const sorted = ordered(list, t);
+    return editing ? sorted : sorted.filter((d) => !t.hidden.includes(d.id));
+  };
 
   function drawDevices() {
     const devs = userDevices();
+    const roomIds = new Set(rooms().map((a) => a.area_id));
     if (room !== 'all') {
-      const list = devs.filter((d) => d.area_id === room);
+      const list = visible(devs.filter((d) => d.area_id === room));
       devicesSlot.replaceChildren(list.length ? grid(list) : emptyRoom());
       return;
     }
-    const sections = sortedAreas().map((a) => ({ title: a.name, id: a.area_id, list: devs.filter((d) => d.area_id === a.area_id) }))
+    // Tiles of hidden rooms stay off Home.
+    const onHome = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id) || roomIds.has(d.area_id));
+    if (!getCustom().groupRooms) {
+      const list = visible(onHome);
+      devicesSlot.replaceChildren(list.length ? grid(list) : emptyRoom());
+      return;
+    }
+    const groups = rooms().map((a) => ({ title: a.name, id: a.area_id, list: visible(devs.filter((d) => d.area_id === a.area_id)) }))
       .filter((s) => s.list.length);
-    const loose = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id));
-    if (loose.length) sections.push({ title: 'Not in a room', id: null, list: loose });
-    devicesSlot.replaceChildren(...(sections.length ? sections.map((s) => h('section', { class: 'room-section' },
+    const loose = visible(devs.filter((d) => !d.area_id || !store.areas.has(d.area_id)));
+    if (loose.length) groups.push({ title: 'Not in a room', id: null, list: loose });
+    devicesSlot.replaceChildren(...(groups.length ? groups.map((s) => h('section', { class: 'room-section' },
       h('div', { class: 'section-row' }, h('h3', { class: 'room-title' }, s.title), h('span', { class: 'muted small' }, `${s.list.length} device${s.list.length === 1 ? '' : 's'}`)),
       grid(s.list))) : [emptyRoom()]));
   }
 
   function grid(list) {
-    return h('div', { class: 'grid devices' }, list.map((d) => deviceCardFor(d, local)));
+    const t = getCustom().tiles;
+    const g = h('div', { class: `grid devices${editing ? ' arranging' : ''}` });
+    g.append(...list.map((d) => {
+      const el = deviceCardFor(d, local);
+      el.dataset.id = d.id;
+      el.classList.toggle('tile-wide', t.wide.includes(d.id));
+      el.classList.toggle('tile-small', t.small.includes(d.id));
+      if (editing) tileTools(el, d, g);
+      return el;
+    }));
+    if (editing) sortable(g, { item: '.device', handle: '.tile-grip', ignore: '.tile-tool', anywhere: true, onEnd: () => saveOrder(g) });
+    return g;
+  }
+
+  // ---- editing tiles ---------------------------------------------------------------
+
+  // A grid holds only part of the home's tiles; their new order takes their
+  // old places in the overall order, so other rooms keep theirs.
+  function saveOrder(g) {
+    const t = getCustom().tiles;
+    const mine = [...g.children].map((el) => el.dataset.id);
+    setCustom({ tiles: { ...t, order: mergeOrder(ordered(userDevices(), t).map((d) => d.id), mine) } }, { rerender: false });
+  }
+
+  function tileTools(el, device, g) {
+    // The tile's own controls sleep while editing.
+    for (const kid of el.children) kid.inert = true;
+    const name = deviceName(device);
+    const tool = (ic, label, onclick) => h('button', { type: 'button', class: 'tile-tool', title: label, 'aria-label': `${label}: ${name}`, onclick }, icon(ic, 16));
+    const move = (by) => {
+      const sib = by < 0 ? el.previousElementSibling : el.nextElementSibling;
+      if (!sib) return;
+      g.insertBefore(el, by < 0 ? sib : sib.nextSibling);
+      saveOrder(g);
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    // Wide, small and hidden are on/off flags in the tiles list.
+    const flagTool = (ic, label, cls, field, paint) => {
+      const btn = tool(ic, label, () => {
+        const on = !el.classList.contains(cls);
+        el.classList.toggle(cls, on);
+        btn.setAttribute('aria-pressed', String(on));
+        paint?.(on);
+        setCustom({ tiles: withFlag(getCustom().tiles, field, device.id, on) }, { rerender: false });
+      });
+      btn.setAttribute('aria-pressed', String(el.classList.contains(cls)));
+      return btn;
+    };
+    const wideBtn = flagTool('widen', 'Wide tile', 'tile-wide', 'wide');
+    const smallBtn = flagTool('minus', 'Small tile', 'tile-small', 'small');
+    const hideBtn = flagTool('eye', 'Hide from Home', 'tile-hidden', 'hidden', (hidden) => hideBtn.replaceChildren(icon(hidden ? 'eyeOff' : 'eye', 16)));
+    if (getCustom().tiles.hidden.includes(device.id)) { el.classList.add('tile-hidden'); hideBtn.setAttribute('aria-pressed', 'true'); hideBtn.replaceChildren(icon('eyeOff', 16)); }
+    el.prepend(h('div', { class: 'tile-tools' },
+      h('span', { class: 'tile-grip', title: 'Drag to move', 'aria-hidden': 'true' }, icon('grip', 18), h('small', null, 'Drag')),
+      h('span', { class: 'sep' }),
+      tool('left', 'Move earlier', () => move(-1)),
+      tool('right', 'Move later', () => move(1)),
+      wideBtn, smallBtn, hideBtn));
   }
 
   function emptyRoom() {
@@ -78,7 +177,7 @@ export function renderHome(root, cleanup) {
   }));
   cleanup.push(() => { for (const fn of local) { try { fn(); } catch { /* ignore */ } } });
 
-  // Safety alerts across the whole home.
+  // Safety alerts across the whole home. They can't be moved or hidden.
   const drawAlerts = () => {
     const active = [...store.states.values()].filter((s) => s.entity_id.startsWith('binary_sensor.') && s.state === 'on'
       && ['smoke', 'gas', 'moisture'].includes(s.attributes.device_class));
@@ -96,9 +195,11 @@ export function renderHome(root, cleanup) {
   drawAlerts();
 }
 
-function roomChip(name, count, active, onclick) {
-  return h('button', { class: `room-chip${active ? ' active' : ''}`, type: 'button', role: 'tab', 'aria-selected': String(active), onclick },
-    name, h('span', { class: 'count' }, String(count)));
+function roomChip(id, name, count, active, onclick) {
+  return h('button', {
+    class: `room-chip${active ? ' active' : ''}`, type: 'button', role: 'tab', 'aria-selected': String(active), onclick,
+    'data-id': id, 'data-name': name,
+  }, name, h('span', { class: 'count' }, String(count)));
 }
 
 // ---- room card --------------------------------------------------------------------
@@ -111,7 +212,11 @@ function entitiesIn(roomId, test) {
   });
 }
 
-function hero(roomId, cleanup) {
+function hero(roomId, cleanup, ind, editing) {
+  const show = (id) => editing || !isHidden(ind, id);
+  const inRow = (group) => ordered(INDICATORS.filter((i) => i.group === group), ind).filter((i) => show(i.id)).map((i) => i.id);
+  const allIds = ordered(INDICATORS, ind).map((i) => i.id);
+  const named = (el, id) => { el.dataset.id = id; el.dataset.name = INDICATORS.find((i) => i.id === id).label; return el; };
   const c = HOME.climate;
   const isTemp = (s) => s.entity_id.startsWith('sensor.') && s.attributes.device_class === 'temperature';
   const isHum = (s) => s.entity_id.startsWith('sensor.') && s.attributes.device_class === 'humidity';
@@ -122,17 +227,29 @@ function hero(roomId, cleanup) {
   const label = roomId === 'all' ? (tempId ? areaName(entityArea(tempId)) || 'Home' : 'Home') : areaName(roomId);
 
   const temp = h('span', { class: 'hero-num' }, '–');
-  const badge = h('span', { class: 'badge' }, '–');
+  const badge = named(h('span', { class: 'badge' }, '–'), 'badge');
   const humidity = h('strong', null, '–');
   const outside = h('strong', null, '–');
-  const range = h('span', { class: 'hero-range' });
+  const power = h('strong', null, '–');
+  // Text lives in a first text node, so edit handles added after it survive updates.
+  const range = named(h('span', { class: 'hero-range' }, ''), 'range');
+  const stats = {
+    humidity: named(h('span', { class: 'stat' }, icon('droplet', 16), humidity, h('small', null, 'humidity')), 'humidity'),
+    outside: named(h('span', { class: 'stat' }, icon('cloud', 16), outside, h('small', null, 'outside')), 'outside'),
+    power: named(h('span', { class: 'stat' }, icon('bolt', 16), power, h('small', null, 'in use')), 'power'),
+  };
+  // The badge and the range line each sit alone in a small holder, so they
+  // get the same eye as everything else while editing.
+  const badgeBox = h('span', { class: 'hero-badge-box' }, show('badge') ? badge : null);
+  const rangeBox = h('div', { class: 'hero-range-box' }, show('range') ? range : null);
+  const statRow = inRow('stat');
+  const statsEl = statRow.length ? h('div', { class: 'hero-stats' }, statRow.map((id) => stats[id])) : null;
   const el = h('section', { class: 'hero tone-muted' },
-    h('div', { class: 'hero-top' }, h('span', { class: 'hero-label' }, icon('thermometer', 16), label ? `Inside · ${label}` : 'Inside'), badge),
+    h('div', { class: 'hero-top' }, h('span', { class: 'hero-label' }, icon('thermometer', 16), label ? `Inside · ${label}` : 'Inside'), badgeBox),
     h('div', { class: 'hero-temp' }, temp, h('span', { class: 'hero-deg' }, '°')),
-    range,
-    h('div', { class: 'hero-stats' },
-      h('span', { class: 'stat' }, icon('droplet', 16), humidity, h('small', null, 'humidity')),
-      h('span', { class: 'stat' }, icon('cloud', 16), outside, h('small', null, 'outside'))));
+    rangeBox,
+    statsEl);
+  for (const box of [badgeBox, rangeBox, statsEl]) if (box) arrangeable(box, 'indicators', { whole: true, all: allIds });
 
   const ids = [tempId, humId, c.comfortTempMin, c.comfortTempMax, c.comfortHumMin, HOME.weather].filter(Boolean);
   cleanup.push(store.watch(ids, () => {
@@ -144,61 +261,85 @@ function hero(roomId, cleanup) {
     humidity.textContent = hu && isAvailable(hu) ? `${num(hu, 0)}%` : '–';
     const wt = w?.attributes?.temperature;
     outside.textContent = wt != null ? `${Math.round(wt)}°` : '–';
-    range.textContent = tempId ? `Comfortable between ${lo}° and ${hi}°` : 'Add a temperature sensor to this room to see its climate';
+    range.firstChild.textContent = tempId ? `Comfortable between ${lo}° and ${hi}°` : 'Add a temperature sensor to this room to see its climate';
     let tone = 'muted', text = tempId ? 'No reading' : 'No sensor';
     if (tv != null) {
       if (tv < lo) { tone = 'cool'; text = 'Chilly'; } else if (tv > hi) { tone = 'warm'; text = 'Warm'; } else { tone = 'ok'; text = 'Comfortable'; }
       if (hv != null && hv < (useComfort ? numVal(store.get(c.comfortHumMin)) ?? 40 : 35)) text += ' · dry air';
     }
-    badge.textContent = text;
+    badge.firstChild.textContent = text;
     el.className = `hero tone-${tone}`;
   }));
 
-  const openChip = chip('window', '–');
-  const presenceChip = chip('person', '–');
+  const openChip = named(chip('window', '–'), 'window');
+  const presenceChip = named(chip('person', '–'), 'presence');
+  const lightsChip = named(chip('bulb', '–'), 'lights');
+  // Chips keep their edit classes when their colour changes.
+  const tone = (el, cls) => { el.classList.remove('ok', 'warn', 'accent', 'live'); if (cls) el.classList.add(...cls.split(' ')); };
   const drawChips = () => {
+    if (show('power')) {
+      const watts = entitiesIn(roomId, (s) => s.entity_id.startsWith('sensor.') && s.attributes.device_class === 'power' && s.attributes.unit_of_measurement === 'W')
+        .map(numVal).filter((v) => v != null);
+      power.textContent = watts.length ? `${Math.round(watts.reduce((a, b) => a + b, 0))} W` : '–';
+    }
+    const lights = entitiesIn(roomId, (s) => s.entity_id.startsWith('light.'));
+    const lit = lights.filter(isOn).length;
+    lightsChip.hidden = !lights.length;
+    tone(lightsChip, lit ? 'accent' : '');
+    lightsChip.setText(lit ? `${lit} light${lit === 1 ? '' : 's'} on` : 'Lights off');
     const contacts = entitiesIn(roomId, (s) => s.entity_id.startsWith('binary_sensor.') && ['opening', 'door', 'window', 'garage_door'].includes(s.attributes.device_class));
     const open = contacts.filter((s) => s.state === 'on');
     if (!contacts.length) { openChip.hidden = true; } else {
       openChip.hidden = false;
-      if (open.length === 1) { openChip.className = 'chip warn'; openChip.setText(`${open[0].attributes.friendly_name} open`); }
-      else if (open.length > 1) { openChip.className = 'chip warn'; openChip.setText(`${open.length} open`); }
-      else { openChip.className = 'chip ok'; openChip.setText(contacts.length === 1 ? `${contacts[0].attributes.friendly_name} closed` : 'All closed'); }
+      if (open.length === 1) { tone(openChip, 'warn'); openChip.setText(`${open[0].attributes.friendly_name} open`); }
+      else if (open.length > 1) { tone(openChip, 'warn'); openChip.setText(`${open.length} open`); }
+      else { tone(openChip, 'ok'); openChip.setText(contacts.length === 1 ? `${contacts[0].attributes.friendly_name} closed` : 'All closed'); }
     }
     const occ = entitiesIn(roomId, (s) => s.entity_id.startsWith('binary_sensor.') && ['occupancy', 'presence', 'motion'].includes(s.attributes.device_class)
       && !store.entities.get(s.entity_id)?.hidden_by);
     if (!occ.length) { presenceChip.hidden = true; } else {
       presenceChip.hidden = false;
       const here = occ.filter((s) => s.state === 'on');
-      if (here.length) { presenceChip.className = 'chip accent live'; presenceChip.setText('Someone is here'); }
+      if (here.length) { tone(presenceChip, 'accent live'); presenceChip.setText('Someone is here'); }
       else {
         const last = occ.map((s) => s.last_changed).sort().pop();
-        presenceChip.className = 'chip'; presenceChip.setText(`Empty · seen ${relTime(last)}`);
+        tone(presenceChip, ''); presenceChip.setText(`Empty · seen ${relTime(last)}`);
       }
     }
   };
   const tick = setInterval(drawChips, 3000);
   cleanup.push(() => clearInterval(tick));
   drawChips();
-  el.append(h('div', { class: 'hero-chips' }, openChip, presenceChip));
+  const chipEls = { window: openChip, presence: presenceChip, lights: lightsChip };
+  const chipRow = inRow('chip');
+  if (chipRow.length) {
+    const row = h('div', { class: 'hero-chips' }, chipRow.map((id) => chipEls[id]));
+    el.append(row);
+    arrangeable(row, 'indicators', { whole: true, all: allIds });
+  }
   return el;
 }
 
 // ---- quick actions ---------------------------------------------------------------------
 
-function quickActions() {
-  return h('section', { class: 'quick' },
-    h('h2', { class: 'section-title' }, 'Quick actions'),
-    h('div', { class: 'quick-row' }, HOME.quickActions.map((a) => {
-      const btn = h('button', { class: `quick-btn q-${a.id}`, type: 'button', style: { '--tone': a.tone } },
-        h('span', { class: 'quick-icon' }, icon(a.icon, 20)),
-        h('span', { class: 'quick-text' }, h('strong', null, a.name), h('small', null, a.hint)));
-      btn.addEventListener('click', async () => {
-        if (btn.classList.contains('busy')) return;
-        btn.classList.add('busy');
-        try { await runQuickAction(a); toast(`${a.name} done`); } catch { /* toast shown */ }
-        btn.classList.remove('busy');
-      });
-      return btn;
-    })));
+function quickActions(custom, editing) {
+  const actions = ordered(HOME.quickActions, custom.quick).filter((a) => editing || !isHidden(custom.quick, a.id));
+  if (!actions.length) return null;
+  const row = h('div', { class: 'quick-row' }, actions.map((a) => {
+    // The person's own colour, icon and name for this button, if they chose any.
+    const look = custom.quickLook[a.id] || {};
+    const name = look.name || a.name;
+    const btn = h('button', { class: `quick-btn q-${a.id}`, type: 'button', style: { '--tone': look.tone || a.tone }, 'data-id': a.id, 'data-name': name },
+      h('span', { class: 'quick-icon' }, icon(look.icon || a.icon, 20)),
+      h('span', { class: 'quick-text' }, h('strong', null, name), h('small', null, a.hint)));
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('busy')) return;
+      btn.classList.add('busy');
+      try { await runQuickAction(a); toast(`${name} done`); } catch { /* toast shown */ }
+      btn.classList.remove('busy');
+    });
+    return btn;
+  }));
+  arrangeable(row, 'quick', { whole: true, all: ordered(HOME.quickActions, custom.quick).map((a) => a.id) });
+  return h('section', { class: 'quick' }, h('h2', { class: 'section-title' }, 'Quick actions'), row);
 }

@@ -136,6 +136,8 @@ a { color: inherit; }
 h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -0.015em; }
 p { margin: 0; }
 .icon { flex: none; display: block; }
+/* "hidden" always wins over a component's own display. */
+[hidden] { display: none !important; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .pad { padding: 28px 4px; }
@@ -165,6 +167,8 @@ p { margin: 0; }
   background: var(--card); border: 1px solid var(--line); color: var(--muted);
 }
 .theme-btn:hover { color: var(--text); }
+.custom-btn { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.custom-btn[aria-expanded="true"] { background: var(--accent-fill); color: var(--accent-fill-ink); }
 
 /* Developer mode off: technical details are hidden. */
 :root:not(.dev) .dev-only { display: none !important; }
@@ -245,7 +249,7 @@ p { margin: 0; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 18px;
+  padding: var(--card-pad, 18px);
   display: flex; flex-direction: column; gap: 16px;
   min-width: 0;
 }
@@ -1001,3 +1005,677 @@ textarea.json {
 @media (prefers-reduced-motion: reduce) {
   *, *::after { animation: none !important; transition: none !important; }
 }
+
+/* =========================================================================
+   Customization (js/custom.js, js/views/customize.js)
+   ========================================================================= */
+/* Tiles that are on keep a plain background when "Colour tiles" is off. */
+.no-glow .device.is-on, .no-glow .light-card.is-on { background: var(--card); border-color: var(--line); box-shadow: var(--shadow); }
+
+/* Tiles per row and wide tiles, from tablets up; phones show one column. */
+@media (min-width: 700px) {
+  :root[data-cols] .grid.devices { grid-template-columns: repeat(var(--tile-cols), minmax(0, 1fr)); }
+  .grid.devices > .tile-wide { grid-column: span 2; }
+  :root[data-cols="1"] .grid.devices > .tile-wide { grid-column: auto; }
+}
+@media (min-width: 1100px) {
+  .home-top.quick-first { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+}
+
+/* Quick action buttons with just an icon and a name. */
+.quick-compact .quick-row { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
+.quick-compact .quick-btn { flex-direction: column; align-items: center; gap: 8px; padding: 12px 6px; text-align: center; }
+.quick-compact .quick-text small { display: none; }
+.quick-compact .quick-text strong { font-size: 13px; }
+
+/* ---- the panel ---------------------------------------------------------- */
+.cz-backdrop { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.38); opacity: 0; transition: opacity 0.25s; }
+.cz-backdrop.show { opacity: 1; }
+.cz-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 61;
+  width: min(440px, 100%);
+  display: flex; flex-direction: column; gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 16px) 16px 0;
+  background: var(--bg); color: var(--text);
+  border-left: 1px solid var(--line);
+  box-shadow: -24px 0 60px -30px rgb(0 0 0 / 0.55);
+  transform: translateX(102%); transition: transform 0.25s cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+.cz-panel.show { transform: none; }
+.cz-head { display: flex; align-items: center; gap: 12px; }
+.cz-head h2 { flex: 1; font-size: 20px; }
+.cz-tabs { display: flex; }
+.cz-tabs button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.cz-body {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 12px;
+  margin: 0 -16px; padding: 2px 16px calc(env(safe-area-inset-bottom) + 24px);
+}
+.cz-group {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px; border-radius: var(--radius-md);
+  background: var(--card); border: 1px solid var(--line);
+}
+.cz-title { font-size: 15px; }
+.cz-seg { display: flex; }
+.cz-seg button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 6px; }
+.cz-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cz-sub { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.cz-sub small { font-size: 12px; }
+.cz-foot { justify-content: flex-end; }
+
+.cz-palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 10px; }
+.cz-palette {
+  display: flex; flex-direction: column; gap: 6px; padding: 5px;
+  border-radius: var(--radius-sm); border: 2px solid transparent; background: var(--card-2); text-align: left;
+}
+.cz-palette:hover { border-color: var(--line-strong); }
+.cz-palette.active { border-color: var(--accent); }
+.cz-preview { display: block; height: 54px; padding: 8px; border-radius: 10px; border: 1px solid var(--line); }
+.cz-preview-card { display: flex; align-items: center; gap: 5px; height: 100%; padding: 0 8px; border-radius: 7px; }
+.cz-preview-card i { display: block; width: 13px; height: 13px; border-radius: 50%; }
+.cz-palette-name { display: inline-flex; align-items: center; gap: 4px; padding: 0 3px 2px; font-size: 13px; font-weight: 650; }
+.cz-palette.active .cz-palette-name { color: var(--accent); }
+
+.cz-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.cz-swatch {
+  position: relative; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  background: var(--sw); color: #10162A; font-size: 13px; font-weight: 750;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.14);
+}
+.cz-swatch.active { outline: 2px solid var(--text); outline-offset: 3px; }
+.cz-swatch.any { background: conic-gradient(#F27D89, #E9BE7C, #9CCB9A, #7FCBD6, #9AAFDD, #B9A6E8, #F27D89); }
+.cz-swatch.any[style] { background: var(--sw); }
+.cz-swatch.any input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.cz-swatch.any:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.cz-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cz-item { display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 2px; border-radius: 12px; background: var(--card-2); }
+.cz-item.off .cz-item-icon, .cz-item.off .cz-item-label { opacity: 0.5; }
+.cz-item.dragging { position: relative; z-index: 2; background: var(--card-3); box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.5); }
+.cz-item-icon { display: grid; color: var(--accent); }
+.cz-item-label { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; font-weight: 600; }
+.cz-item-label small { color: var(--muted); font-size: 11px; font-weight: 500; }
+.cz-mini {
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 9px; flex: none;
+  display: grid; place-items: center; background: transparent; color: var(--muted);
+}
+.cz-mini:hover:not(:disabled) { background: var(--card-3); color: var(--text); }
+.cz-mini[aria-pressed="true"] { color: var(--accent); }
+.cz-mini.locked { opacity: 0.45; }
+.cz-grip, .tile-grip { display: grid; place-items: center; width: 30px; height: 34px; flex: none; color: var(--muted); cursor: grab; touch-action: none; }
+.sorting, .sorting * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+
+/* ---- device tiles while editing ------------------------------------------------ */
+.grid.arranging .device { position: relative; outline: 2px dashed color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: -2px; }
+.grid.arranging .device.dragging { z-index: 5; outline-style: solid; box-shadow: 0 22px 44px -20px rgb(0 0 0 / 0.6); }
+.device.tile-hidden > :not(.tile-tools) { opacity: 0.35; filter: grayscale(1); }
+.tile-tools {
+  display: flex; align-items: center; gap: 2px; padding: 3px;
+  margin: -6px -6px 0; border-radius: 12px;
+  background: var(--card-2); border: 1px solid var(--line);
+}
+.tile-tools .tile-grip { width: auto; gap: 4px; padding: 0 8px 0 4px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 650; }
+.tile-tool { width: 32px; height: 32px; padding: 0; border: 0; border-radius: 9px; display: grid; place-items: center; background: transparent; color: var(--muted); }
+.tile-tool:hover { background: var(--card-2); color: var(--text); }
+.tile-tool[aria-pressed="true"] { color: var(--accent); }
+
+/* ---- editing the layout on the screen (js/edit.js) --------------------------- */
+.edit-btn { width: auto; min-width: 34px; padding: 0 9px; gap: 6px; display: inline-flex; align-items: center; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.edit-btn[aria-pressed="true"] { background: var(--accent-fill); color: var(--accent-fill-ink); border-color: transparent; }
+.edit-bar {
+  position: fixed; z-index: 35; left: 12px; right: 12px;
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);
+  display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap;
+  padding: 12px 14px; border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--card) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+@media (min-width: 900px) { .edit-bar { left: 124px; right: 28px; bottom: 16px; max-width: 1180px; } }
+.edit-bar-text { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; }
+.edit-bar-text small { color: var(--muted); font-size: 12px; }
+.editing .view { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 200px); }
+
+/* Anything that can move gets a dashed outline; small things wobble a little
+   and are dragged by themselves, big things by their handle. */
+.edit-item { position: relative; }
+.editing .edit-item { outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.edit-whole { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; animation: edit-wobble 1.6s ease-in-out infinite; }
+.edit-whole:nth-child(even) { animation-delay: -0.8s; }
+.edit-item.dragging { animation: none; z-index: 6; outline-style: solid; box-shadow: 0 16px 36px -14px rgb(0 0 0 / 0.55); }
+@keyframes edit-wobble { 0%, 100% { rotate: -0.6deg; } 50% { rotate: 0.6deg; } }
+.edit-hidden { opacity: 0.42; }
+.edit-hidden:hover, .edit-hidden:focus-within { opacity: 0.75; }
+
+.edit-tools {
+  position: absolute; top: 6px; right: 6px; z-index: 4;
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+  border-radius: 999px; background: var(--card); border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  font-size: 12px; line-height: 1; rotate: 0deg;
+}
+.edit-tools.mini { top: -11px; right: -9px; padding: 0; }
+.edit-grip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px 5px 6px; color: var(--muted); font-weight: 650; cursor: grab; touch-action: none; }
+.edit-eye { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: transparent; color: var(--accent); cursor: pointer; }
+.edit-tools.mini .edit-eye { width: 22px; height: 22px; }
+.edit-hidden .edit-eye { color: var(--muted); }
+
+/* Room for the handles. */
+.editing .home-block { padding: 40px 8px 10px; border-radius: var(--radius); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.editing .home-block > .edit-tools { top: 8px; right: 8px; }
+.editing .room-chips { padding-top: 13px; padding-right: 12px; }
+.editing .hero-chips, .editing .hero-stats { padding-top: 4px; }
+.editing .scene.edit-item { padding-top: 46px; }
+.editing .nav-item.edit-item { outline-offset: -2px; border-radius: 14px; }
+.editing .top-left, .editing .top-right { padding-top: 8px; }
+.hero-badge-box { display: inline-flex; }
+
+/* ---- layout options ------------------------------------------------------------ */
+/* Compact and small tiles: just the name, state and switch. */
+.tiles-compact .grid.devices .device > :not(.device-head):not(.tile-tools),
+.grid.devices .device.tile-small > :not(.device-head):not(.tile-tools) { display: none; }
+.tiles-compact .grid.devices { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.nav-icons-only .nav-label { display: none; }
+.phone-all-tabs .nav-item.wide-only { display: flex; }
+@media (min-width: 900px) { .page-full .view > * { max-width: none; } }
+.no-section-titles .section-title, .no-section-titles .room-section > .section-row { display: none; }
+.cz-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* A moving theme's preview turns slowly. */
+.cz-preview { position: relative; overflow: hidden; }
+.cz-preview-card { position: relative; z-index: 1; }
+.cz-preview-glow { position: absolute; inset: -60%; background: conic-gradient(from 0deg, var(--m1), var(--m2), var(--m3), var(--m1)); filter: blur(14px); opacity: 0.55; animation: spin 9s linear infinite; }
+
+/* =========================================================================
+   Moving backgrounds (js/sky.js). <html data-sky> picks the kind; "night" is
+   the Evra website's night background. --m1..--m3 are the theme's colours,
+   --sky-op the strength, --sky-slow stretches every animation.
+   ========================================================================= */
+.sky { display: none; position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+:root[data-sky] { background: var(--bg); }
+:root[data-sky] body { background: transparent; }
+:root[data-sky] .sky { display: block; }
+:root[data-sky-motion="calm"] { --sky-slow: 1.8; }
+:root[data-sky-motion="still"] .sky * { animation-play-state: paused !important; }
+.sky > * { display: none; position: absolute; }
+/* data-sky lists the effects in use; each shows its own layer. */
+:root[data-sky~="glow"] .sky-glow,
+:root[data-sky~="aurora"] .sky-aurora,
+:root[data-sky~="stars"] .sky-stars,
+:root[data-sky~="lines"] .sky-lines,
+:root[data-sky~="orbs"] .sky-orbs,
+:root[data-sky~="waves"] .sky-waves,
+:root[data-sky~="draw"] .sky-draw,
+:root[data-sky~="beams"] .sky-beams,
+:root[data-sky~="snow"] .sky-snow,
+:root[data-sky~="embers"] .sky-embers,
+:root[data-sky~="fireflies"] .sky-fireflies,
+:root[data-sky~="flow"] .sky-flow,
+:root[data-sky~="mountains"] .sky-mountains { display: block; }
+
+.sky-glow { inset: 0; background: radial-gradient(120% 70% at 50% -10%, color-mix(in srgb, var(--m2) 22%, transparent) 0%, transparent 60%); opacity: var(--sky-op); }
+
+/* Northern lights */
+.sky-aurora { inset: -10% -20% auto; height: 75vh; opacity: var(--sky-op); }
+.sky-aurora span {
+  position: absolute; top: 0; height: 100%; border-radius: 50%; filter: blur(48px); mix-blend-mode: screen; opacity: 0.5; transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 25%, #000 55%, transparent); mask-image: linear-gradient(180deg, transparent, #000 25%, #000 55%, transparent);
+}
+.sky-aurora span:nth-child(1) { left: 0%; width: 55%; background: linear-gradient(100deg, transparent 10%, var(--m1) 35%, var(--m3) 60%, transparent 90%); animation: sky-aurora-a calc(22s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.sky-aurora span:nth-child(2) { left: 30%; width: 50%; background: linear-gradient(80deg, transparent 10%, var(--m2) 40%, color-mix(in srgb, var(--m2) 50%, #2d6bff) 65%, transparent 90%); opacity: 0.42; animation: sky-aurora-b calc(27s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.sky-aurora span:nth-child(3) { left: 58%; width: 48%; background: linear-gradient(95deg, transparent 10%, var(--m3) 40%, var(--m1) 60%, transparent 90%); opacity: 0.37; animation: sky-aurora-c calc(31s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+:root[data-sky-tone="light"] .sky-aurora span { mix-blend-mode: normal; opacity: 0.22; }
+@keyframes sky-aurora-a { 0% { transform: translateX(-6%) skewX(-12deg) scaleY(0.9); } 50% { transform: translateX(4%) skewX(8deg) scaleY(1.1); } 100% { transform: translateX(10%) skewX(-4deg) scaleY(0.95); } }
+@keyframes sky-aurora-b { 0% { transform: translateX(6%) skewX(10deg) scaleY(1); } 50% { transform: translateX(-8%) skewX(-10deg) scaleY(1.2); } 100% { transform: translateX(2%) skewX(6deg) scaleY(0.9); } }
+@keyframes sky-aurora-c { 0% { transform: translateX(-4%) skewX(-8deg) scaleY(1.05); } 100% { transform: translateX(-14%) skewX(12deg) scaleY(0.85); } }
+
+/* Stars */
+.sky-stars {
+  inset: 0; opacity: calc(0.55 * var(--sky-op));
+  background-image: radial-gradient(1.2px 1.2px at 12% 18%, var(--star), transparent), radial-gradient(1px 1px at 28% 62%, var(--star), transparent), radial-gradient(1.4px 1.4px at 47% 32%, var(--star), transparent), radial-gradient(1px 1px at 63% 78%, var(--star), transparent), radial-gradient(1.2px 1.2px at 78% 22%, var(--star), transparent), radial-gradient(1px 1px at 88% 58%, var(--star), transparent), radial-gradient(1px 1px at 36% 88%, var(--star), transparent), radial-gradient(1.3px 1.3px at 6% 74%, var(--star), transparent);
+  background-size: 900px 700px;
+  animation: sky-twinkle calc(6s * var(--sky-slow, 1)) ease-in-out infinite alternate;
+}
+@keyframes sky-twinkle { to { opacity: calc(0.25 * var(--sky-op)); } }
+
+/* Lines of light that run across and fade out */
+.sky-lines { inset: 0; width: 100%; height: 100%; opacity: var(--sky-op); }
+.sky-lines path {
+  fill: none; stroke: #f5b544; color: #f5b544; stroke-width: 1.8; stroke-linecap: round;
+  stroke-dasharray: 180 2600; stroke-dashoffset: 2780; opacity: 0; filter: drop-shadow(0 0 6px currentColor);
+  animation: sky-comet calc(9s * var(--sky-slow, 1)) cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.sky-lines path:nth-child(even) { stroke: #6f98ff; color: #6f98ff; }
+.sky-lines path:nth-child(3n) { stroke: #2fe0c0; color: #2fe0c0; }
+.sky-lines path:nth-child(2) { animation-duration: calc(11s * var(--sky-slow, 1)); animation-delay: -2s; }
+.sky-lines path:nth-child(3) { animation-duration: calc(10s * var(--sky-slow, 1)); animation-delay: -5s; }
+.sky-lines path:nth-child(4) { animation-duration: calc(12s * var(--sky-slow, 1)); animation-delay: -7s; }
+.sky-lines path:nth-child(5) { animation-duration: calc(9.5s * var(--sky-slow, 1)); animation-delay: -3.5s; }
+.sky-lines path:nth-child(6) { animation-duration: calc(13s * var(--sky-slow, 1)); animation-delay: -9s; }
+.sky-lines path:nth-child(7) { animation-duration: calc(10.5s * var(--sky-slow, 1)); animation-delay: -1s; }
+.sky-lines path:nth-child(8) { animation-duration: calc(12.5s * var(--sky-slow, 1)); animation-delay: -6s; }
+@keyframes sky-comet { 0% { stroke-dashoffset: 2780; opacity: 0; } 10% { opacity: 0.85; } 65% { opacity: 0.5; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+
+/* Glow: soft lights drifting */
+.sky-orbs { inset: 0; opacity: var(--sky-op); }
+:root[data-sky-tone="light"] .sky-orbs { opacity: calc(0.6 * var(--sky-op)); }
+.sky-orbs span { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; animation: sky-float calc(18s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.sky-orbs span:nth-child(1) { width: 46vmax; height: 46vmax; right: -12vmax; top: -14vmax; background: var(--m1); }
+.sky-orbs span:nth-child(2) { width: 38vmax; height: 38vmax; left: -14vmax; bottom: -16vmax; background: var(--m2); opacity: 0.4; animation-duration: calc(23s * var(--sky-slow, 1)); animation-delay: -7s; }
+.sky-orbs span:nth-child(3) { width: 28vmax; height: 28vmax; left: 35vw; top: 30vh; background: var(--m3); opacity: 0.28; animation-duration: calc(27s * var(--sky-slow, 1)); animation-delay: -12s; }
+@keyframes sky-float { 33% { transform: translate(-6vw, 5vh) scale(1.08); } 66% { transform: translate(4vw, -3vh) scale(0.94); } 100% { transform: translate(-3vw, 7vh) scale(1.12); } }
+
+/* Waves rolling along the bottom */
+.sky-waves { left: 0; right: 0; bottom: 0; height: 42vh; opacity: var(--sky-op); }
+.sky-waves .wave { position: absolute; left: 0; bottom: 0; width: 200%; height: 100%; animation: sky-wave calc(40s * var(--sky-slow, 1)) linear infinite; }
+.sky-waves .w1 path { fill: color-mix(in srgb, var(--m1) 26%, transparent); }
+.sky-waves .w2 { height: 85%; animation-duration: calc(28s * var(--sky-slow, 1)); animation-direction: reverse; }
+.sky-waves .w2 path { fill: color-mix(in srgb, var(--m3) 22%, transparent); }
+.sky-waves .w3 { height: 68%; animation-duration: calc(20s * var(--sky-slow, 1)); }
+.sky-waves .w3 path { fill: color-mix(in srgb, var(--m2) 20%, transparent); }
+@keyframes sky-wave { to { transform: translateX(-50%); } }
+/* Small readings keep their text clear of the eye. */
+.editing .hero .edit-whole, .editing .top-left .edit-whole { padding-right: 16px; }
+/* On phones the edit bar is one slim row. */
+@media (max-width: 600px) {
+  .edit-bar { padding: 8px 10px; gap: 8px; }
+  .edit-bar > .card-icon, .edit-bar-text small { display: none; }
+  .edit-bar-text { flex: 1 1 auto; font-size: 14px; }
+  .edit-bar .btn-row { flex-wrap: nowrap; gap: 6px; }
+  .edit-bar .btn { padding: 8px 10px; font-size: 13px; }
+  .edit-bar .btn.ghost .icon { display: none; }
+}
+
+/* =========================================================================
+   One customize button (a colourful palette), half-width sections,
+   dragging big things, and the Buttons options
+   ========================================================================= */
+.custom-btn, .custom-btn:hover {
+  background: linear-gradient(135deg, #ffcf6e, #f472b6 55%, #8b5cf6); color: #1b1030; border-color: transparent;
+  box-shadow: 0 4px 14px -4px rgb(244 114 182 / 0.65);
+}
+.custom-btn:hover { filter: brightness(1.08); }
+.custom-btn-icon { display: grid; place-items: center; }
+.custom-btn[aria-pressed="true"] { width: auto; padding: 0 12px 0 9px; gap: 6px; display: inline-flex; align-items: center; border-radius: 999px; font-size: 13px; font-weight: 750; }
+.card-icon.custom-btn-icon { background: linear-gradient(135deg, #ffcf6e, #f472b6 55%, #8b5cf6); color: #1b1030; }
+
+/* Home's sections: one column, or two half-width ones side by side on big screens. */
+.home-blocks { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); align-items: stretch; }
+.home-block { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.home-block > .hero-slot { flex: 1; display: flex; flex-direction: column; }
+.home-block > .hero-slot > .hero { flex: 1; }
+.home-block > .quick { flex: 1; }
+@media (min-width: 1100px) {
+  .home-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-blocks > .home-block { grid-column: 1 / -1; }
+  .home-blocks > .home-block.half { grid-column: auto; }
+  .home-block.half .quick-row { grid-template-columns: 1fr 1fr; flex: 1; }
+  .home-block.half > .quick { display: flex; flex-direction: column; }
+}
+
+/* Big things are dragged anywhere on them while customizing. */
+.edit-big, .grid.arranging .device { cursor: grab; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.edit-big.dragging, .grid.arranging .device.dragging { cursor: grabbing; }
+.edit-flag { color: var(--muted); }
+.edit-flag[aria-pressed="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.editing .edit-zone { -webkit-touch-callout: none; }
+
+/* ---- Buttons: shape ---- */
+.btn-pill :is(.btn, .quick-btn, .icon-btn, .segmented, .segmented button, .ir-btn, .chip, .room-chip, .theme-btn, .tile-tool, .cz-icon) { border-radius: 999px; }
+.btn-square :is(.btn, .quick-btn, .icon-btn, .segmented, .segmented button, .ir-btn, .ir-btn.round, .chip, .room-chip, .theme-btn, .status-pill, .quick-icon, .switch, .cz-swatch, .tile-tool, .cz-icon, .badge) { border-radius: 5px; }
+.btn-square .switch .knob { border-radius: 3px; }
+/* ---- Buttons: main button style ---- */
+.btn-soft .btn.primary { background: color-mix(in srgb, var(--accent-fill) 24%, var(--card)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.btn-outline .btn.primary { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn-outline .btn:not(.primary):not(.danger) { background: transparent; }
+/* ---- Buttons: size ---- */
+.btn-small .btn { padding: 7px 11px; font-size: 13px; }
+.btn-small .quick-btn { padding: 10px; gap: 9px; }
+.btn-small .quick-icon { width: 34px; height: 34px; }
+.btn-small .room-chip { padding: 7px 11px; font-size: 13px; }
+.btn-large .btn { padding: 13px 18px; font-size: 16px; }
+.btn-large .quick-btn { padding: 18px; gap: 14px; }
+.btn-large .quick-icon { width: 52px; height: 52px; }
+.btn-large .quick-text strong { font-size: 17px; }
+.btn-large .room-chip { padding: 12px 18px; font-size: 15px; }
+.btn-large .ir-btn { min-height: 54px; }
+.btn-large .ir-btn.round { width: 54px; height: 54px; }
+/* ---- Buttons: quick action look ---- */
+.qb-tinted .quick-btn { background: color-mix(in srgb, var(--tone) 18%, var(--card)); border-color: color-mix(in srgb, var(--tone) 32%, transparent); }
+.qb-outline .quick-btn { background: transparent; border: 1.5px solid color-mix(in srgb, var(--tone) 65%, transparent); box-shadow: none; }
+.qb-solid .quick-btn { background: var(--tone); border-color: transparent; color: var(--tone-ink); }
+.qb-solid .quick-text small { color: color-mix(in srgb, var(--tone-ink) 72%, transparent); }
+.qb-solid .quick-icon { background: rgb(255 255 255 / 0.35); color: var(--tone-ink); }
+/* ---- Buttons: icons ---- */
+.qi-circle .quick-icon { border-radius: 50%; }
+.qi-plain .quick-icon { background: transparent; width: auto; min-width: 26px; }
+/* ---- Buttons: depth ---- */
+:root.depth-flat { --shadow: none; }
+:root.depth-raised { --shadow: 0 2px 4px rgb(0 0 0 / 0.16), 0 14px 30px -12px rgb(0 0 0 / 0.38); }
+.depth-glow :is(.quick-btn, .btn.primary) { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone, var(--accent)) 30%, transparent), 0 10px 30px -8px color-mix(in srgb, var(--tone, var(--accent)) 70%, transparent); }
+.depth-glow .card { box-shadow: 0 12px 34px -18px color-mix(in srgb, var(--accent) 60%, transparent); }
+/* ---- Buttons: when pressed ---- */
+.press-none :is(.btn, .quick-btn, .ir-btn, .room-chip):active { transform: none; }
+.press-bouncy :is(.btn, .quick-btn, .room-chip, .ir-btn, .theme-btn) { transition: transform 0.28s cubic-bezier(0.3, 1.8, 0.5, 1), background 0.2s, border-color 0.2s; }
+.press-bouncy :is(.btn, .quick-btn):hover { transform: translateY(-2px); }
+.press-bouncy :is(.btn, .quick-btn, .room-chip, .ir-btn, .theme-btn):active { transform: scale(0.9); }
+
+/* ---- the panel's Buttons tab ---- */
+.cz-tabs button { padding: 8px 6px; }
+.cz-chip-sep { flex-basis: 100%; height: 0; }
+.room-chip.effect { gap: 5px; }
+.cz-btn-preview { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; pointer-events: none; }
+.cz-btn-preview .quick-btn { min-width: 150px; }
+.cz-quick { padding: 8px 10px; border-radius: 12px; background: var(--card-2); }
+.cz-quick > * + * { margin-top: 10px; }
+.cz-quick summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.cz-quick summary::-webkit-details-marker { display: none; }
+.cz-quick summary small { margin-left: auto; font-size: 12px; text-align: right; }
+.cz-quick summary .quick-icon { width: 34px; height: 34px; border-radius: 10px; }
+.cz-quick .quick-icon { display: grid; place-items: center; color: color-mix(in srgb, var(--tone) var(--ink-mix), var(--text)); background: color-mix(in srgb, var(--tone) var(--bubble), transparent); }
+.cz-swatches.small .cz-swatch { width: 30px; height: 30px; }
+.cz-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 6px; }
+.cz-icon { height: 38px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); display: grid; place-items: center; }
+.cz-icon.active { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+
+/* =========================================================================
+   More background effects
+   ========================================================================= */
+
+/* Gold and blue lines that draw themselves (the website's showcase). */
+.sky-draw { inset: 0; width: 100%; height: 100%; opacity: var(--sky-op); }
+.sky-draw path { fill: none; stroke: #f5b544; stroke-width: 1.6; opacity: 0.45; filter: drop-shadow(0 0 6px #f5b544); stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: sky-draw calc(9s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.sky-draw path:nth-child(2) { stroke: #5b8cff; filter: drop-shadow(0 0 6px #5b8cff); animation-delay: -3s; }
+.sky-draw path:nth-child(3) { stroke: var(--m1); filter: drop-shadow(0 0 6px var(--m1)); opacity: 0.3; animation-delay: -6s; }
+@keyframes sky-draw { from { stroke-dashoffset: 1400; } to { stroke-dashoffset: 0; } }
+
+/* Connections: dashes flowing along lines between glowing points. */
+.sky-beams { inset: 0; width: 100%; height: 100%; opacity: var(--sky-op); }
+.sky-beams path { fill: none; stroke: var(--m1); stroke-width: 1.6; stroke-dasharray: 8 10; opacity: 0.45; animation: sky-flow-dash calc(1.4s * var(--sky-slow, 1)) linear infinite; }
+.sky-beams path:nth-child(even) { stroke: var(--m2); animation-direction: reverse; }
+.sky-beams circle { fill: var(--m3); transform-box: fill-box; transform-origin: center; filter: drop-shadow(0 0 6px var(--m3)); animation: sky-breathe calc(3.2s * var(--sky-slow, 1)) ease-in-out infinite; }
+.sky-beams circle:nth-of-type(odd) { animation-delay: -1.6s; }
+@keyframes sky-flow-dash { to { stroke-dashoffset: -18; } }
+@keyframes sky-breathe { 50% { opacity: 0.25; transform: scale(0.6); } }
+
+/* Snow falling. */
+.sky-snow { inset: 0; opacity: var(--sky-op); }
+.sky-snow span { position: absolute; top: -3vh; left: var(--x); width: var(--s); height: var(--s); border-radius: 50%; background: var(--star); opacity: var(--o); animation: sky-fall calc(var(--d) * var(--sky-slow, 1)) linear infinite; animation-delay: var(--delay); }
+@keyframes sky-fall { to { transform: translate(var(--sway), 106vh); } }
+
+/* Embers rising and fading. */
+.sky-embers { inset: 0; opacity: var(--sky-op); }
+.sky-embers span { position: absolute; bottom: -3vh; left: var(--x); width: var(--s); height: var(--s); border-radius: 50%; background: var(--c); box-shadow: 0 0 8px 2px var(--c); opacity: 0; animation: sky-rise calc(var(--d) * var(--sky-slow, 1)) ease-in infinite; animation-delay: var(--delay); }
+@keyframes sky-rise { 0% { transform: translate(0, 0) scale(1); opacity: 0; } 10% { opacity: 0.95; } 70% { opacity: 0.6; } 100% { transform: translate(var(--sway), -78vh) scale(0.3); opacity: 0; } }
+
+/* Fireflies drifting and blinking. */
+@keyframes sky-firefly { to { transform: translate(var(--dx), var(--dy)); } }
+@keyframes sky-blink { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.95; } }
+
+/* Colour flow: a huge soft wheel of the theme's colours turning slowly. */
+.sky-flow { inset: -30%; background: conic-gradient(from 0deg at 50% 50%, var(--m1), var(--m2), var(--m3), var(--m1)); filter: blur(90px); opacity: calc(0.35 * var(--sky-op)); animation: spin calc(60s * var(--sky-slow, 1)) linear infinite; }
+:root[data-sky-tone="light"] .sky-flow { opacity: calc(0.22 * var(--sky-op)); }
+
+/* ---- more effects: fireplace, galaxy, retro, Istanbul, moon, seagulls, sunset glow ---- */
+:root[data-sky~="fire"] .sky-fire,
+:root[data-sky~="galaxy"] .sky-galaxy,
+:root[data-sky~="retro"] .sky-retro,
+:root[data-sky~="istanbul"] .sky-istanbul,
+:root[data-sky~="moon"] .sky-moon,
+:root[data-sky~="gulls"] .sky-gulls,
+:root[data-sky~="dusk"] .sky-dusk { display: block; }
+
+/* Sunset glow rising from the bottom */
+.sky-dusk { left: 0; right: 0; bottom: 0; height: 75vh; opacity: var(--sky-op); background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--m2) 26%, transparent) 50%, color-mix(in srgb, var(--m1) 42%, transparent)); }
+
+/* Moon */
+.sky-moon {
+  right: 12vw; top: 9vh; width: 9vmin; height: 9vmin; min-width: 46px; min-height: 46px; border-radius: 50%;
+  background: radial-gradient(circle at 36% 34%, #fffdf2, #f1e7c9 62%, #d8cca8);
+  box-shadow: 0 0 40px 10px rgb(255 240 200 / 0.32), 0 0 140px 50px rgb(255 240 200 / 0.1);
+  animation: sky-moon calc(7s * var(--sky-slow, 1)) ease-in-out infinite alternate;
+}
+@keyframes sky-moon { to { box-shadow: 0 0 52px 16px rgb(255 240 200 / 0.42), 0 0 160px 60px rgb(255 240 200 / 0.14); } }
+
+/* Galaxy: a tilted spiral disc turning very slowly */
+.sky-galaxy { left: 62%; top: 34%; width: 110vmax; height: 110vmax; margin: -55vmax 0 0 -55vmax; transform: rotate(-22deg) scaleY(0.42); opacity: var(--sky-op); }
+.sky-galaxy span { position: absolute; inset: 0; border-radius: 50%; -webkit-mask-image: radial-gradient(circle, #000 0, #000 12%, transparent 58%); mask-image: radial-gradient(circle, #000 0, #000 12%, transparent 58%); }
+.sky-galaxy span:nth-child(1) {
+  background:
+    radial-gradient(circle, rgb(255 255 255 / 0.95) 0, color-mix(in srgb, var(--m3) 70%, #fff) 2.5%, color-mix(in srgb, var(--m1) 70%, transparent) 8%, transparent 22%),
+    conic-gradient(from 0deg, transparent 0deg, color-mix(in srgb, var(--m1) 75%, transparent) 40deg, transparent 100deg, color-mix(in srgb, var(--m2) 65%, transparent) 170deg, transparent 230deg, color-mix(in srgb, var(--m3) 65%, transparent) 290deg, transparent 350deg);
+  filter: blur(16px); animation: spin calc(150s * var(--sky-slow, 1)) linear infinite;
+}
+.sky-galaxy span:nth-child(2) {
+  background: repeating-conic-gradient(from 10deg, transparent 0deg 14deg, rgb(255 255 255 / 0.35) 20deg, transparent 28deg);
+  filter: blur(6px); opacity: 0.5; animation: spin calc(220s * var(--sky-slow, 1)) linear infinite reverse;
+}
+:root[data-sky-tone="light"] .sky-galaxy { opacity: calc(0.6 * var(--sky-op)); }
+
+/* Retro: striped sun on the horizon and a neon grid rolling towards you */
+.sky-retro { left: 0; right: 0; bottom: 0; height: 58vh; overflow: hidden; background: radial-gradient(60% 45% at 50% 62%, color-mix(in srgb, var(--m1) 30%, transparent), transparent 70%); opacity: calc(0.4 + 0.6 * var(--sky-op)); }
+.retro-sun {
+  position: absolute; left: 50%; bottom: 40%; width: 28vmin; height: 28vmin; margin-left: -14vmin; border-radius: 50%;
+  background: linear-gradient(180deg, var(--m3) 5%, color-mix(in srgb, var(--m3) 40%, var(--m1)) 45%, var(--m1) 80%);
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% 52% no-repeat, repeating-linear-gradient(180deg, #000 0 9px, transparent 9px 14px);
+  mask: linear-gradient(#000 0 0) top / 100% 52% no-repeat, repeating-linear-gradient(180deg, #000 0 9px, transparent 9px 14px);
+  animation: retro-sun calc(6s * var(--sky-slow, 1)) ease-in-out infinite alternate;
+}
+@keyframes retro-sun { to { transform: translateY(8px); filter: brightness(1.15); } }
+.retro-horizon { position: absolute; left: 0; right: 0; bottom: 40%; height: 2px; background: color-mix(in srgb, var(--m1) 80%, #fff); box-shadow: 0 0 18px 4px color-mix(in srgb, var(--m1) 70%, transparent); }
+.retro-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 40%; overflow: hidden; perspective: 260px; perspective-origin: 50% 0; background: linear-gradient(180deg, color-mix(in srgb, var(--m1) 16%, transparent), color-mix(in srgb, var(--bg) 50%, transparent)); }
+.retro-plane {
+  position: absolute; left: -150%; right: -150%; top: 0; height: 400%; transform-origin: 50% 0; transform: rotateX(80deg);
+  background-image: linear-gradient(color-mix(in srgb, var(--m2) 85%, transparent) 2px, transparent 2px), linear-gradient(90deg, color-mix(in srgb, var(--m2) 85%, transparent) 2px, transparent 2px);
+  background-size: 36px 36px; animation: retro-roll calc(1.2s * var(--sky-slow, 1)) linear infinite;
+}
+@keyframes retro-roll { to { background-position: 0 36px; } }
+
+@keyframes sky-flicker {
+  0% { transform: scale(1, 1) skewX(0deg); opacity: 0.85; }
+  25% { transform: scale(0.92, 1.12) skewX(3deg); opacity: 1; }
+  50% { transform: scale(1.06, 0.9) skewX(-2deg); opacity: 0.8; }
+  75% { transform: scale(0.95, 1.08) skewX(2deg); opacity: 0.95; }
+  100% { transform: scale(1.02, 0.95) skewX(-3deg); opacity: 0.85; }
+}
+
+/* Seagulls */
+.sky-gulls { inset: 0; opacity: var(--sky-op); --gull: rgb(255 255 255 / 0.8); }
+:root[data-sky-tone="light"] .sky-gulls { --gull: rgb(30 30 50 / 0.6); }
+.sky-gulls span { position: absolute; left: -6vw; top: var(--y); width: 24px; height: 10px; animation: sky-glide calc(var(--d) * var(--sky-slow, 1)) linear infinite; animation-delay: var(--delay); }
+.sky-gulls span::before, .sky-gulls span::after {
+  content: ""; position: absolute; top: 0; width: 13px; height: 8px; border-top: 2px solid var(--gull); border-radius: 60% 60% 0 0;
+  animation: sky-flap var(--f) ease-in-out infinite alternate;
+}
+.sky-gulls span::before { left: 0; transform-origin: 100% 100%; }
+.sky-gulls span::after { right: 0; transform-origin: 0 100%; }
+@keyframes sky-glide { 0% { transform: translate(0, 0) scale(var(--s)); } 50% { transform: translate(56vw, -3vh) scale(var(--s)); } 100% { transform: translate(114vw, 1vh) scale(var(--s)); } }
+@keyframes sky-flap { to { transform: scaleY(0.45) rotate(4deg); } }
+
+.sky-istanbul { left: 0; right: 0; bottom: 0; width: 100%; height: 50vh; }
+
+/* =========================================================================
+   Customize flow: the button opens the panel; "Move things" starts moving.
+   ========================================================================= */
+.editing .view { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 28px); }
+@media (min-width: 900px) { .editing .view { padding-bottom: 36px; } }
+.cz-back-btn { width: auto; padding: 0 12px 0 9px; gap: 6px; display: inline-flex; align-items: center; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--text); }
+.cz-back-btn[hidden] { display: none; }
+@media (max-width: 600px) { .cz-back-btn span:not(.custom-btn-icon) { display: none; } .cz-back-btn { padding: 0; width: 34px; justify-content: center; } }
+
+/* "Move things on the screen", at the top of the panel */
+.cz-move {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; text-align: left;
+  border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--text); cursor: pointer;
+}
+.cz-move:hover { background: color-mix(in srgb, var(--accent) 18%, var(--card)); }
+.cz-move > .card-icon { flex: none; }
+.cz-move strong { display: block; font-size: 15px; }
+.cz-move small { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 2px; }
+.cz-move > .icon:last-child { margin-left: auto; color: var(--muted); flex: none; }
+.cz-hidden-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Bigger handles on touch screens, touchpads near small screens, and phones */
+@media (pointer: coarse), (max-width: 600px) {
+  .edit-eye { width: 32px; height: 32px; }
+  .edit-tools.mini { top: -15px; right: -12px; }
+  .edit-tools.mini .edit-eye { width: 28px; height: 28px; }
+  .edit-grip { padding: 8px 10px 8px 8px; }
+  .tile-tool { width: 38px; height: 38px; }
+  .editing .room-chips { padding-top: 17px; }
+}
+.edit-item:focus-visible { outline: 3px solid var(--accent) !important; outline-offset: 3px; }
+
+/* The panel on small screens: full width, tabs and choices that fit */
+@media (max-width: 600px) {
+  .cz-panel { width: 100%; border-left: 0; padding-left: 12px; padding-right: 12px; }
+  .cz-body { margin: 0 -12px; padding-left: 12px; padding-right: 12px; }
+  .cz-tabs button .icon { display: none; }
+  .cz-seg { flex-wrap: wrap; }
+  .cz-seg button { flex: 1 1 30%; }
+  .cz-palettes { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+}
+
+/* Settings: Look and layout */
+.look-themes { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; }
+.look-themes .cz-palette { flex: 0 0 104px; }
+.look-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.look-actions .btn { justify-content: center; }
+
+/* =========================================================================
+   Illustrated scenes (js/sky-scenes.js): Istanbul, fireplace, mountains,
+   retro horizon. Colours are variables here so light and dark both work.
+   ========================================================================= */
+/* ---- Mountains: shaded ridges, snow caps, drifting mist, a pine treeline ---- */
+.sky-mountains {
+  left: 0; right: 0; bottom: 0; width: 100%; height: 40vh;
+  --mt1a: color-mix(in srgb, var(--m2) 30%, color-mix(in srgb, var(--bg) 66%, #fff));
+  --mt1b: color-mix(in srgb, var(--m2) 14%, color-mix(in srgb, var(--bg) 80%, #fff));
+  --mt2a: color-mix(in srgb, var(--m2) 16%, color-mix(in srgb, var(--bg) 82%, #fff));
+  --mt2b: color-mix(in srgb, var(--bg) 90%, #fff);
+  --mt3a: color-mix(in srgb, var(--m1) 6%, color-mix(in srgb, var(--bg) 88%, #000));
+  --mt3b: color-mix(in srgb, var(--bg) 78%, #000);
+  --mt-tree: color-mix(in srgb, var(--bg) 58%, #000);
+  --mt-mist: color-mix(in srgb, var(--m1) 30%, #fff);
+  --mt-snow: rgb(240 248 255 / 0.85);
+}
+:root[data-sky-tone="light"] .sky-mountains {
+  --mt1a: color-mix(in srgb, var(--m2) 22%, var(--bg)); --mt1b: color-mix(in srgb, var(--m2) 10%, var(--bg));
+  --mt2a: color-mix(in srgb, var(--accent) 24%, var(--bg)); --mt2b: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  --mt3a: color-mix(in srgb, var(--accent) 40%, var(--bg)); --mt3b: color-mix(in srgb, var(--accent) 30%, var(--bg));
+  --mt-tree: color-mix(in srgb, var(--accent) 55%, var(--bg)); --mt-mist: #fff; --mt-snow: #fff;
+}
+.mt-rim { fill: none; stroke: color-mix(in srgb, var(--m1) 60%, #fff); stroke-width: 1.4; opacity: 0.5; filter: drop-shadow(0 0 4px var(--m1)); }
+.mt-caps { fill: var(--mt-snow); }
+.mt-caps.two { opacity: 0.7; }
+.mt-mist { opacity: 0.25; animation: mt-drift calc(40s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.mt-mist.two { opacity: 0.25; animation-duration: calc(55s * var(--sky-slow, 1)); animation-direction: alternate-reverse; }
+@keyframes mt-drift { to { transform: translateX(160px); } }
+.mt-trees { fill: var(--mt-tree); }
+
+/* ---- Fireplace: layered flames over glowing coals and logs ---- */
+.sky-fire {
+  left: 0; right: 0; bottom: 0; width: 100%; height: 50vh; opacity: calc(0.5 + 0.5 * var(--sky-op));
+  --f-bark: color-mix(in srgb, var(--bg) 60%, #000);
+  --f-bark-top: color-mix(in srgb, var(--m2) 22%, color-mix(in srgb, var(--bg) 72%, #000));
+}
+.fire-halo { transform-box: fill-box; transform-origin: center; animation: fire-glow calc(2.6s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+@keyframes fire-glow { to { opacity: 0.75; transform: scale(1.05); } }
+.fire-coals { animation: fire-coals calc(1.8s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+@keyframes fire-coals { to { opacity: 0.65; } }
+.fl-layer { mix-blend-mode: screen; }
+:root[data-sky-tone="light"] .fl-layer { mix-blend-mode: normal; }
+.fl-layer.outer { filter: blur(4px); opacity: 0.9; }
+.fl-layer.mid { filter: blur(2px); }
+.fl-layer.inner { filter: blur(0.6px); }
+.fl { transform-box: fill-box; transform-origin: 50% 100%; animation: sky-flicker calc(var(--d) * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.log-end { fill: color-mix(in srgb, var(--m1) 35%, var(--f-bark-top)); }
+.log-ring { fill: none; stroke: color-mix(in srgb, var(--bg) 50%, #000); stroke-width: 1.2; }
+.log-crack { fill: none; stroke: var(--m3); stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--m1)); animation: fire-coals calc(1.4s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+
+/* ---- Retro: sun glow and neon mountains on the horizon ---- */
+.retro-glow { position: absolute; left: 50%; bottom: 34%; width: 64vmin; height: 44vmin; margin-left: -32vmin; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--m1) 50%, transparent), transparent); filter: blur(10px); }
+.retro-mountains { position: absolute; left: 0; right: 0; bottom: 40%; width: 100%; height: 11vh; }
+.retro-m-edge { fill: none; stroke: var(--m1); stroke-width: 2; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 5px var(--m1)); }
+
+/* ---- Waves: crests ---- */
+.sky-waves .wave path { stroke: color-mix(in srgb, #fff 30%, transparent); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+
+/* ---- Istanbul: the shore, the Bosphorus bridge and Kız Kulesi ---- */
+.sky-istanbul {
+  left: 0; right: 0; bottom: 0; width: 100%; height: clamp(320px, 27.8vw, 52vh);
+  --i-haze: color-mix(in srgb, var(--m2) 30%, color-mix(in srgb, var(--bg) 66%, #fff));
+  --i-haze2: color-mix(in srgb, var(--m2) 18%, color-mix(in srgb, var(--bg) 78%, #fff));
+  --i-far: color-mix(in srgb, var(--m2) 16%, color-mix(in srgb, var(--bg) 82%, #fff));
+  --i-far2: color-mix(in srgb, var(--bg) 88%, #fff);
+  --i-near: color-mix(in srgb, var(--bg) 70%, #000);
+  --i-near2: color-mix(in srgb, var(--bg) 52%, #000);
+  --i-bridge: color-mix(in srgb, var(--bg) 58%, #000);
+  --i-tower: color-mix(in srgb, var(--bg) 50%, #000);
+  --i-tower-lit: color-mix(in srgb, var(--m1) 22%, color-mix(in srgb, var(--bg) 50%, #000));
+  --i-stone: color-mix(in srgb, var(--m1) 10%, color-mix(in srgb, var(--bg) 62%, #000));
+  --i-rock: color-mix(in srgb, var(--bg) 40%, #000);
+  --i-water-top: color-mix(in srgb, var(--m1) 34%, color-mix(in srgb, var(--bg) 80%, #fff));
+  --i-water-mid: color-mix(in srgb, var(--m2) 22%, var(--bg));
+  --i-water-bot: color-mix(in srgb, var(--bg) 62%, #000);
+  --i-win: #ffd27a;
+}
+:root[data-sky-tone="light"] .sky-istanbul {
+  --i-haze: color-mix(in srgb, var(--m2) 20%, var(--bg)); --i-haze2: color-mix(in srgb, var(--m2) 10%, var(--bg));
+  --i-far: color-mix(in srgb, var(--accent) 22%, var(--bg)); --i-far2: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  --i-near: color-mix(in srgb, var(--accent) 46%, var(--bg)); --i-near2: color-mix(in srgb, var(--accent) 36%, var(--bg));
+  --i-bridge: color-mix(in srgb, var(--accent) 52%, var(--bg)); --i-tower: color-mix(in srgb, var(--accent) 58%, var(--bg));
+  --i-tower-lit: color-mix(in srgb, var(--accent) 40%, var(--bg)); --i-stone: color-mix(in srgb, var(--accent) 34%, var(--bg));
+  --i-rock: color-mix(in srgb, var(--accent) 64%, var(--bg));
+  --i-water-top: color-mix(in srgb, var(--m2) 30%, var(--bg)); --i-water-mid: color-mix(in srgb, var(--m2) 22%, var(--bg)); --i-water-bot: color-mix(in srgb, var(--accent) 30%, var(--bg));
+  --i-win: var(--i-tower-lit);
+}
+.ist-bridge { fill: var(--i-bridge); }
+.ist-hangers { fill: none; stroke: var(--i-bridge); stroke-width: 0.8; opacity: 0.8; }
+.ist-cable { fill: none; stroke: var(--i-bridge); stroke-width: 3; }
+.ist-deck-glow { fill: none; stroke: var(--m1); stroke-width: 2; opacity: 0.85; filter: drop-shadow(0 0 4px var(--m1)); animation: ist-hue calc(9s * var(--sky-slow, 1)) linear infinite; }
+@keyframes ist-hue { 0%, 100% { stroke: var(--m1); } 33% { stroke: var(--m3); } 66% { stroke: var(--m2); } }
+.ist-lamp { fill: #ffe2a0; filter: drop-shadow(0 0 3px #ffd27a); animation: ist-twinkle calc(3s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.ist-win { fill: var(--i-win); opacity: 0.75; }
+.ist-twinkle { fill: #fff1c2; animation: ist-twinkle calc(3.5s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+@keyframes ist-twinkle { from { opacity: 0.1; } to { opacity: 1; } }
+.ist-waves path { stroke: color-mix(in srgb, var(--m1) 40%, #fff); stroke-width: 1.2; stroke-linecap: round; animation: ist-drift calc(12s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+@keyframes ist-drift { to { transform: translateX(40px); } }
+.ist-sun, .ist-sunpath, .ist-moonpath { display: none; }
+:root[data-sky~="dusk"] .ist-sun, :root[data-sky~="dusk"] .ist-sunpath { display: inline; }
+:root[data-sky~="moon"]:not([data-sky~="dusk"]) .ist-moonpath { display: inline; }
+.ist-sunpath path, .ist-moonpath path { stroke-width: 2.2; stroke-linecap: round; animation: ist-glitter calc(2.2s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+.ist-sunpath path { stroke: color-mix(in srgb, var(--m3) 70%, #fff); }
+.ist-moonpath path { stroke: #fff6d8; stroke-width: 1.8; }
+@keyframes ist-glitter { from { opacity: 0.15; transform: translateX(-4px); } to { opacity: 0.9; transform: translateX(4px); } }
+.ist-streak { stroke: #ffd27a; stroke-width: 1.6; stroke-linecap: round; opacity: 0.5; animation: ist-glitter calc(2.6s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+/* Kız Kulesi */
+.kk-rock { fill: var(--i-rock); }
+.kk-stone { fill: var(--i-stone); }
+.kk-body, .kk-rail { fill: var(--i-tower); }
+.kk-facet { fill: var(--i-tower-lit); }
+.kk-win { fill: var(--i-win); opacity: 0.85; }
+.kk-lantern { fill: #ffe9a8; animation: kk-lantern calc(2.4s * var(--sky-slow, 1)) ease-in-out infinite; }
+@keyframes kk-lantern { 50% { fill: #ffc861; } }
+.kk-flag { fill: var(--m2); transform-box: fill-box; transform-origin: 0 50%; animation: kk-flag 1.2s ease-in-out infinite alternate; }
+@keyframes kk-flag { to { transform: scaleX(0.7) skewY(8deg); } }
+.kk-glow { transform-box: fill-box; transform-origin: center; animation: kk-glow calc(2.4s * var(--sky-slow, 1)) ease-in-out infinite; }
+@keyframes kk-glow { 50% { opacity: 0.5; transform: scale(0.8); } }
+/* The lantern's beam sweeps round, seen from the side. */
+.kk-beam { transform-box: view-box; transform-origin: 1265px 181px; mix-blend-mode: screen; animation: kk-sweep calc(8s * var(--sky-slow, 1)) linear infinite; }
+@keyframes kk-sweep {
+  0%, 100% { transform: scaleX(1); opacity: 0.7; }
+  25% { transform: scaleX(0.05); opacity: 0.15; }
+  50% { transform: scaleX(-1); opacity: 0.7; }
+  75% { transform: scaleX(0.05); opacity: 0.15; }
+}
+.kk-flip { transform: matrix(1, 0, 0, -0.72, 0, 516); }
+.kk-ripple { transform-box: fill-box; transform-origin: 50% 0; animation: kk-ripple calc(4s * var(--sky-slow, 1)) ease-in-out infinite alternate; }
+@keyframes kk-ripple { to { transform: skewX(4deg) scaleX(1.03); } }
+:root[data-sky-tone="light"] :is(.kk-beam, .kk-glow, .ist-twinkle, .ist-lamp, .ist-streak) { display: none; }
+/* Scenes are scaled to fill the screen; anything reaching above their box
+   (like the fire's glow) carries on fading out instead of being cut off. */
+.sky-fire, .sky-mountains, .sky-istanbul, .retro-mountains { overflow: visible; }

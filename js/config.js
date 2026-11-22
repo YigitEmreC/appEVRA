@@ -96,18 +96,19 @@ export const HOME = {
   //   { wait: <milliseconds> }
   // Colour each device card lights up with when it's on (Evra palette; heating
   // keeps a warm amber so "heating" still reads as warm).
-  tones: { heater: '#E9BE7C', tv: '#9ED5FD', plug: '#B3C6B3', light: '#9AAFDD' },
+  // The pastels are CSS tokens, so they follow the chosen colour theme.
+  tones: { heater: '#E9BE7C', tv: 'var(--p-splash)', plug: 'var(--p-seawash)', light: 'var(--p-sky)' },
 
   quickActions: [
     {
-      id: 'movie', name: 'Movie', icon: 'tv', hint: 'TV on, dim purple light', tone: '#9AAFDD',
+      id: 'movie', name: 'Movie', icon: 'tv', hint: 'TV on, dim purple light', tone: 'var(--p-sky)',
       steps: [
         { ensure: 'tv', on: true },
         { call: 'light.turn_on', target: 'light.bg_crib_led', data: { hs_color: [265, 90], brightness_pct: 15 } },
       ],
     },
     {
-      id: 'cosy', name: 'Cosy', icon: 'flame', hint: 'Heater on ECO, warm light', tone: '#B3C6B3',
+      id: 'cosy', name: 'Cosy', icon: 'flame', hint: 'Heater on ECO, warm light', tone: 'var(--p-seawash)',
       steps: [
         { ensure: 'heater', on: true },
         { wait: 600 },
@@ -116,11 +117,11 @@ export const HOME = {
       ],
     },
     {
-      id: 'bright', name: 'Bright', icon: 'sun', hint: 'Full white light', tone: '#9ED5FD',
+      id: 'bright', name: 'Bright', icon: 'sun', hint: 'Full white light', tone: 'var(--p-splash)',
       steps: [{ call: 'light.turn_on', target: 'light.bg_crib_led', data: { color_temp_kelvin: 5000, brightness_pct: 100 } }],
     },
     {
-      id: 'off', name: 'All off', icon: 'power', hint: 'TV, heater and light', tone: '#CDD7F0',
+      id: 'off', name: 'All off', icon: 'power', hint: 'TV, heater and light', tone: 'var(--p-stlouis)',
       steps: [
         { ensure: 'tv', on: false },
         { wait: 600 },

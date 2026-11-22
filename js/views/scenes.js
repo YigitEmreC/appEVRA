@@ -2,10 +2,18 @@ import { store, sortedAreas, areaName } from '../store.js';
 import { h, toast, relTime, loadSettings } from '../util.js';
 import { icon } from '../icons.js';
 import { SCENES, sceneRooms, setSceneRooms, planScene, runScene } from '../scenes.js';
+import { getCustom, ordered, isHidden, isEditing } from '../custom.js';
+import { arrangeable } from '../edit.js';
 
 export function renderScenes(root, cleanup) {
   const grid = h('div', { class: 'scene-grid' });
-  const draw = () => grid.replaceChildren(...SCENES.map((s) => sceneCard(s)));
+  // Scenes in the person's order; in edit mode they can be dragged and hidden.
+  const draw = () => {
+    const cfg = getCustom().scenes;
+    const list = ordered(SCENES, cfg);
+    grid.replaceChildren(...list.filter((s) => isEditing() || !isHidden(cfg, s.id)).map((s) => sceneCard(s)));
+    arrangeable(grid, 'scenes', { all: list.map((s) => s.id), big: true });
+  };
 
   // Re-draw when devices or rooms change, since that changes what each scene does.
   let sig = '';
@@ -68,7 +76,7 @@ function sceneCard(scene) {
   });
 
   const last = loadSettings().lastScene;
-  const el = h('article', { class: 'scene', style: { '--tone': scene.tone } },
+  const el = h('article', { class: 'scene', style: { '--tone': scene.tone }, 'data-id': scene.id, 'data-name': scene.name },
     h('div', { class: 'scene-top' },
       h('span', { class: 'scene-icon' }, icon(scene.icon, 24)),
       h('div', { class: 'scene-titles' },
