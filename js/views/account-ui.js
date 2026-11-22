@@ -1,10 +1,12 @@
 // The Evra account panel: first-time setup, sign-in, and the signed-in member,
-// used in Settings and on the Assistant tab.
+// used on the welcome screen (views/auth-gate.js), in Settings and on the Assistant tab.
+// Who is an admin, and who gets the assistant beyond their plan, is set in the
+// website's database (evra_app_access), not in the app.
 
 import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
 import {
-  member, isAdmin, canUseAssistant, onAccount, accountStatus, signIn, setUp, signOutAccount, changePassword, refreshMember, websiteOrigin,
+  member, canUseAssistant, onAccount, accountStatus, signIn, setUp, signOutAccount, changePassword, refreshMember, websiteOrigin,
 } from '../account.js';
 
 let fieldCount = 0;
@@ -93,7 +95,6 @@ export function accountPanel(cleanup, { intro } = {}) {
         h('div', { class: 'account-pills' }, ...[access, plan].filter(Boolean)),
         site && !canUseAssistant(u) ? h('p', { class: 'muted small' }, 'The assistant comes with the Premium plan, or an Evra admin can switch it on for you.') : null,
         h('div', { class: 'btn-row' },
-          isAdmin(u) ? h('a', { class: 'btn', href: '#/members' }, icon('person', 16), 'Manage members') : null,
           site ? h('a', { class: 'btn ghost', href: `${websiteOrigin()}/hesabim.html`, target: '_blank', rel: 'noopener' }, icon('person', 16), 'Your account online') : null,
           h('button', { class: 'btn ghost', type: 'button', 'aria-expanded': String(showPassword), onclick: () => { showPassword = !showPassword; draw(); } }, icon('lock', 16), 'Change password'),
           h('button', { class: 'btn ghost', type: 'button', onclick: async () => { await signOutAccount(); toast('Signed out of Evra'); } }, 'Sign out')),

@@ -92,7 +92,4 @@ export async function refreshMember() {
   }
 }
 export const changePassword = (currentPassword, newPassword) => api('POST', '/me/password', { current: currentPassword, new: newPassword });
-export const listMembers = () => api('GET', '/members');
-export const addMember = (m) => api('POST', '/members', m);
-export const updateMember = (id, patch) => api('PATCH', `/members/${encodeURIComponent(id)}`, patch);
-export const deleteMember = (id) => api('DELETE', `/members/${encodeURIComponent(id)}`);
+// Admins and app access are managed in the website's database (evra_app_access), not in the app.

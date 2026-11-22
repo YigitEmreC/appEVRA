@@ -29,9 +29,9 @@ Both answer the same requests, so switching only changes an address:
 |---|---|---|
 | Sign in with | e-mail address | username |
 | New members | sign up on the website | the admin adds them in the app |
-| Assistant | Premium plan, or an admin's choice | an admin's choice |
-| Admins | the first is made in the D1 Console, the rest in the app | the first account, the rest in the app |
-| Names, password resets, deleting | on the website | in the app (Manage members) |
+| Assistant | Premium plan, or set in the D1 Console | `features.ai` in `data/accounts.json` |
+| Admins | set in the D1 Console (`evra_app_access`) | the first account; others by editing `data/accounts.json` |
+| Names, password resets, deleting | on the website | by editing `data/accounts.json` |
 | "Off" switch | app access only; the website account stays | the whole account; signed out everywhere |
 | Wrong passwords | 5 lock the account for 15 minutes (the website's lock) | 5 in 5 minutes, per username or address, make sign-in wait |
 
@@ -45,7 +45,7 @@ Both answer the same requests, so switching only changes an address:
 1. **Start it:** `Start Evra.bat` starts it. By hand, from the `SMART` folder: `python appEVRA/tools/accounts/server.py` (port 8770; `--port`, `--data` and `--origin` change it).
 2. **Point the app and the assistant at it** (see above).
 3. **Create the admin account** in Evra under **Settings → Evra account**. The first account becomes the admin.
-4. **Add members:** **Manage members** → add a member with a temporary password, and tick **Can use the assistant** for those who may use it.
+4. **More members:** the app has no member screens any more. The stand-in's API still has `/members` for scripts, or edit `data/accounts.json` while it's stopped.
 
 **Data:** `data/accounts.json`, which git ignores. Deleting it starts over with first-time setup.
 

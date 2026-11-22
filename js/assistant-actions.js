@@ -21,6 +21,8 @@ async function until(test, ms = 4000) {
 }
 
 const stateOf = (id) => store.get(id)?.state;
+// Card results are in Turkish, like Evra (they're also sent back to Evra as what happened).
+const STATE_TR = { on: 'açık', off: 'kapalı', open: 'açık', closed: 'kapalı', heat: 'ısıtıyor', unavailable: 'ulaşılamıyor' };
 const nameOf = (id) => store.get(id)?.attributes?.friendly_name || id;
 
 async function control(steps) {
@@ -35,7 +37,7 @@ async function control(steps) {
         const pressed = await ensurePower(s.power, s.on);
         lastIr = true;
         const ok = await until(() => (stateOf(HOME[s.power].tracker) === 'on') === s.on, 3000);
-        lines.push(`${s.power === 'tv' ? 'TV' : 'Heater'} ${s.on ? 'on' : 'off'}${pressed ? '' : ' (it already was)'}${ok ? '' : ' (not confirmed)'}`);
+        lines.push(`${s.power === 'tv' ? 'TV' : 'Isıtıcı'} ${s.on ? 'açık' : 'kapalı'}${pressed ? '' : ' (zaten öyleydi)'}${ok ? '' : ' (doğrulanamadı)'}`);
         if (!ok) failed++;
         continue;
       }
@@ -46,7 +48,7 @@ async function control(steps) {
       if (want) ok = await until(() => stateOf(s.entity_id) === want, s.domain === 'cover' ? 5000 : 3000);
       if (s.service === 'set_temperature') ok = await until(() => Number(store.get(s.entity_id)?.attributes?.temperature) === Number(s.data.temperature));
       if (s.service === 'set_cover_position') ok = await until(() => store.get(s.entity_id)?.attributes?.current_position === s.data.position, 5000);
-      lines.push(`${nameOf(s.entity_id)} ${ok ? `is ${stateOf(s.entity_id)}` : 'didn\'t confirm the change'}`);
+      lines.push(`${nameOf(s.entity_id)} ${ok ? `şimdi: ${STATE_TR[stateOf(s.entity_id)] || stateOf(s.entity_id)}` : 'değişikliği doğrulamadı'}`);
       if (!ok) failed++;
     } catch (e) {
       failed++;
@@ -60,7 +62,7 @@ async function control(steps) {
 export async function runProposal(p) {
   const a = p.action || {};
   const b = store.backend;
-  if (!b) return { ok: false, detail: 'The app isn\'t connected.' };
+  if (!b) return { ok: false, detail: 'Uygulama bağlı değil.' };
   try {
     switch (a.type) {
       case 'control':
@@ -70,48 +72,48 @@ export async function runProposal(p) {
           await store.press(a.entity_id);
           if (i < a.times - 1) await sleep(400);
         }
-        return { ok: true, detail: `Pressed ${nameOf(a.entity_id)}${a.times > 1 ? ` ${a.times} times` : ''}` };
+        return { ok: true, detail: `${nameOf(a.entity_id)} basıldı${a.times > 1 ? ` (${a.times} kez)` : ''}` };
       }
       case 'scene': {
         const scene = SCENES.find((s) => s.id === a.scene);
-        if (!scene) return { ok: false, detail: 'That scene no longer exists.' };
+        if (!scene) return { ok: false, detail: 'Bu sahne artık yok.' };
         const r = await runScene(scene, a.rooms || 'all');
-        if (!r.steps) return { ok: false, detail: 'Nothing in those rooms for this scene to change.' };
-        return { ok: !r.failed, detail: r.failed ? `${r.failed} of ${r.steps} changes didn't work` : `${scene.name} started (${r.steps} change${r.steps === 1 ? '' : 's'})` };
+        if (!r.steps) return { ok: false, detail: 'Bu odalarda sahnenin değiştireceği bir şey yok.' };
+        return { ok: !r.failed, detail: r.failed ? `${r.steps} değişiklikten ${r.failed} tanesi olmadı` : `${scene.name} başladı (${r.steps} değişiklik)` };
       }
       case 'automation_save': {
         const id = a.automation_id || String(Date.now());
         await b.saveAutomation(id, a.config);
         const saved = await b.fetchAutomationConfig(id);
         const ok = saved && saved.alias === a.config.alias;
-        return { ok: !!ok, detail: ok ? `Automation '${a.config.alias}' saved and on` : 'Saved, but it couldn\'t be read back' };
+        return { ok: !!ok, detail: ok ? `'${a.config.alias}' otomasyonu kaydedildi ve açık` : 'Kaydedildi ama geri okunamadı' };
       }
       case 'automation_delete': {
         await b.deleteAutomation(a.automation_id);
         const gone = !(await b.fetchAutomationConfig(a.automation_id));
-        return { ok: gone, detail: gone ? 'Automation deleted' : 'It still exists' };
+        return { ok: gone, detail: gone ? 'Otomasyon silindi' : 'Hâlâ duruyor' };
       }
       case 'automation_state': {
         await store.call('automation', a.service, a.entity_id, a.service === 'trigger' ? { skip_condition: true } : {});
-        if (a.service === 'trigger') return { ok: true, detail: 'Started' };
+        if (a.service === 'trigger') return { ok: true, detail: 'Çalıştırıldı' };
         const want = a.service === 'turn_on' ? 'on' : 'off';
         const ok = await until(() => stateOf(a.entity_id) === want);
-        return { ok, detail: ok ? `Automation switched ${want}` : 'The automation didn\'t confirm' };
+        return { ok, detail: ok ? `Otomasyon ${want === 'on' ? 'açıldı' : 'kapatıldı'}` : 'Otomasyon doğrulamadı' };
       }
       case 'room_create': {
         const area = await b.createArea(a.name);
         await until(() => store.areas.has(area.area_id));
-        return { ok: true, detail: `Room '${a.name}' created` };
+        return { ok: true, detail: `'${a.name}' odası oluşturuldu` };
       }
       case 'room_rename': {
         await b.renameArea(a.area_id, a.name);
         const ok = await until(() => store.areas.get(a.area_id)?.name === a.name);
-        return { ok, detail: ok ? `Renamed to '${a.name}'` : 'The new name didn\'t show up' };
+        return { ok, detail: ok ? `Yeni adı '${a.name}'` : 'Yeni ad görünmedi' };
       }
       case 'room_delete': {
         await b.deleteArea(a.area_id);
         const ok = await until(() => !store.areas.has(a.area_id));
-        return { ok, detail: ok ? 'Room deleted' : 'The room is still there' };
+        return { ok, detail: ok ? 'Oda silindi' : 'Oda hâlâ duruyor' };
       }
       case 'device_update': {
         await b.updateDevice(a.device_id, a.patch);
@@ -120,28 +122,28 @@ export async function runProposal(p) {
           return d && Object.entries(a.patch).every(([k, v]) => (d[k] ?? null) === (v ?? null));
         });
         const d = store.devices.get(a.device_id);
-        return { ok, detail: ok ? ('name_by_user' in a.patch ? `Now called '${deviceName(d)}'` : `Moved to ${store.areas.get(d?.area_id)?.name || 'no room'}`) : 'The change didn\'t show up' };
+        return { ok, detail: ok ? ('name_by_user' in a.patch ? `Yeni adı '${deviceName(d)}'` : `Şimdi: ${store.areas.get(d?.area_id)?.name || 'odasız'}`) : 'Değişiklik görünmedi' };
       }
       case 'device_remove': {
         const d = store.devices.get(a.device_id);
-        if (!d) return { ok: false, detail: 'That device is already gone.' };
+        if (!d) return { ok: false, detail: 'Bu cihaz zaten yok.' };
         await b.removeDevice(a.device_id, d);
         const ok = await until(() => !store.devices.has(a.device_id), 8000);
-        return { ok, detail: ok ? `${deviceName(d)} removed` : 'It\'s still listed' };
+        return { ok, detail: ok ? `${deviceName(d)} kaldırıldı` : 'Hâlâ listede' };
       }
       case 'device_add':
         location.hash = `#/devices/add/${encodeURIComponent(a.product)}`;
-        return { ok: true, detail: 'Opened the Add device page; the person finishes the pairing there (nothing added yet)' };
+        return { ok: true, detail: 'Cihaz ekle sayfası açıldı; eşleştirme orada tamamlanır (henüz bir şey eklenmedi)' };
       case 'update_install': {
         await store.call('update', 'install', a.entity_id);
         const ok = await until(() => store.get(a.entity_id)?.attributes?.in_progress || stateOf(a.entity_id) === 'off', 8000);
-        return { ok, detail: ok ? (stateOf(a.entity_id) === 'off' ? 'Update installed' : 'Update installing') : 'The update didn\'t start' };
+        return { ok, detail: ok ? (stateOf(a.entity_id) === 'off' ? 'Güncelleme kuruldu' : 'Güncelleme kuruluyor') : 'Güncelleme başlamadı' };
       }
       case 'setting':
         setPrefs(a.patch);
-        return { ok: true, detail: 'Setting changed' };
+        return { ok: true, detail: 'Ayar değişti' };
       default:
-        return { ok: false, detail: `The app doesn't know how to do '${a.type}'.` };
+        return { ok: false, detail: `Uygulama '${a.type}' işlemini bilmiyor.` };
     }
   } catch (e) {
     return { ok: false, detail: e.message || String(e) };

@@ -16,7 +16,7 @@ import { openCustomizer } from './views/customize.js';
 import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_NAV, HEADER_ITEMS } from './custom.js';
 import { arrangeable } from './edit.js';
 import { ensureSky } from './sky.js';
-import { renderMembers } from './views/members.js';
+import { renderAuthGate } from './views/auth-gate.js';
 import { member, canUseAssistant, onAccount, refreshMember } from './account.js';
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
@@ -30,7 +30,6 @@ const VIEWS = [
   { id: 'chat', label: 'Assistant', icon: 'devil', render: renderChat, title: 'Assistant' },
   { id: 'settings', label: 'Settings', icon: 'gear', render: renderSettings, title: 'Settings' },
   // Reached from Settings, not shown in the navigation.
-  { id: 'members', label: 'Members', icon: 'person', render: renderMembers, title: 'Members', nav: false },
 ];
 const SUBTITLES = { 'devices/add': 'Add a device', 'automations/new': 'New automation', 'automations/edit': 'Edit automation' };
 
@@ -133,14 +132,13 @@ const main = h('main', { id: 'view', tabindex: '-1' });
 const nav = h('nav', { class: 'nav', 'aria-label': 'Main' });
 const brand = h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra home', title: 'Evra' }, icon('evra', 22));
 
-// Members whose account doesn't include the assistant don't get its tab. (Signed
-// out, it stays so people can find out they need to sign in. The assistant
-// server checks membership itself either way.)
+// Members whose account doesn't include the assistant don't get its tab. (The
+// assistant server checks membership itself either way.)
 const assistantBlocked = () => !!member() && !canUseAssistant();
 
 // Tabs in the person's chosen order, without the ones they hid (while
-// editing, hidden tabs show faded so they can be brought back). Screens like
-// Members (nav: false) are reached from Settings and never get a tab.
+// editing, hidden tabs show faded so they can be brought back). Screens with
+// nav: false never get a tab.
 function buildNav() {
   const { nav: cfg } = getCustom();
   const all = ordered(VIEWS.filter((v) => v.nav !== false && !(v.id === 'chat' && assistantBlocked())), cfg);
@@ -153,20 +151,50 @@ function markActive() {
   for (const a of nav.querySelectorAll('.nav-item')) a.classList.toggle('active', a.dataset.view === currentView?.id);
 }
 
-// A change of account (or of what it may use) re-draws the tabs.
+// ---- sign in first ------------------------------------------------------------
+// Nobody signed in: only the welcome screen (views/auth-gate.js). Signed in: the app.
+// The connection to the home starts after sign-in, so live mode never asks for a
+// Home Assistant login before the Evra one. A kept sign-in still opens the app
+// offline (refreshMember keeps it unless the server says it ended).
+const appEl = document.getElementById('app');
+const shell = [h('header', { class: 'top' }, topLeft, topRight), nav, main];
+let started = false;
+let gateCleanup = [];
+let signedIn = !!member();
+
+function tidyGate() { for (const fn of gateCleanup) { try { fn(); } catch { /* ignore */ } } gateCleanup = []; }
+
+function showApp() {
+  tidyGate();
+  appEl.classList.remove('gated');
+  appEl.replaceChildren(...shell);
+  if (!started) { started = true; buildNav(); connect(); }
+  route();
+}
+
+function showGate() {
+  for (const fn of cleanup) { try { fn(); } catch { /* ignore */ } }
+  cleanup = [];
+  tidyGate();
+  if (store.backend) { store.backend.disconnect(); store.backend = null; started = false; }
+  appEl.classList.add('gated');
+  appEl.replaceChildren(renderAuthGate(gateCleanup));
+  document.title = 'Sign in · Evra';
+}
+
+// A change of account (or of what it may use) re-draws the tabs, or swaps app and welcome screen.
 let lastBlocked = assistantBlocked();
 onAccount(() => {
+  if (!!member() !== signedIn) {
+    signedIn = !!member();
+    if (signedIn) { if (!location.hash || location.hash === '#/settings') location.hash = '#/home'; showApp(); } else showGate();
+    return;
+  }
   if (assistantBlocked() !== lastBlocked) { lastBlocked = assistantBlocked(); buildNav(); }
 });
 refreshMember();
-// Pick up access changes an admin made, when the app comes back into view.
+// Pick up access changes (plan, app access), when the app comes back into view.
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshMember(); });
-
-document.getElementById('app').replaceChildren(
-  h('header', { class: 'top' }, topLeft, topRight),
-  nav,
-  main,
-);
 
 function greeting() {
   const hr = new Date().getHours();
@@ -206,8 +234,14 @@ store.onStatus((s) => {
 // ---- router -----------------------------------------------------------------
 
 let cleanup = [];
+let lastTab = -1;
+
+// The header settles into an app bar once the page scrolls.
+const onScroll = () => document.documentElement.classList.toggle('scrolled', window.scrollY > 6);
+window.addEventListener('scroll', onScroll, { passive: true });
 
 function route(opts) {
+  if (!member()) return; // the welcome screen is up
   const keepScroll = opts?.keepScroll ? window.scrollY : null;
   const raw = location.hash.replace(/^#\/?/, '') || 'home';
   const [path, qs] = raw.split('?');
@@ -223,8 +257,18 @@ function route(opts) {
   document.title = `${currentTitle || view.label} · Evra`;
   markActive();
   view.render(main, cleanup, { reconnect: connect, applyTheme, params, query: new URLSearchParams(qs || '') });
+  // A new screen slides in from the side of the tab it belongs to (not on a re-draw in place).
+  const tabs = [...nav.querySelectorAll('.nav-item')].map((a) => a.dataset.view);
+  const at = tabs.indexOf(view.id);
+  if (keepScroll === null) {
+    main.style.setProperty('--enter-x', lastTab < 0 || at < 0 || at === lastTab ? '0px' : at > lastTab ? '22px' : '-22px');
+    main.classList.add('view-enter');
+    setTimeout(() => main.classList.remove('view-enter'), 700);
+  }
+  if (at >= 0) lastTab = at;
   main.scrollTop = 0;
   window.scrollTo(0, keepScroll ?? 0);
+  onScroll();
 }
 
 // Customize changes: new look, new tab order, and the open screen re-drawn in place.
@@ -241,9 +285,7 @@ const mq = window.matchMedia('(prefers-color-scheme: dark)');
 mq.addEventListener?.('change', applyTheme);
 
 applyTheme();
-buildNav();
-connect();
-route();
+if (signedIn) showApp(); else showGate();
 
 // Offline caching only works on https or localhost.
 if ('serviceWorker' in navigator && window.isSecureContext) {

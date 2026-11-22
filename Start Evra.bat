@@ -10,8 +10,6 @@ set "PORT=%~1"
 if not defined PORT set "PORT=8010"
 set "SERVER_MODE="
 if "%EVRA_PHONE%"=="1" set "SERVER_MODE=--lan"
-rem The assistant needs the app's port to know the phone's address.
-set "EVRA_APP_PORT=%PORT%"
 set "APP_DIR=%~dp0"
 for %%I in ("%APP_DIR%.") do set "APP_NAME=%%~nxI"
 set "URL=http://localhost:%PORT%/%APP_NAME%/"
@@ -29,6 +27,18 @@ if not defined PY (
   exit /b 1
 )
 
+rem ---- phone mode: a port where Evra already runs for phones, or the next free one
+rem (port 8010 may be busy with Evra for this computer only, for example the
+rem Claude app's preview, which a phone can't open)
+if defined SERVER_MODE (
+  for /f %%P in ('call "%PY%" "%APP_DIR%tools\dev_server.py" %PORT% --phone-port') do set "PHONE_PORT=%%P"
+)
+if defined PHONE_PORT if not "%PHONE_PORT%"=="%PORT%" echo Port %PORT% is serving Evra for this computer only, so phone mode uses port %PHONE_PORT%.
+if defined PHONE_PORT set "PORT=%PHONE_PORT%"
+set "URL=http://localhost:%PORT%/%APP_NAME%/"
+rem The assistant needs the app's port to know the phone's address.
+set "EVRA_APP_PORT=%PORT%"
+
 rem ---- start the server, unless the app is already being served -----------
 call :serving
 if errorlevel 1 (
@@ -36,13 +46,13 @@ if errorlevel 1 (
   start "Evra server - close this window to stop it" /min "%PY%" "%APP_DIR%tools\dev_server.py" %PORT% %SERVER_MODE%
   call :wait_for_server
 ) else (
-  echo The Evra server is already running on port %PORT%.
+  echo The Evra server is already running on port %PORT%, so that one is used. That's fine.
   if defined SERVER_MODE (
     curl -s -I --max-time 2 "http://127.0.0.1:%PORT%/%APP_NAME%/index.html" | findstr /i "X-Evra-Lan" >nul
     if errorlevel 1 (
       echo.
       echo It's running for this computer only, so a phone can't open it.
-      echo Close the "Evra server" and "Evra assistant" windows, then run this again.
+      echo Close the "Evra server" window, or run  "Start Evra on phone.bat" 8020  to use another port.
       pause
       exit /b 1
     )

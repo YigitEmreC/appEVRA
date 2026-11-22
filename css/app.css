@@ -1102,6 +1102,96 @@ textarea.json {
 .shortcut span { flex: 1; }
 .shortcut > .icon:last-child { color: var(--muted); }
 
+/* =========================================================================
+   App feel: a contained layout, a header that settles as you scroll, and
+   motion that answers every tap (turned off by prefers-reduced-motion below).
+   ========================================================================= */
+:root { --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); --spring: cubic-bezier(0.3, 1.5, 0.5, 1); }
+html { overscroll-behavior-y: none; }
+body { overscroll-behavior-y: none; }
+button, a, .nav-item, .room-chip { touch-action: manipulation; }
+.nav, .btn, .theme-btn, .quick-btn, .room-chip, .segmented, .status-pill, .top-title { -webkit-user-select: none; user-select: none; }
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+/* The header settles into an app bar once the page moves. */
+.top { transition: padding 0.25s var(--ease-out), box-shadow 0.25s, background 0.25s; }
+.top-title { transition: font-size 0.25s var(--ease-out); }
+.scrolled .top { padding-top: calc(env(safe-area-inset-top) + 10px); padding-bottom: 10px; box-shadow: 0 1px 0 var(--line), 0 10px 28px -20px rgb(0 0 0 / 0.55); }
+.scrolled .top-title { font-size: 19px; }
+
+/* Wide screens: content in one centred column, with the header lined up on it. */
+@media (min-width: 900px) {
+  .view > * { margin-inline: auto; }
+  .top {
+    padding-left: calc(124px + max(0px, (100% - 152px - 1180px) / 2));
+    padding-right: calc(28px + max(0px, (100% - 152px - 1180px) / 2));
+  }
+  .scrolled .top { padding-top: 12px; padding-bottom: 10px; }
+}
+
+/* Changing tab: the new screen slides in from the side of the tab you went to,
+   its parts arriving one after another. */
+.view.view-enter > * { animation: view-in 0.42s var(--ease-out) backwards; }
+.view.view-enter > :nth-child(2) { animation-delay: 0.04s; }
+.view.view-enter > :nth-child(3) { animation-delay: 0.08s; }
+.view.view-enter > :nth-child(4) { animation-delay: 0.12s; }
+.view.view-enter > :nth-child(5) { animation-delay: 0.16s; }
+.view.view-enter > :nth-child(n+6) { animation-delay: 0.2s; }
+@keyframes view-in { from { opacity: 0; transform: translate3d(var(--enter-x, 0px), 12px, 0); } }
+
+/* Buttons press in and spring back; on a mouse they lift a little. */
+:is(.btn, .theme-btn, .room-chip, .quick-btn, .status-pill, .segmented button, .chat-send) {
+  transition: transform 0.22s var(--spring), background-color 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
+}
+:is(.btn, .theme-btn, .room-chip, .status-pill, .chat-send):active { transform: scale(0.95); transition-duration: 0.08s; }
+.segmented button:active { transform: scale(0.94); }
+@media (hover: hover) {
+  .btn:hover, .quick-btn:hover, .room-chip:hover { transform: translateY(-1px); }
+  .btn.primary:hover { box-shadow: 0 8px 20px -10px var(--accent-fill); }
+  .theme-btn:hover { transform: rotate(-8deg) scale(1.06); }
+}
+.card { transition: border-color 0.2s, box-shadow 0.25s, transform 0.25s var(--ease-out); }
+
+/* Tabs: the active one pops; a press squeezes the icon. */
+.nav-item { transition: color 0.2s; }
+.nav-icon { transition: background 0.25s, color 0.25s, transform 0.25s var(--spring); }
+.nav-item:active .nav-icon { transform: scale(0.88); }
+.nav-item.active .nav-icon { animation: nav-pop 0.42s var(--spring); }
+@keyframes nav-pop { 0% { transform: scale(0.82); } 100% { transform: scale(1); } }
+@media (hover: hover) { .nav-item:not(.active):hover .nav-icon { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); } }
+
+/* Switches and messages come in softly. */
+.msg { animation: msg-in 0.32s var(--ease-out) backwards; }
+@keyframes msg-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.proposal { animation: msg-in 0.36s var(--ease-out) 0.06s backwards; }
+
+/* ---- the welcome screen (views/auth-gate.js) ---- */
+.app.gated, #app.gated { min-height: 100dvh; display: grid; place-items: center; padding: calc(env(safe-area-inset-top) + 24px) 16px 24px; }
+.gate { width: 100%; max-width: 430px; animation: gate-in 0.55s var(--ease-out) backwards; }
+@keyframes gate-in { from { opacity: 0; transform: translateY(18px) scale(0.98); } }
+.gate-card {
+  background: color-mix(in srgb, var(--card) 92%, transparent); border: 1px solid var(--line); border-radius: 26px;
+  padding: 30px 24px 24px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 18px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+.gate-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.gate-logo {
+  width: 68px; height: 68px; border-radius: 22px; display: grid; place-items: center; margin-bottom: 6px;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: logo-pop 0.7s var(--spring) 0.12s backwards;
+}
+@keyframes logo-pop { from { opacity: 0; transform: scale(0.6) rotate(-12deg); } }
+.gate-brand h1 { font-size: 25px; }
+.gate-tabs { display: flex; align-self: stretch; }
+.gate-tabs button { flex: 1; }
+.gate-body.gate-swap { animation: view-in 0.32s var(--ease-out) backwards; }
+.gate-body .account-form .btn.primary, .gate-body .btn-row .btn.primary { flex: 1; justify-content: center; }
+.gate-steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 12px; }
+.gate-steps li strong { display: block; }
+.gate-steps li span { color: var(--muted); font-size: 13px; }
+.gate-note { text-align: center; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 650; text-decoration: underline; }
+
 .booting *, .booting *::after { transition: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
