@@ -1,0 +1,316 @@
+// Live backend: talks to Home Assistant over its WebSocket API, the same API
+// Home Assistant's own website uses. Sign-in uses Home Assistant's normal
+// login page, so no password or long-lived token is stored in the app.
+
+const TOKENS_KEY = 'smarthome.auth';
+const OAUTH_STATE_KEY = 'smarthome.oauthState';
+
+const clientId = () => location.origin + '/';
+const redirectUri = () => location.origin + location.pathname;
+
+function readJson(storage, key) {
+  try { return JSON.parse(storage.getItem(key) || 'null'); } catch { return null; }
+}
+function writeJson(storage, key, value) {
+  try { storage.setItem(key, JSON.stringify(value)); } catch { /* storage blocked */ }
+}
+
+export function signOut() {
+  try { localStorage.removeItem(TOKENS_KEY); } catch { /* storage blocked */ }
+}
+
+async function tokenRequest(hassUrl, params) {
+  const res = await fetch(hassUrl + '/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(params),
+  });
+  if (!res.ok) throw new Error(`sign-in was refused (${res.status})`);
+  return res.json();
+}
+
+// Returns a valid access token, refreshing it or sending the user to Home
+// Assistant's login page when needed.
+export async function getAccessToken(hassUrl, { interactive = true } = {}) {
+  const url = new URL(location.href);
+  const code = url.searchParams.get('code');
+  if (code) {
+    const returnedState = url.searchParams.get('state');
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+    let expected = null;
+    try { expected = sessionStorage.getItem(OAUTH_STATE_KEY); } catch { /* storage blocked */ }
+    if (expected && expected === returnedState) {
+      const t = await tokenRequest(hassUrl, { grant_type: 'authorization_code', code, client_id: clientId() });
+      const tokens = { hassUrl, access_token: t.access_token, refresh_token: t.refresh_token, expires: Date.now() + t.expires_in * 1000 };
+      writeJson(localStorage, TOKENS_KEY, tokens);
+      return tokens.access_token;
+    }
+  }
+
+  const saved = readJson(localStorage, TOKENS_KEY);
+  if (saved && saved.hassUrl === hassUrl) {
+    if (Date.now() < saved.expires - 60000) return saved.access_token;
+    try {
+      const t = await tokenRequest(hassUrl, { grant_type: 'refresh_token', refresh_token: saved.refresh_token, client_id: clientId() });
+      const tokens = { ...saved, access_token: t.access_token, expires: Date.now() + t.expires_in * 1000 };
+      writeJson(localStorage, TOKENS_KEY, tokens);
+      return tokens.access_token;
+    } catch (e) {
+      if (/refused \(4\d\d\)/.test(e.message)) signOut();
+      else throw e;
+    }
+  }
+
+  if (!interactive) throw new Error('not signed in');
+  const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { sessionStorage.setItem(OAUTH_STATE_KEY, state); } catch { /* storage blocked */ }
+  const auth = new URL(hassUrl + '/auth/authorize');
+  auth.searchParams.set('response_type', 'code');
+  auth.searchParams.set('client_id', clientId());
+  auth.searchParams.set('redirect_uri', redirectUri());
+  auth.searchParams.set('state', state);
+  location.assign(auth.toString());
+  return new Promise(() => {});
+}
+
+export function createLiveBackend(hassUrl) {
+  let ws = null;
+  let nextId = 1;
+  const pending = new Map();
+  let emit = () => {};
+  let setStatus = () => {};
+  let retry = 0;
+  let retryTimer = null;
+  let pingTimer = null;
+  let closedByUs = false;
+  let token = null;
+  let registryTimer = null;
+
+  async function loadRegistries() {
+    const [devices, areas, entities] = await Promise.all([
+      send({ type: 'config/device_registry/list' }),
+      send({ type: 'config/area_registry/list' }),
+      send({ type: 'config/entity_registry/list' }),
+    ]);
+    emit({ type: 'registry', devices, areas, entities });
+  }
+
+  async function rest(method, path, body) {
+    const res = await fetch(`${hassUrl}/api/${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let msg = `${res.status}`;
+      try { const j = await res.json(); msg = j.message || j.error || msg; } catch { /* not JSON */ }
+      throw new Error(msg);
+    }
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  }
+
+  function send(msg, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) { reject(new Error('not connected')); return; }
+      const id = nextId++;
+      pending.set(id, { resolve, reject });
+      ws.send(JSON.stringify({ ...msg, id }));
+      setTimeout(() => {
+        if (pending.has(id)) { pending.delete(id); reject(new Error('Home Assistant did not answer')); }
+      }, timeoutMs);
+    });
+  }
+
+  function schedule() {
+    clearTimeout(retryTimer);
+    const delay = Math.min(30000, 1000 * 2 ** retry);
+    retry += 1;
+    retryTimer = setTimeout(open, delay);
+  }
+
+  function startPing() {
+    clearInterval(pingTimer);
+    pingTimer = setInterval(() => {
+      send({ type: 'ping' }, 10000).catch(() => { try { ws.close(); } catch { /* already closed */ } });
+    }, 30000);
+  }
+
+  async function open() {
+    setStatus({ mode: 'live', state: retry ? 'reconnecting' : 'connecting', message: hassUrl });
+    try {
+      token = await getAccessToken(hassUrl);
+    } catch (e) {
+      setStatus({ mode: 'live', state: 'error', message: `Couldn't sign in: ${e.message}` });
+      schedule();
+      return;
+    }
+    try {
+      ws = new WebSocket(hassUrl.replace(/^http/, 'ws') + '/api/websocket');
+    } catch (e) {
+      setStatus({ mode: 'live', state: 'error', message: `Bad address: ${e.message}` });
+      return;
+    }
+
+    ws.onmessage = async (ev) => {
+      let m;
+      try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.type === 'auth_required') {
+        ws.send(JSON.stringify({ type: 'auth', access_token: token }));
+      } else if (m.type === 'auth_invalid') {
+        signOut();
+        setStatus({ mode: 'live', state: 'error', message: 'Home Assistant rejected the sign-in. Connect again to log in.' });
+        closedByUs = true;
+        ws.close();
+      } else if (m.type === 'auth_ok') {
+        retry = 0;
+        setStatus({ mode: 'live', state: 'connecting', message: 'Loading states' });
+        try {
+          const all = await send({ type: 'get_states' });
+          emit({ type: 'all', states: all });
+          await loadRegistries();
+          await send({ type: 'subscribe_events', event_type: 'state_changed' });
+          for (const ev of ['device_registry_updated', 'area_registry_updated', 'entity_registry_updated']) {
+            await send({ type: 'subscribe_events', event_type: ev });
+          }
+          setStatus({ mode: 'live', state: 'connected', message: `Home Assistant ${m.ha_version}` });
+          startPing();
+        } catch (e) {
+          setStatus({ mode: 'live', state: 'error', message: e.message });
+          ws.close();
+        }
+      } else if (m.type === 'event' && m.event && m.event.event_type === 'state_changed') {
+        const d = m.event.data;
+        emit({ type: 'update', entity_id: d.entity_id, state: d.new_state });
+      } else if (m.type === 'event' && m.event && /_registry_updated$/.test(m.event.event_type)) {
+        clearTimeout(registryTimer);
+        registryTimer = setTimeout(() => loadRegistries().catch(() => {}), 400);
+      } else if (m.type === 'result' || m.type === 'pong') {
+        const p = pending.get(m.id);
+        if (!p) return;
+        pending.delete(m.id);
+        if (m.type === 'pong' || m.success) p.resolve(m.result);
+        else p.reject(new Error((m.error && m.error.message) || 'request failed'));
+      }
+    };
+
+    ws.onclose = () => {
+      clearInterval(pingTimer);
+      for (const p of pending.values()) p.reject(new Error('connection lost'));
+      pending.clear();
+      if (closedByUs) return;
+      setStatus({ mode: 'live', state: 'reconnecting', message: 'Connection lost, retrying' });
+      schedule();
+    };
+  }
+
+  function onVisible() {
+    if (document.visibilityState === 'visible' && !closedByUs && (!ws || ws.readyState === WebSocket.CLOSED)) {
+      retry = 0;
+      open();
+    }
+  }
+
+  return {
+    mode: 'live',
+    hassUrl,
+    connect(onMessage, onStatus) {
+      emit = onMessage;
+      setStatus = onStatus;
+      closedByUs = false;
+      document.addEventListener('visibilitychange', onVisible);
+      open();
+    },
+    disconnect() {
+      closedByUs = true;
+      clearTimeout(retryTimer);
+      clearInterval(pingTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+      if (ws) ws.close();
+    },
+    callService(domain, service, data = {}, target) {
+      const msg = { type: 'call_service', domain, service, service_data: data };
+      if (target) msg.target = target;
+      return send(msg);
+    },
+    async fetchHistory(ids, startIso, endIso) {
+      const res = await send({
+        type: 'history/history_during_period',
+        start_time: startIso, end_time: endIso, entity_ids: ids,
+        minimal_response: true, no_attributes: true,
+      }, 30000);
+      const out = {};
+      for (const id of ids) {
+        out[id] = (res[id] || []).map((r) => [new Date((r.lu ?? r.lc) * 1000).toISOString(), r.s]);
+      }
+      return out;
+    },
+    async fetchAutomationConfig(configId) {
+      const res = await fetch(`${hassUrl}/api/config/automation/config/${encodeURIComponent(configId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return res.ok ? res.json() : null;
+    },
+    automationEditorUrl(configId) {
+      return `${hassUrl}/config/automation/edit/${encodeURIComponent(configId)}`;
+    },
+
+    // ---- automations ----
+    saveAutomation(configId, config) {
+      return rest('POST', `config/automation/config/${encodeURIComponent(configId)}`, config);
+    },
+    deleteAutomation(configId) {
+      return rest('DELETE', `config/automation/config/${encodeURIComponent(configId)}`);
+    },
+
+    // ---- rooms ----
+    createArea(name) { return send({ type: 'config/area_registry/create', name }); },
+    renameArea(areaId, name) { return send({ type: 'config/area_registry/update', area_id: areaId, name }); },
+    deleteArea(areaId) { return send({ type: 'config/area_registry/delete', area_id: areaId }); },
+
+    // ---- devices ----
+    updateDevice(deviceId, patch) { return send({ type: 'config/device_registry/update', device_id: deviceId, ...patch }); },
+    async removeDevice(deviceId, device) {
+      const zha = (device?.identifiers || []).find((i) => i[0] === 'zha');
+      if (zha) {
+        await send({ type: 'call_service', domain: 'zha', service: 'remove', service_data: { ieee: zha[1] } }, 30000);
+        return;
+      }
+      const entries = device?.config_entries || [];
+      if (!entries.length) throw new Error('this device has no integration to remove it from');
+      for (const entryId of entries) {
+        try {
+          await send({ type: 'config/device_registry/remove_config_entry', device_id: deviceId, config_entry_id: entryId });
+        } catch {
+          // Integrations that don't support removing single devices: remove the whole entry.
+          await rest('DELETE', `config/config_entries/entry/${entryId}`);
+        }
+      }
+    },
+
+    // ---- pairing ----
+    permitJoin(seconds) {
+      return send({ type: 'call_service', domain: 'zha', service: 'permit', service_data: { duration: seconds } });
+    },
+    stopJoin() {
+      return send({ type: 'call_service', domain: 'zha', service: 'permit', service_data: { duration: 0 } }).catch(() => {});
+    },
+    flowStart(handler) {
+      return rest('POST', 'config/config_entries/flow', { handler, show_advanced_options: false });
+    },
+    flowSubmit(flowId, data) {
+      return rest('POST', `config/config_entries/flow/${flowId}`, data);
+    },
+    flowAbort(flowId) {
+      return rest('DELETE', `config/config_entries/flow/${flowId}`).catch(() => {});
+    },
+    matterCommission(code) {
+      return send({ type: 'matter/commission', code }, 120000);
+    },
+    integrationUrl(domain) {
+      return `${hassUrl}/config/integrations/dashboard/add?domain=${encodeURIComponent(domain)}`;
+    },
+  };
+}
