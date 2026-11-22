@@ -1,9 +1,10 @@
 // Keeps the app's own files cached so it opens instantly and even without a
 // connection. Home Assistant data is never cached.
-const CACHE = 'evra-v9';
+const CACHE = 'evra-v10';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css', './icons/icon.svg',
   './js/main.js', './js/config.js', './js/catalog.js', './js/store.js', './js/util.js', './js/icons.js', './js/components.js',
+  './js/ideas.js', './js/scenes.js', './js/views/scenes.js',
   './js/backends/demo.js', './js/backends/live.js', './js/devices/cards.js',
   './js/views/home.js', './js/views/devices.js', './js/views/remotes.js', './js/views/energy.js',
   './js/views/automations.js', './js/views/automation-editor.js', './js/views/chat.js', './js/views/settings.js',

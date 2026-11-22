@@ -133,7 +133,7 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.4; }
 a { color: inherit; }
-h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -0.015em; }
+h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -0.015em; }
 p { margin: 0; }
 .icon { flex: none; display: block; }
 .muted { color: var(--muted); }
@@ -190,7 +190,8 @@ p { margin: 0; }
 
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  /* One column per visible tab, however many there are. */
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding: 6px 6px env(safe-area-inset-bottom);
   background: color-mix(in srgb, var(--card) 92%, transparent);
@@ -217,6 +218,7 @@ p { margin: 0; }
 @media (min-width: 900px) {
   .nav {
     top: 0; right: auto; width: 96px; height: auto;
+    grid-auto-flow: row; grid-auto-columns: auto;
     grid-template-columns: 1fr; grid-auto-rows: 72px; align-content: start;
     padding: 18px 0 0; border-top: 0; border-right: 1px solid var(--line);
   }
@@ -626,6 +628,89 @@ path.chart-area { stroke: none; }
 .auto-desc { color: var(--muted); font-size: 14px; }
 .auto-desc:empty { display: none; }
 .auto-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.auto-mine, .ideas { display: flex; flex-direction: column; gap: var(--gap); }
+.auto-mine[hidden], .ideas[hidden] { display: none; }
+.tab-count { margin-left: 6px; font-size: 11px; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); }
+.input.short { width: 80px; flex: 0 0 80px; }
+.segmented button { white-space: nowrap; }
+.narrow-text { display: none; }
+@media (max-width: 480px) {
+  .wide-text { display: none; }
+  .narrow-text { display: inline; }
+}
+.idea-hint { margin: 0; }
+
+/* ---- automation ideas: ready ones in full colour, the rest faded ---- */
+.idea-group { display: flex; flex-direction: column; gap: 10px; }
+.idea-group > .muted.small { margin: -4px 4px 0; }
+.idea-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.idea {
+  --tone: var(--accent);
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+  border-radius: var(--radius); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+}
+.idea-top { display: flex; align-items: flex-start; gap: 12px; align-self: stretch; }
+.idea-icon {
+  width: 40px; height: 40px; border-radius: 13px; flex: none; display: grid; place-items: center;
+  color: color-mix(in srgb, var(--tone) var(--ink-mix), var(--text));
+  background: color-mix(in srgb, var(--tone) var(--bubble), var(--card));
+}
+.idea-titles { flex: 1; min-width: 0; }
+.idea-titles h4 { font-size: 15px; line-height: 1.3; }
+.idea-cat { font-size: 12px; color: var(--muted); }
+.idea-text { color: var(--muted); font-size: 14px; }
+.idea-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.idea-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 999px; font-size: 12px; font-weight: 650;
+  background: var(--card-2); color: var(--text); text-decoration: none; white-space: nowrap;
+}
+.idea-chip .icon { color: color-mix(in srgb, var(--tone) var(--ink-mix), var(--text)); }
+/* A product the idea still needs: dashed, colourless, links to the catalogue. */
+.idea-chip.missing { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+.idea-chip.missing .icon { color: var(--muted); }
+.idea-chip.missing:hover { color: var(--text); border-color: var(--muted); }
+.idea-chip .chip-note { font-weight: 550; font-size: 11px; }
+.btn.small { padding: 7px 12px; font-size: 13px; border-radius: 10px; }
+.idea-lock { color: var(--muted); padding: 4px; }
+.idea.unavailable { background: transparent; box-shadow: none; border-style: dashed; border-color: var(--line-strong); }
+.idea.unavailable .idea-icon { color: var(--muted); background: var(--card-2); filter: grayscale(1); }
+.idea.unavailable .idea-titles h4 { color: var(--muted); }
+.idea.unavailable .idea-chip:not(.missing) { background: color-mix(in srgb, var(--card-2) 60%, transparent); color: var(--muted); }
+.idea.unavailable .idea-chip:not(.missing) .icon { color: var(--muted); }
+
+/* ---- scenes ---- */
+.scene-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); align-items: start; }
+.scene {
+  --tone: var(--accent);
+  background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow);
+  border-radius: var(--radius); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: opacity 0.2s;
+}
+.scene.busy { opacity: 0.7; }
+.scene-top { display: flex; align-items: center; gap: 12px; }
+.scene-icon {
+  width: 48px; height: 48px; border-radius: 15px; flex: none; display: grid; place-items: center;
+  color: color-mix(in srgb, var(--tone) var(--ink-mix), var(--text));
+  background: color-mix(in srgb, var(--tone) var(--bubble), var(--card));
+}
+.scene-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.scene-titles h3 { font-size: 17px; }
+.scene-last { font-size: 12px; font-weight: 650; color: color-mix(in srgb, var(--tone) var(--ink-mix), var(--text)); }
+.scene-start { flex: none; }
+.scene-start:disabled { opacity: 0.45; cursor: default; }
+.scene-text { color: var(--muted); font-size: 14px; margin-top: -4px; }
+.scene-rooms { display: flex; flex-wrap: wrap; gap: 6px; }
+.room-chip.small { padding: 6px 12px; font-size: 13px; }
+.scene-steps summary { cursor: pointer; font-size: 13px; font-weight: 650; color: var(--text); list-style-position: outside; }
+.scene-steps ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.scene-steps li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.scene-steps li .icon { color: color-mix(in srgb, var(--tone) var(--ink-mix), var(--text)); flex: none; }
+.scene-steps li span { flex: 1; min-width: 0; }
+.scene-steps li strong { color: var(--text); font-weight: 650; }
+.scene-empty { margin: 0; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -692,6 +777,12 @@ path.chart-area { stroke: none; }
    Navigation extras
    ========================================================================= */
 .nav-item.wide-only { display: none; }
+/* Six tabs on a phone: slightly smaller labels so "Automations" fits. */
+@media (max-width: 899px) {
+  .nav-item { font-size: 10px; letter-spacing: -0.01em; min-width: 0; }
+  .nav-label { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-icon { width: 48px; }
+}
 @media (min-width: 900px) { .nav-item.wide-only { display: flex; } }
 .nav-devil.active .nav-icon { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 

@@ -9,7 +9,9 @@ import { card } from '../components.js';
 
 // ---- entity lists for the pickers ------------------------------------------------
 
-const STATE_DOMAINS = ['binary_sensor', 'switch', 'light', 'lock', 'cover', 'input_boolean', 'button', 'event', 'siren', 'valve', 'climate', 'media_player'];
+const STATE_DOMAINS = ['binary_sensor', 'switch', 'light', 'lock', 'cover', 'input_boolean', 'button', 'event', 'siren', 'valve', 'climate', 'media_player', 'weather'];
+// Conditions can also check whether it's dark (the sun) and the weather.
+const CONDITION_DOMAINS = [...STATE_DOMAINS.filter((d) => !['button', 'event'].includes(d)), 'sun'];
 const CONTROL_DOMAINS = ['light', 'switch', 'cover', 'lock', 'valve', 'siren', 'climate', 'input_boolean', 'fan', 'scene', 'automation'];
 
 function entitiesFor(test) {
@@ -68,6 +70,8 @@ function stateOptions(entityId) {
   if (d === 'valve') return [['open', 'opens'], ['closed', 'closes']];
   if (d === 'climate') return [['heat', 'starts heating'], ['off', 'turns off']];
   if (d === 'media_player') return [['playing', 'starts playing'], ['paused', 'pauses'], ['off', 'turns off']];
+  if (d === 'sun') return [['below_horizon', 'sets'], ['above_horizon', 'rises']];
+  if (d === 'weather') return [['rainy', 'turns rainy'], ['pouring', 'turns to heavy rain'], ['snowy', 'turns snowy'], ['lightning-rainy', 'turns stormy'], ['sunny', 'turns sunny'], ['cloudy', 'turns cloudy']];
   return [['on', 'turns on'], ['off', 'turns off']];
 }
 
@@ -86,7 +90,7 @@ function serviceOptions(entityId) {
 
 // ---- config <-> builder ---------------------------------------------------------------
 
-const KNOWN = { trigger: ['trigger', 'platform', 'entity_id', 'to', 'from', 'above', 'below', 'at', 'event', 'offset'], condition: ['condition', 'entity_id', 'state', 'after', 'before', 'weekday'] };
+const KNOWN = { trigger: ['trigger', 'platform', 'entity_id', 'to', 'from', 'above', 'below', 'at', 'event', 'offset', 'for'], condition: ['condition', 'entity_id', 'state', 'after', 'before', 'weekday'] };
 const extras = (obj, known) => Object.fromEntries(Object.entries(obj).filter(([k]) => !known.includes(k)));
 const hhmm = (t) => (t ? String(t).slice(0, 5) : '');
 const toSeconds = (d) => {
@@ -101,6 +105,21 @@ const offsetMinutes = (o) => {
 };
 const offsetString = (m) => { const a = Math.abs(m); return `${m < 0 ? '-' : ''}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}:00`; };
 const single = (x) => (Array.isArray(x) ? (x.length === 1 ? x[0] : null) : x);
+// "for at least N minutes" on a trigger, both ways. '' means no wait; null
+// means a value the builder can't show (such as a template).
+const forMinutes = (f) => {
+  if (f == null) return '';
+  if (typeof f === 'string' && !/^\d+(:\d+){0,2}$/.test(f)) return null;
+  if (typeof f === 'object' && Object.values(f).some((v) => typeof v !== 'number')) return null;
+  const s = toSeconds(f);
+  return Number.isFinite(s) ? Math.round(s / 6) / 10 : null;
+};
+const forConfig = (m) => {
+  const s = Math.round(Number(m) * 60);
+  if (!Number.isFinite(s) || s <= 0) return {};
+  const parts = { hours: Math.floor(s / 3600), minutes: Math.floor((s % 3600) / 60), seconds: s % 60 };
+  return { for: Object.fromEntries(Object.entries(parts).filter(([, v]) => v)) };
+};
 
 // Returns builder state, or null if the configuration uses things the builder can't show.
 export function fromConfig(cfg) {
@@ -109,8 +128,9 @@ export function fromConfig(cfg) {
     for (const t of [].concat(cfg.triggers || cfg.trigger || [])) {
       const type = t.trigger || t.platform;
       const extra = extras(t, KNOWN.trigger);
-      if (type === 'state' && single(t.entity_id) && !t.attribute && !t.for) state.triggers.push({ type: 'state', entity_id: single(t.entity_id), to: t.to ?? '', from: t.from, extra });
-      else if (type === 'numeric_state' && single(t.entity_id) && !t.for) state.triggers.push({ type: 'numeric', entity_id: single(t.entity_id), direction: t.above != null ? 'above' : 'below', value: t.above ?? t.below, extra });
+      if (forMinutes(t.for) === null) return null;
+      if (type === 'state' && single(t.entity_id) && !t.attribute) state.triggers.push({ type: 'state', entity_id: single(t.entity_id), to: t.to ?? '', from: t.from, forMin: forMinutes(t.for), extra });
+      else if (type === 'numeric_state' && single(t.entity_id) && !t.attribute && (t.above == null || t.below == null)) state.triggers.push({ type: 'numeric', entity_id: single(t.entity_id), direction: t.above != null ? 'above' : 'below', value: t.above ?? t.below, forMin: forMinutes(t.for), extra });
       else if (type === 'time' && single(t.at) && /^\d\d:\d\d/.test(single(t.at))) state.triggers.push({ type: 'time', at: hhmm(single(t.at)), extra });
       else if (type === 'sun') state.triggers.push({ type: 'sun', event: t.event || 'sunset', offset: offsetMinutes(t.offset), extra });
       else return null;
@@ -150,8 +170,8 @@ export function fromConfig(cfg) {
 export function toConfig(st) {
   const cfg = { alias: st.alias.trim() || 'New automation', description: st.description.trim(), mode: st.mode, triggers: [], conditions: [], actions: [] };
   for (const t of st.triggers) {
-    if (t.type === 'state') cfg.triggers.push({ ...t.extra, trigger: 'state', entity_id: t.entity_id, ...(t.from != null && t.from !== '' ? { from: t.from } : {}), ...(t.to !== '' && t.to != null ? { to: t.to } : {}) });
-    else if (t.type === 'numeric') cfg.triggers.push({ ...t.extra, trigger: 'numeric_state', entity_id: t.entity_id, [t.direction]: Number(t.value) });
+    if (t.type === 'state') cfg.triggers.push({ ...t.extra, trigger: 'state', entity_id: t.entity_id, ...(t.from != null && t.from !== '' ? { from: t.from } : {}), ...(t.to !== '' && t.to != null ? { to: t.to } : {}), ...forConfig(t.forMin) });
+    else if (t.type === 'numeric') cfg.triggers.push({ ...t.extra, trigger: 'numeric_state', entity_id: t.entity_id, [t.direction]: Number(t.value), ...forConfig(t.forMin) });
     else if (t.type === 'time') cfg.triggers.push({ ...t.extra, trigger: 'time', at: `${t.at}:00` });
     else if (t.type === 'sun') cfg.triggers.push({ ...t.extra, trigger: 'sun', event: t.event, ...(t.offset ? { offset: offsetString(Number(t.offset)) } : {}) });
   }
@@ -195,7 +215,8 @@ function validate(st) {
 
 // ---- the screen ---------------------------------------------------------------------------
 
-export function renderAutomationEditor(root, cleanup, configId) {
+// template: a ready configuration to start a new automation from (an idea).
+export function renderAutomationEditor(root, cleanup, configId, template = null) {
   const isNew = !configId;
   const id = configId || String(Date.now());
   let st = { alias: '', description: '', mode: 'single', triggers: [{ type: 'state', entity_id: '', to: 'on', extra: {} }], conditions: [], actions: [{ type: 'service', entity_id: '', service: 'turn_on', data: {} }] };
@@ -207,6 +228,15 @@ export function renderAutomationEditor(root, cleanup, configId) {
   root.append(h('a', { class: 'back-link', href: '#/automations' }, icon('left', 16), 'Automations'), body, actionsBar);
 
   async function load() {
+    if (isNew && template) {
+      const built = fromConfig(template);
+      if (built) st = built;
+      else { jsonMode = true; jsonText = JSON.stringify(template, null, 2); st.alias = template.alias || ''; }
+      body.replaceChildren();
+      root.insertBefore(h('p', { class: 'hint idea-hint' }, icon('sparkle', 16), 'Filled in from an idea with your devices. Change anything you like, then Save.'), body);
+      draw();
+      return;
+    }
     if (isNew) { draw(); return; }
     body.replaceChildren(h('p', { class: 'muted pad' }, 'Loading…'));
     let cfg = null;
@@ -316,14 +346,21 @@ export function renderAutomationEditor(root, cleanup, configId) {
 
   function triggerRow(t, redraw) {
     const typeSel = select([['state', 'A device changes'], ['numeric', 'A value goes above or below'], ['time', 'At a time of day'], ['sun', 'At sunrise or sunset']], t.type, (v) => {
-      Object.assign(t, { type: v, entity_id: '', to: 'on', direction: 'above', value: '', at: '07:00', event: 'sunset', offset: 0 });
+      Object.assign(t, { type: v, entity_id: '', to: 'on', direction: 'above', value: '', at: '07:00', event: 'sunset', offset: 0, forMin: '' });
       redraw();
     }, 'Trigger type');
+    // "...and stays that way for N minutes" (empty = straight away).
+    const forField = () => h('div', { class: 'inline-fields' },
+      h('span', { class: 'muted small' }, 'for at least'),
+      input(t.forMin ?? '', (v) => { t.forMin = v; }, { type: 'number', min: 0, step: 'any', placeholder: '0', 'aria-label': 'For at least this many minutes', class: 'input short' }),
+      h('span', { class: 'muted small' }, 'minutes'));
     if (t.type === 'state') {
       const list = entitiesFor((s) => STATE_DOMAINS.includes(domainOf(s.entity_id)));
       const opts = t.entity_id ? stateOptions(t.entity_id) : [];
+      const instant = ['button', 'event'].includes(domainOf(t.entity_id));
       return [typeSel, entityPicker(list, t.entity_id, (v) => { t.entity_id = v; t.to = stateOptions(v)[0][0]; t.from = undefined; redraw(); }),
-        t.entity_id ? select(opts, t.to ?? '', (v) => { t.to = v; }, 'State') : null];
+        t.entity_id ? select(opts, t.to ?? '', (v) => { t.to = v; }, 'State') : null,
+        t.entity_id && !instant ? forField() : null];
     }
     if (t.type === 'numeric') {
       const list = entitiesFor((s) => domainOf(s.entity_id) === 'sensor' && Number.isFinite(parseFloat(s.state)));
@@ -332,7 +369,8 @@ export function renderAutomationEditor(root, cleanup, configId) {
         h('div', { class: 'inline-fields' },
           select([['above', 'goes above'], ['below', 'drops below']], t.direction, (v) => { t.direction = v; }, 'Direction'),
           input(t.value, (v) => { t.value = v; }, { type: 'number', step: 'any', placeholder: 'Value', 'aria-label': 'Value' }),
-          unit ? h('span', { class: 'muted' }, unit) : null)];
+          unit ? h('span', { class: 'muted' }, unit) : null),
+        forField()];
     }
     if (t.type === 'time') return [typeSel, input(t.at, (v) => { t.at = v; }, { type: 'time', 'aria-label': 'Time' })];
     return [typeSel, h('div', { class: 'inline-fields' },
@@ -356,8 +394,10 @@ export function renderAutomationEditor(root, cleanup, configId) {
           return h('button', { class: `day${on ? ' on' : ''}`, type: 'button', 'aria-pressed': String(on), onclick: () => { c.weekday = on ? c.weekday.filter((x) => x !== d) : [...c.weekday, d]; redraw(); } }, l);
         }), h('span', { class: 'muted small' }, c.weekday.length ? '' : 'every day'))];
     }
-    const list = entitiesFor((s) => STATE_DOMAINS.includes(domainOf(s.entity_id)) && !['button', 'event'].includes(domainOf(s.entity_id)));
-    const opts = c.entity_id ? stateOptions(c.entity_id).map(([v, l]) => [v, l.replace(/^(opens|closes|detects someone|clears|turns on|turns off|locks|unlocks|starts heating|raises the alarm|goes back to clear)$/, (m) => ({ opens: 'is open', closes: 'is closed', 'detects someone': 'sees someone', clears: 'is clear', 'turns on': 'is on', 'turns off': 'is off', locks: 'is locked', unlocks: 'is unlocked', 'starts heating': 'is heating', 'raises the alarm': 'is alarming', 'goes back to clear': 'is clear' }[m]))]) : [];
+    const list = entitiesFor((s) => CONDITION_DOMAINS.includes(domainOf(s.entity_id)));
+    const opts = c.entity_id ? stateOptions(c.entity_id).map(([v, l]) => [v, l
+      .replace(/^(opens|closes|detects someone|clears|turns on|turns off|locks|unlocks|starts heating|raises the alarm|goes back to clear|sets|rises)$/, (m) => ({ opens: 'is open', closes: 'is closed', 'detects someone': 'sees someone', clears: 'is clear', 'turns on': 'is on', 'turns off': 'is off', locks: 'is locked', unlocks: 'is unlocked', 'starts heating': 'is heating', 'raises the alarm': 'is alarming', 'goes back to clear': 'is clear', sets: 'is down (dark)', rises: 'is up (daylight)' }[m]))
+      .replace(/^turns (to )?/, 'is ')]) : [];
     return [typeSel, entityPicker(list, c.entity_id, (v) => { c.entity_id = v; c.state = stateOptions(v)[0][0]; redraw(); }),
       c.entity_id ? select(opts, c.state, (v) => { c.state = v; }, 'State') : null];
   }

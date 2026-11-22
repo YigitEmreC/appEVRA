@@ -275,12 +275,43 @@ export function createDemoBackend() {
     return false;
   }
 
+  // Is the state a trigger waits for still true? (for "...for 10 minutes")
+  function triggerHolds(t, s) {
+    if (!s) return false;
+    const type = t.trigger || t.platform;
+    if (type === 'state') return t.to == null || list(t.to).map(String).includes(s.state);
+    if (type === 'numeric_state') {
+      const x = parseFloat(s.state);
+      return Number.isFinite(x) && (t.above == null || x > Number(t.above)) && (t.below == null || x < Number(t.below));
+    }
+    return false;
+  }
+
+  // Triggers with "for": started when the state is reached, cancelled if it changes back.
+  const pendingFor = new Map();
   function checkStateTriggers(id, old, next) {
     for (const [configId, cfg] of automations) {
       const ent = autoEntityFor(configId);
       if (!ent || stateOf(ent) !== 'on') continue;
-      const trig = list(cfg.triggers || cfg.trigger).find((t) => triggerMatches(t, id, old, next));
-      if (trig) runAutomation(configId, { id: trig.id, entity_id: id, from_state: old, to_state: next });
+      let fired = false;
+      list(cfg.triggers || cfg.trigger).forEach((t, i) => {
+        if (!list(t.entity_id).includes(id) || t.attribute) return;
+        const key = `${configId}#${i}`;
+        if (t.for != null) {
+          if (!triggerHolds(t, next)) { clearTimeout(pendingFor.get(key)); pendingFor.delete(key); return; }
+          if (triggerMatches(t, id, old, next) && !pendingFor.has(key)) {
+            pendingFor.set(key, setTimeout(() => {
+              pendingFor.delete(key);
+              if (stateOf(ent) === 'on' && triggerHolds(t, states.get(id))) runAutomation(configId, { id: t.id, entity_id: id, from_state: old, to_state: states.get(id) });
+            }, delayMs(t.for)));
+          }
+          return;
+        }
+        if (!fired && triggerMatches(t, id, old, next)) {
+          fired = true;
+          runAutomation(configId, { id: t.id, entity_id: id, from_state: old, to_state: next });
+        }
+      });
     }
   }
 
@@ -495,6 +526,8 @@ export function createDemoBackend() {
 
   function disconnect() {
     for (const t of timers) { clearInterval(t); clearTimeout(t); }
+    for (const t of pendingFor.values()) clearTimeout(t);
+    pendingFor.clear();
     timers.length = 0;
     clearTimeout(joinTimer);
     for (const ctx of running.values()) ctx.cancelled = true;

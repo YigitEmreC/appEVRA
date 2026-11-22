@@ -6,11 +6,15 @@ It's plain HTML, CSS and JavaScript with no build step, so there's nothing to in
 
 ## Run it on this PC
 
+Double-click **`Start Evra.bat`**. It starts the local server in a small minimised window (close that window to stop it) and opens Evra in its own Edge or Chrome app window. If the server is already running it just opens the app. `"Start Evra.bat" 8020` uses another port.
+
+By hand, from the `SMART` folder:
+
 ```bash
-python app/tools/dev_server.py
+python appEVRA/tools/dev_server.py
 ```
 
-Then open http://localhost:8010/app/. Run the command from the `SMART` folder. Port 8000 is left alone because your website project uses it.
+Then open http://localhost:8010/appEVRA/. Port 8000 is left alone because your website project uses it. The server serves the whole `SMART` folder because demo mode reads `../ha-snapshot`, so a copy of this repository on its own has no demo data.
 
 The app starts in **demo mode**: a pretend Home Assistant built from the snapshot in `../ha-snapshot`, taken on 13 November 2026. Everything works in demo mode: adding and removing any catalogue product, rooms, and automations, which actually run. Changes are kept in the browser; **Settings → Reset demo** goes back to the snapshot (Reset demo is under Demo controls, which only show in developer mode).
 
@@ -24,7 +28,8 @@ The sun/moon button in the header switches between light and dark; Settings → 
 |---|---|
 | Home | Alerts for smoke, gas or water; the room's climate; quick actions; room chips; every device as a tile with its own controls |
 | Devices | All devices by room, the Rooms tab (create, rename, delete), device details (rename, move, remove) and **Add device** |
-| Automations | Every automation with on/off, Run now, Edit and Delete, plus **New automation** |
+| Scenes | Morning, Afternoon, Night, Sleep, Eco, Party, Movie, Entertainment, Music and Dinner. Each has room chips (All rooms or any mix) and a "What it does" list of the exact changes; only devices in the chosen rooms change. Plugs are never touched |
+| Automations | **My automations**: every automation with on/off, Run now, Edit and Delete, plus **New automation**. **Ideas**: about 40 automations the Evra range can do; ones your devices can already do open the editor filled in, the rest are faded with dashed chips for the missing products (tap one to see the product) |
 | Assistant | Empty placeholder for the Evra assistant chat |
 | Settings | Connection (demo or live), appearance (light, dark, auto), developer mode, electricity price, batteries, demo controls (developer mode), shortcuts to Energy, Remotes and Rooms |
 | Energy, Remotes | Power, temperature and activity charts; the full TV and heater remotes, one at a time: swipe sideways or use the tabs and arrows. In the side bar on wide screens, and linked from Settings on phones |
@@ -64,11 +69,15 @@ When it connects, you name it and choose its room.
 
 **New automation** opens a simple editor:
 
-- **When:** a device changes, a value goes above or below a number, a time of day, or sunrise/sunset.
-- **Only if** (optional): a time window and days, or a device being in a state.
+- **When:** a device changes, a value goes above or below a number (both optionally "for at least N minutes"), a time of day, or sunrise/sunset.
+- **Only if** (optional): a time window and days, a device being in a state, whether it's dark (the sun), or the weather.
 - **Then:** control a device (lights with brightness and colour, blinds with position, thermostat with temperature), press a remote button, wait, or send a notification.
 
 **Edit as JSON** shows the full Home Assistant configuration for anything more advanced. Automations the simple editor can't show, like your presence automation with its choices and scenes, open as JSON automatically.
+
+**Ideas** (`js/ideas.js`) are written once and filled in with whatever devices the home has. Each idea lists the kinds of device it needs, such as a motion sensor and a light; `CAPS` says which catalogue products count for each kind. When the needs are met, "Set it up" opens the simple editor with the home's own devices, preferring ones in the same room. Notifications go to Home Assistant's notification list; safety alerts (smoke, gas, leak, emergency button) also go to phones with the Home Assistant app.
+
+**Scenes** (`js/scenes.js`) list what lights, the TV and heater (through the IR kit's power trackers), radiator valves, blinds and the lock should do. Room choices are kept on each device (in the browser), not in Home Assistant.
 
 ## Where things live
 
@@ -77,6 +86,9 @@ When it connects, you name it and choose its room.
 | `js/catalog.js` | The Evra range: products, categories, pairing methods, installation steps |
 | `js/config.js` | This home's specifics: the heater/TV IR codes and trackers, colour presets, quick actions |
 | `js/store.js` | States, devices, rooms and entities; helpers used by every screen |
+| `js/ideas.js` | Automation ideas, what each needs, and how each is built from the home's devices |
+| `js/scenes.js` | The ten scenes and how they're applied to the chosen rooms |
+| `Start Evra.bat` | Starts the local server and opens the app |
 | `js/devices/cards.js` | The device tiles, one builder per kind |
 | `js/backends/demo.js` | The demo Home Assistant, including a small automation engine |
 | `js/backends/live.js` | The real connection: WebSocket API, login, pairing, rooms, automations |

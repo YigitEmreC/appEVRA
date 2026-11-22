@@ -11,11 +11,13 @@ import { renderAutomations } from './views/automations.js';
 import { renderSettings } from './views/settings.js';
 import { renderDevices } from './views/devices.js';
 import { renderChat } from './views/chat.js';
+import { renderScenes } from './views/scenes.js';
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [
   { id: 'home', label: 'Home', icon: 'home', render: renderHome, title: HOME.room },
   { id: 'devices', label: 'Devices', icon: 'devices', render: renderDevices, title: 'Devices' },
+  { id: 'scenes', label: 'Scenes', icon: 'scenes', render: renderScenes, title: 'Scenes' },
   { id: 'automations', label: 'Automations', icon: 'robot', render: renderAutomations, title: 'Automations' },
   { id: 'energy', label: 'Energy', icon: 'chart', render: renderEnergy, title: 'Energy & climate', mobile: false },
   { id: 'remotes', label: 'Remotes', icon: 'remote', render: renderRemotes, title: 'Remotes', mobile: false },

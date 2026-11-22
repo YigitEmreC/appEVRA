@@ -147,6 +147,8 @@ export function loadSettings() {
     pricePerKwh: saved.pricePerKwh ?? 0.30,
     room: saved.room,
     remote: saved.remote,
+    sceneRooms: saved.sceneRooms,
+    lastScene: saved.lastScene,
   };
 }
 export function saveSettings(patch) {
