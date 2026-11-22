@@ -53,8 +53,10 @@ def main():
     ap.add_argument("--out", default=str(APP / "dist" / "addon"), help="where to put it (default: dist/addon)")
     args = ap.parse_args()
     out = Path(args.out).resolve()
-    if out == APP or APP in out.parents and out.parts[len(APP.parts)] != "dist":
-        sys.exit("Put the build in dist/ or outside the app folder, so it can't overwrite the app.")
+    # Only into dist/ or build/ (the GitHub workflow), or outside the app folder,
+    # so a typo can't overwrite the app itself.
+    if out == APP or (APP in out.parents and out.parts[len(APP.parts)] not in ("dist", "build")):
+        sys.exit("Put the build in dist/, build/ or outside the app folder, so it can't overwrite the app.")
 
     config = (ADDON / "config.yaml").read_text(encoding="utf-8")
     m = re.search(r'^version:\s*"([^"]+)"', config, re.M)

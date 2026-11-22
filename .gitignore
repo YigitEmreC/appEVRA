@@ -4,8 +4,9 @@ tools/test_hub/data/
 tools/accounts/data/
 __pycache__/
 
-# Built add-on (python tools/build_addon.py)
+# Built add-on (python tools/build_addon.py; the GitHub workflow uses build/)
 dist/
+build/
 
 # Secrets: never commit keys or environment files
 .env
