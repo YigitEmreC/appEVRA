@@ -289,3 +289,7 @@ The wall panel can open the same address; the layout has a compact mode for its 
 ```bash
 python app/tools/make_icons.py
 ```
+
+## Licence
+
+Copyright (c) 2026 Evra. All rights reserved. The code is public to read; you may install and use the Evra app and add-on on your own devices. Copying, changing, sharing or selling it needs written permission. See [LICENSE](LICENSE).
