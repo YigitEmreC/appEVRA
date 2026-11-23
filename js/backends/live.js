@@ -29,19 +29,30 @@ async function tokenRequest(hassUrl, params) {
   return res.json();
 }
 
-// True when something answers at the Home Assistant address. "no-cors" gives an
-// unreadable reply, but any reply at all means the server is there; a wrong name,
-// a switched-off hub or a timeout throws instead.
-async function reachable(hassUrl) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 6000);
+// Is Home Assistant really there and willing to sign this app in? Asked before
+// leaving the app for its login page, so nobody lands on an error page instead
+// (a Cloudflare "tunnel error" when the house's Pi is off or not set up yet, or a
+// browser "can't reach this page"):
+//   'ok'           Home Assistant answered the sign-in endpoint and allows this app
+//                  (an unknown request type, so nothing happens there)
+//   'not-ready'    something answers, but not Home Assistant allowing this app: the
+//                  tunnel has no running Pi behind it, or cors_allowed_origins lacks this app
+//   'unreachable'  nothing answers at all (wrong address, no internet, hub off at home)
+export async function reachable(hassUrl) {
+  const attempt = async (opts) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 7000);
+    try { return await fetch(hassUrl + '/auth/token', { ...opts, cache: 'no-store', signal: ctrl.signal }); } finally { clearTimeout(timer); }
+  };
   try {
-    await fetch(hassUrl + '/auth/providers', { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
-    return true;
+    const res = await attempt({ method: 'POST', body: new URLSearchParams({ grant_type: 'evra_reachability_check' }) });
+    if (res.status < 500) return 'ok';
+  } catch { /* unreadable: see below */ }
+  try {
+    await attempt({ method: 'GET', mode: 'no-cors' });
+    return 'not-ready';
   } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
+    return 'unreachable';
   }
 }
 
@@ -82,8 +93,14 @@ export async function getAccessToken(hassUrl, { interactive = true } = {}) {
   if (!interactive) throw new Error('not signed in');
   // Only leave the app for the login page if Home Assistant answers. Otherwise the
   // browser lands on a "can't reach this page" error and every reload does it again.
-  if (!(await reachable(hassUrl))) {
-    throw new Error(`can't reach ${hassUrl}. Check the address in Settings → Connection, or switch to Demo.`);
+  // Evra keeps trying (open() schedules another attempt), so it connects by itself
+  // once the house answers.
+  const there = await reachable(hassUrl);
+  if (there === 'unreachable') {
+    throw new Error(`can't reach ${hassUrl}. Check the internet connection and the address in Settings → Connection.`);
+  }
+  if (there === 'not-ready') {
+    throw new Error(`your home's hub isn't answering yet (${new URL(hassUrl).host}). Its Pi may be off or still being set up, or Home Assistant doesn't allow this app yet (cors_allowed_origins). Evra keeps trying.`);
   }
   const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
   try { sessionStorage.setItem(OAUTH_STATE_KEY, state); } catch { /* storage blocked */ }
