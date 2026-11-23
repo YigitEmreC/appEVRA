@@ -1,24 +1,27 @@
 // The Evra assistant: a chat that answers questions about the home.
 //
-// The app never holds the Gemini key. It talks to the assistant server on this
-// computer (EvrAI/gemini_home_starter/server.py), sending the question plus how
-// to see the home: in live mode the Home Assistant address and the app's own
-// sign-in token (the server reads states with it, read-only); in demo mode the
-// demo home itself. The assistant never changes anything itself: it sends back
-// prepared changes, shown here as cards, and the app carries out the ones the
-// person approves (assistant-actions.js), then tells the assistant the result.
+// The app never holds the Gemini key. It talks to the assistant on the Evra website
+// (https://evrasmarthome.com/api/assistant, webEVRA functions/api/assistant.js), which
+// checks the Evra membership (Premium) and the monthly question limit itself.
+// With each question the app sends only what's needed: a filtered list of the home's
+// devices, rooms, states and automations (no locks, cameras, alarms or people, and
+// never the Home Assistant sign-in). The member's name, e-mail, address and phone are
+// never sent. The assistant never connects to the home and never changes anything: it
+// sends back prepared changes, shown here as cards, and the app carries out the ones
+// the person approves (assistant-actions.js), then tells the assistant the result.
+// Members without the assistant get the locked screen and nothing is sent anywhere.
 
 import { HOME } from '../config.js';
 import { store } from '../store.js';
 import { h, loadSettings, saveSettings } from '../util.js';
 import { icon } from '../icons.js';
-import { getAccessToken } from '../backends/live.js';
 import { PRODUCTS, PAIRING_LABEL } from '../catalog.js';
 import { SCENES } from '../scenes.js';
 import { runProposal, openInEditor } from '../assistant-actions.js';
 import { canSpeak, speak, stopSpeaking, speakingId, guessLang } from '../speech.js';
-import { member, accountToken, canUseAssistant, onAccount, refreshMember } from '../account.js';
+import { member, accountToken, canUseAssistant, onAccount, refreshMember, plansUrl } from '../account.js';
 import { accountPanel } from './account-ui.js';
+import { openLegal, AI_CONSENT_VERSION } from '../legal.js';
 
 const CHAT_KEY = 'evra.chat';
 const MAX_KEPT = 60; // messages kept for this browser tab
@@ -71,31 +74,43 @@ function appInfo() {
   };
 }
 
-async function demoAutomations() {
+async function automationConfigs() {
   const out = {};
-  for (const s of store.all('automation')) {
+  await Promise.all(store.all('automation').map(async (s) => {
     const id = s.attributes?.id;
-    if (id) { try { out[id] = await store.backend.fetchAutomationConfig(id); } catch { /* skip */ } }
-  }
+    if (id) { try { const cfg = await store.backend.fetchAutomationConfig(id); if (cfg) out[id] = cfg; } catch { /* skip */ } }
+  }));
   return out;
 }
 
+// What the assistant may see of the home. Locks, cameras, alarms, people and phone
+// locations never leave the app; of each state only the details below are sent.
+const SHARED_DOMAINS = new Set(['light', 'switch', 'sensor', 'binary_sensor', 'fan', 'climate', 'cover', 'valve', 'siren',
+  'media_player', 'automation', 'update', 'input_boolean', 'weather', 'sun', 'button', 'event', 'vacuum']);
+const SHARED_ATTRS = ['friendly_name', 'id', 'device_class', 'unit_of_measurement', 'battery_level', 'brightness', 'color_mode',
+  'color_temp_kelvin', 'hs_color', 'effect', 'effect_list', 'temperature', 'current_temperature', 'hvac_action', 'humidity',
+  'current_position', 'last_triggered', 'next_rising', 'next_setting', 'wind_speed', 'pressure', 'installed_version',
+  'latest_version', 'release_summary', 'in_progress', 'title', 'supported_color_modes', 'min_temp', 'max_temp'];
+const shared = (id) => SHARED_DOMAINS.has(String(id).split('.')[0]);
+function sharedState(s) {
+  const attributes = {};
+  for (const k of SHARED_ATTRS) if (s.attributes?.[k] != null) attributes[k] = s.attributes[k];
+  return { entity_id: s.entity_id, state: s.state, attributes, last_changed: s.last_changed };
+}
+
+// The home as the assistant sees it, the same for a real home and the demo home.
 async function homeContext() {
-  const b = store.backend;
-  if (b?.mode === 'live') {
-    let token;
-    try { token = await getAccessToken(b.hassUrl, { interactive: false }); } catch { throw new Error('Sign in to Home Assistant first (Settings → Connect).'); }
-    return { mode: 'live', hass_url: b.hassUrl, token, ...appInfo() };
-  }
+  if (!store.backend) throw new Error('Ev henüz bağlanmadı. Biraz sonra tekrar deneyin.');
   return {
-    mode: 'demo',
+    mode: store.backend.mode === 'live' ? 'live' : 'demo',
     ...appInfo(),
     snapshot: {
-      automations: await demoAutomations(),
-      states: [...store.states.values()],
+      automations: await automationConfigs(),
+      states: [...store.states.values()].filter((s) => shared(s.entity_id)).map(sharedState),
       areas: [...store.areas.values()].map(({ area_id, name }) => ({ area_id, name })),
       devices: [...store.devices.values()].map(({ id, name, name_by_user, area_id, model, manufacturer, entry_type }) => ({ id, name, name_by_user, area_id, model, manufacturer, entry_type })),
-      entities: [...store.entities.values()].map(({ entity_id, device_id, area_id, hidden_by, disabled_by, entity_category }) => ({ entity_id, device_id, area_id, hidden_by, disabled_by, entity_category })),
+      entities: [...store.entities.values()].filter((e) => shared(e.entity_id))
+        .map(({ entity_id, device_id, area_id, hidden_by, disabled_by, entity_category }) => ({ entity_id, device_id, area_id, hidden_by, disabled_by, entity_category })),
     },
   };
 }
@@ -131,21 +146,27 @@ function richText(text) {
 
 // ---- the screen ----
 
-// Signed out, or a membership without the assistant: say why, and how to fix it.
+// Signed out, or a membership without the assistant: say why, and how to get it.
+// Nothing is sent to the assistant from here.
 function lockedView(root, cleanup) {
   const u = member();
   root.append(h('section', { class: 'chat chat-locked', 'aria-label': 'Evra' },
     h('header', { class: 'chat-head' },
       h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
       h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
-        h('p', { class: 'chat-status' }, icon('lock', 14), u ? 'Üyeliğinizde yok' : 'Evra üyeleri için'))),
+        h('p', { class: 'chat-status' }, icon('lock', 14), u ? 'Premium planla gelir' : 'Evra üyeleri için'))),
     u
-      ? h('div', { class: 'card' },
-        h('p', null, `Hesabınız (${u.username}) Evra asistanını içermiyor.`),
-        h('p', { class: 'muted small' }, u.email
-          ? 'Evra asistanı Premium planla gelir.'
-          : 'Bir yöneticiden asistanı sizin için açmasını isteyin.'),
-        h('div', { class: 'btn-row' }, h('a', { class: 'btn', href: '#/settings' }, icon('person', 16), 'Hesabınız')))
+      ? h('div', { class: 'card chat-plans' },
+        h('h3', null, 'Evra Asistan Premium planda'),
+        h('p', null, 'Evinizi sohbetle yönetin:'),
+        h('ul', null,
+          h('li', null, 'Evde neler olduğunu sorun: açık pencereler, sıcaklık, pil durumları'),
+          h('li', null, '"Salonun ışığını %40 yap" deyin; değişiklik bir kart olarak hazırlanır, siz onaylarsınız'),
+          h('li', null, 'Otomasyonları ve yeni cihaz eşleştirmeyi adım adım birlikte yapın')),
+        h('div', { class: 'btn-row' },
+          h('a', { class: 'btn primary', href: plansUrl(), target: '_blank', rel: 'noopener' }, icon('sparkle', 16), 'Planları gör'),
+          h('a', { class: 'btn ghost', href: '#/settings' }, icon('person', 16), 'Hesabınız')),
+        h('p', { class: 'muted small' }, 'Premium\'a geçtiyseniz uygulamayı yenileyin; asistan hemen açılır.'))
       : h('div', { class: 'card' },
         h('p', null, 'Evra\'yı kullanmak için Evra hesabınızla giriş yapın.'),
         accountPanel(cleanup))));
@@ -155,22 +176,43 @@ export function renderChat(root, cleanup) {
   const local = [];
   cleanup.push(() => local.splice(0).forEach((fn) => { try { fn(); } catch { /* ignore */ } }));
   let shown = null;
+  const consented = () => (loadSettings().aiConsent?.version || 0) >= AI_CONSENT_VERSION;
   const draw = () => {
-    const key = `${member()?.id || ''}:${canUseAssistant()}`;
+    const key = `${member()?.id || ''}:${canUseAssistant()}:${consented()}`;
     if (key === shown) return;
     shown = key;
     local.splice(0).forEach((fn) => { try { fn(); } catch { /* ignore */ } });
     root.replaceChildren();
-    if (canUseAssistant()) chatView(root, local); else lockedView(root, local);
+    if (!canUseAssistant()) lockedView(root, local);
+    else if (!consented()) consentView(root, draw);
+    else chatView(root, local);
   };
   cleanup.push(onAccount(draw));
   draw();
   refreshMember();
 }
 
-// Where to start the assistant: on this computer, or (opened on a phone) on the computer serving the app.
-const onThisComputer = () => ['localhost', '127.0.0.1', ''].includes(location.hostname);
-const startHint = () => (onThisComputer() ? '"Start Evra.bat" ile başlatın' : 'bilgisayarda Evra\'yı "Start Evra on phone.bat" ile başlatın');
+// Before the first question: the assistant sends questions and device states to
+// Google (abroad), which needs the member's explicit consent (KVKK m.9). Nothing is
+// sent until they accept; the rest of the app works either way. Taken back in Settings.
+function consentView(root, redraw) {
+  const accept = h('button', { class: 'btn primary', type: 'button' }, icon('check', 16), 'Okudum, onaylıyorum');
+  accept.addEventListener('click', () => {
+    saveSettings({ aiConsent: { version: AI_CONSENT_VERSION, at: new Date().toISOString() } });
+    redraw();
+  });
+  root.append(h('section', { class: 'chat chat-locked chat-consent', 'aria-label': 'Evra Asistan onayı' },
+    h('header', { class: 'chat-head' },
+      h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
+      h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
+        h('p', { class: 'chat-status' }, icon('lock', 14), 'Kullanmadan önce onayınız gerekiyor'))),
+    h('div', { class: 'card' },
+      h('h3', null, 'Evra Asistan\'ı kullanmadan önce'),
+      h('p', null, 'Asistan, yanıtlarını Google\'ın Gemini yapay zekâsıyla hazırlar. Bunun için sorularınız ve cihazlarınızın adları, odaları ve durumları yurt dışındaki sunuculara aktarılır. Adınız, e-postanız, adresiniz, telefonunuz, kamera görüntüleri, kilitler, şifreler ve ödeme bilgileri gönderilmez; konuşmalar en fazla 30 dakika saklanır, sonra silinir.'),
+      h('p', { class: 'muted small' }, 'Onay vermezseniz asistan kapalı kalır; uygulamanın diğer bütün özellikleri çalışır. Onayınızı Ayarlar → Gizlilik ve koşullar bölümünden geri alabilirsiniz.'),
+      h('div', { class: 'btn-row' }, accept,
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => openLegal('yapayzeka') }, 'Metnin tamamını oku')))));
+}
 
 function chatView(root, cleanup) {
   const base = loadSettings().assistantUrl.replace(/\/+$/, '');
@@ -351,6 +393,7 @@ function chatView(root, cleanup) {
         if (j.code === 'signin' || j.code === 'no_access') refreshMember();
         throw new Error(j.error || `Evra bir hatayla yanıt verdi (${res.status}).`);
       }
+      if (j.usage) showUsage(j.usage);
       if (alive) {
         const reply = { role: 'assistant', text: j.reply, proposals: (j.proposals || []).map((p) => ({ ...p, status: 'pending' })) };
         add(reply);
@@ -358,7 +401,7 @@ function chatView(root, cleanup) {
       }
     } catch (e) {
       const message = e instanceof TypeError
-        ? `Evra'ya ulaşılamıyor. ${onThisComputer() ? 'Bu bilgisayarda' : 'Uygulamayı açan bilgisayarda'} çalışır: ${startHint()}.`
+        ? 'Evra\'ya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.'
         : e.message;
       if (alive) add({ role: 'assistant', text: message, error: true, retry: text });
     } finally {
@@ -395,16 +438,22 @@ function chatView(root, cleanup) {
     input.focus();
   });
 
+  // Connects only now, when the assistant's tab is open (and only for members with the assistant).
+  const where = () => (store.backend?.mode === 'live' ? 'Evinizden yanıtlar' : 'Örnek evden yanıtlar');
+  const ready = (usage) => [h('span', { class: 'status-dot connected' }), `Hazır · ${where()}`,
+    usage && usage.limit ? h('span', { class: 'chat-usage muted' }, `· bu ay ${usage.used}/${usage.limit} soru`) : null].filter(Boolean);
+  function showUsage(usage) { if (alive) status.replaceChildren(...ready(usage)); }
   async function checkHealth() {
-    const where = store.backend?.mode === 'live' ? 'Evinizden yanıtlar' : 'Örnek evden yanıtlar';
     try {
-      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) });
+      const res = await fetch(`${base}/health`, { headers: authHeaders(), signal: AbortSignal.timeout(6000) });
       const j = await res.json();
       if (!alive) return;
-      status.replaceChildren(h('span', { class: `status-dot ${j.key ? 'connected' : 'error'}` }), j.key ? `Hazır · ${where}` : 'Evra\'nın Gemini anahtarı yok');
+      if (j.access === false) { refreshMember(); return; } // the plan changed: the tab locks itself
+      if (j.key) showUsage(j.access ? { used: j.used, limit: j.limit } : null);
+      else status.replaceChildren(h('span', { class: 'status-dot error' }), 'Asistan henüz kurulmadı');
     } catch {
       if (!alive) return;
-      status.replaceChildren(h('span', { class: 'status-dot error' }), `Çalışmıyor. ${startHint()}.`);
+      status.replaceChildren(h('span', { class: 'status-dot error' }), 'Evra\'ya ulaşılamıyor. İnternet bağlantınızı kontrol edin.');
     }
   }
 

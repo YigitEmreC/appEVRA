@@ -14,12 +14,12 @@ Evra is a smart-home PWA front end for Home Assistant. It is plain HTML, CSS and
 - Port 8000 is reserved for another project of the user's. Don't use it.
 - **Test hub** (`tools/test_hub/hub.py`, needs `aiohttp`): a Python stand-in for Home Assistant's auth, WebSocket and REST APIs, used to exercise **live mode** without the Raspberry Pi. It runs on :8123, has a control panel, also reads `../ha-snapshot`, and keeps state in `tools/test_hub/data/`. It is a test double that covers only what the app uses.
 - `python tools/make_icons.py` regenerates the PNG icons from `icons/icon.svg`.
-- `Start Evra.bat` also starts the **accounts stand-in** (`tools/accounts/server.py`, :8770, stdlib only, data in git-ignored `tools/accounts/data/`). It's only used when Settings points at it; by default the app signs in with the Evra website. `Start Evra.bat` also starts the **assistant server** (`../EvrAI/gemini_home_starter/server.py`, :8765) too, but only when that folder has a `.env` with the Gemini key. The assistant server is outside this repo.
+- `Start Evra.bat` also starts the **accounts stand-in** (`tools/accounts/server.py`, :8770, stdlib only, data in git-ignored `tools/accounts/data/`). It's only used when Settings points at it; by default the app signs in with the Evra website. The **assistant** no longer runs on a computer: it is part of the Evra website's Worker (`https://evrasmarthome.com/api/assistant`, webEVRA `functions/api/assistant.js` and `lib/assistant/`). The old `../EvrAI/gemini_home_starter/server.py` is only a reference now.
 
 - **Phone mode:** `Start Evra on phone.bat` runs `Start Evra.bat` with `EVRA_PHONE=1`.
   - The dev server then runs with `--lan` (it listens on 0.0.0.0 and adds an `X-Evra-Lan` header), and the assistant with `--lan` (`ASSISTANT_LAN=1`; it allows `http://<LAN IP>:<EVRA_APP_PORT>` as an origin).
   - Requests from other devices may only open `/appEVRA/` (not `tools/`) and `/ha-snapshot/`. Dot-paths and folder listings get 404; see `phone_may_open()` in `tools/dev_server.py`. Keep it that way: SMART also holds the Gemini key and account data.
-  - The app's default `assistantUrl` is `http://<location.hostname>:8765`, so a phone reaches the PC. That default is never saved to settings.
+  - The app's default `assistantUrl` is `WEBSITE_ASSISTANT` (`https://evrasmarthome.com/api/assistant`, in `util.js`). That default is never saved to settings; an old saved `...:8765` address counts as not chosen.
 
 Live mode has **never been tested against the real Home Assistant**, only against the demo backend and the test hub.
 
@@ -46,6 +46,7 @@ index.html → js/main.js (shell, hash router, theme, connect())
 - `js/themes.js`: the colour themes (`PALETTES`, each with pastels plus dark and light surfaces) and `ACCENTS`.
 - `js/config.js` (`HOME`): this specific home's entity IDs, IR remote buttons, colour presets and quick actions. When HA entities are renamed, this file is the one to update.
 - `js/ideas.js`: automation idea templates. `CAPS` maps capability → catalogue products, and `buildIdea()` produces an editor template from the home's devices.
+- `js/legal.js`: the Turkish legal texts (Gizlilik/KVKK, Kullanım koşulları, the assistant's consent text), the same as the website's `privacy.html` (AI part at `#yapay-zeka`) and `terms.html`; change both together. `openLegal(id)` shows them in a sheet (sign-in screen, Settings → Gizlilik ve koşullar). The assistant asks for consent first (`consentView` in `views/chat.js`, setting `aiConsent`); bump `AI_CONSENT_VERSION` when the consent text changes so members are asked again.
 - `js/scenes.js`: the 10 scenes. `planScene` computes the changes and `runScene` applies them. Per-scene room choices are kept in settings, not in HA. Plugs are never touched.
 - `js/views/automation-editor.js`: `fromConfig(cfg)` / `toConfig(state)` convert between HA automation YAML/JSON and the simple editor. Configs it can't represent fall back to the JSON editor, which is dev-mode only.
 
@@ -88,19 +89,22 @@ index.html → js/main.js (shell, hash router, theme, connect())
 ## Assistant and accounts
 
 - **Assistant** (`js/views/chat.js`, `js/assistant-actions.js`):
-  - The app never talks to Gemini; the key lives only in the assistant server's `.env`.
-  - `chat.js` posts the question plus the home (live: HA address and token; demo: the snapshot) to `assistantUrl` (default `http://localhost:8765`).
+  - The app never talks to Gemini; the key is the Cloudflare Secret `GEMINI_API_KEY` of the website's Worker.
+  - `chat.js` posts the question plus a **filtered snapshot** of the home (`homeContext()`: states of `SHARED_DOMAINS` with only `SHARED_ATTRS`, rooms, devices, entities, automation configs; the same in live and demo mode) to `assistantUrl` (default `https://evrasmarthome.com/api/assistant`).
+  - **Never send** the Home Assistant token or address, locks, cameras, alarms, people or phone locations, or the member's name, e-mail, address or phone. The Worker filters the snapshot again, but the app is the first line.
+  - **Members without the assistant** (`canUseAssistant()` false) get the Assistant tab with a lock badge (`.nav-locked` in `main.js`); tapping it opens the website's plans (`plansUrl()`, `abonelik.html`). `#/chat` shows `lockedView()`. Nothing is sent to the assistant for them: `/health` is called only from `chatView()`, i.e. when a member with the assistant opens the tab.
+  - The Worker checks Premium and a monthly question limit in D1 on every request (`code`: `signin`, `no_access`, `limit`, `busy`) and returns `usage: {used, limit}`, shown in the chat header.
   - The server answers with text and **proposals**: exact actions built by its `propose_*` tools.
   - The app shows each proposal as a card. On Approve, `runProposal()` carries it out through the normal backend (`store.call`, `backend.saveAutomation`, registry updates and so on), reads the result back, and reports it to the server's `/outcome`.
   - **Evra speaks Turkish:** the Assistant tab's texts, the card buttons and the results in `assistant-actions.js` are Turkish (the rest of the app is English). Card titles and details come from the assistant server, also in Turkish.
-  - **A new proposal kind needs both sides:** the tool in `EvrAI/.../proposals.py` and its handler in `assistant-actions.js`.
+  - **A new proposal kind needs both sides:** the tool in webEVRA `lib/assistant/tools.js` and its handler in `assistant-actions.js`.
   - **Read aloud** is `js/speech.js` (Web Speech API, sentence by sentence, Turkish voice for Turkish text). `chat.js` adds a Listen button per reply and the header's Read aloud switch (setting `speakReplies`). Speech stops on a new question, New chat and leaving the tab.
-  - **The owner's instructions** are `EvrAI/gemini_home_starter/instructions.txt`, appended to the system instruction by `system_instruction()` in `home_ai.py` whenever a chat is created.
+  - **The owner's instructions** are the Worker variable `ASSISTANT_INSTRUCTIONS`, appended to the system instruction by `systemInstruction()` in webEVRA `lib/assistant/gemini.js`.
 - **Accounts** (`js/account.js`, `views/auth-gate.js`, `views/account-ui.js`):
   - **Sign in first:** `main.js` shows `renderAuthGate()` until `member()` is set (the `gated` class on `#app`), and only then builds the nav, connects the backend and routes. Signing out tears the view down, disconnects and shows the gate again. `route()` does nothing while signed out.
   - **No admin screens:** roles and assistant overrides live in the website's `evra_app_access` table, edited in the D1 Console. Don't add member management back to the app.
-  - Members sign in under Settings → Evra account. The token goes in the `Authorization` header of every assistant request, and the assistant server checks it with the accounts service's `/me`.
-  - **Assistant access** is `features.ai`; admins always have it. `main.js` hides the Assistant tab with `assistantBlocked()` when a signed-in member lacks it, but the real check is on the server.
+  - Members sign in under Settings → Evra account. The token goes in the `Authorization` header of every assistant request, and the Worker checks it directly in D1 (same sessions and `features.ai` rule as `/me`).
+  - **Assistant access** is `features.ai`; admins always have it. `main.js` locks the Assistant tab with `assistantBlocked()` when a signed-in member lacks it (it opens the plans), but the real check is on the server.
   - **Base address:** `accountsUrl()`. It defaults to `WEBSITE_ACCOUNTS` (`https://evrasmarthome.com/api/accounts`), served by `lib/accounts.js` in the webEVRA repo.
     - **Website accounts:** members sign in with their website e-mail and password (the website's `users`/`sessions` tables in D1). `features.ai` comes from the Premium plan or an admin's choice. Members are added, renamed, reset and deleted only on the website.
     - **The stand-in** is `LOCAL_ACCOUNTS` (`tools/accounts/server.py`, usernames, admin-managed members). It's used only when the `accountsServer` setting points at it.

@@ -30,6 +30,8 @@ function write(value) {
 export const accountsUrl = () => (loadSettings().accountsServer || WEBSITE_ACCOUNTS).replace(/\/+$/, '');
 /** The website's own pages (sign-up, forgotten password, Hesabım) live next to its accounts API. */
 export const websiteOrigin = () => { try { return new URL(accountsUrl()).origin; } catch { return ''; } };
+/** The website's page with the monthly plans (the assistant comes with Premium). */
+export const plansUrl = () => `${websiteOrigin() || 'https://evrasmarthome.com'}/abonelik.html`;
 export const member = () => current?.user || null;
 export const accountToken = () => current?.token || null;
 export const isAdmin = (u = member()) => !!u && !u.disabled && u.role === 'admin';

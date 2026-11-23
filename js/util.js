@@ -182,9 +182,12 @@ function siteAssistantUrl() {
   try { return site.assistantUrl ? new URL(site.assistantUrl, location.href).href.replace(/\/+$/, '') : null; } catch { return null; }
 }
 
-// The assistant runs on the computer that serves the app: localhost on that computer,
-// its home-network address on a phone (phone mode, "Start Evra on phone.bat").
-const defaultAssistantUrl = () => siteAssistantUrl() || `http://${location.hostname || 'localhost'}:8765`;
+// The assistant runs on the Evra website (webEVRA functions/api/assistant.js), for every
+// home and every place the app is opened. evra-config.json can point elsewhere.
+export const WEBSITE_ASSISTANT = 'https://evrasmarthome.com/api/assistant';
+const defaultAssistantUrl = () => siteAssistantUrl() || WEBSITE_ASSISTANT;
+// The old assistant on a computer (port 8765) was the default before; it counts as "not chosen".
+const oldAssistant = (u) => /:8765\/?$/.test(String(u || ''));
 // The home in the signed-in Evra account (its Home Assistant's internet address),
 // for the one app everyone opens (app.evrasmarthome.com). js/account.js hands this
 // in, because it imports this file and can't be imported back.
@@ -225,11 +228,14 @@ export function loadSettings() {
     remote: saved.remote,
     sceneRooms: saved.sceneRooms,
     lastScene: saved.lastScene,
-    // The Evra assistant server (EvrAI/gemini_home_starter). Older versions saved the
-    // default with every setting; that value counts as "not chosen".
-    assistantUrl: (saved.assistantUrl && saved.assistantUrl !== 'http://localhost:8765') ? saved.assistantUrl : defaultAssistantUrl(),
+    // The Evra assistant (on the website). Older versions saved the old default (a
+    // computer's port 8765) with every setting; that value counts as "not chosen".
+    assistantUrl: (saved.assistantUrl && !oldAssistant(saved.assistantUrl)) ? saved.assistantUrl : defaultAssistantUrl(),
     // Read the assistant's new replies aloud (js/speech.js).
     speakReplies: saved.speakReplies === true,
+    // Consent to send questions and device states abroad for the assistant (KVKK m.9):
+    // { version, at } once given on this device (views/chat.js, js/legal.js).
+    aiConsent: saved.aiConsent || null,
     // Notifications on this device are switched on (js/push.js).
     notifyHere: saved.notifyHere === true,
     // Evra accounts address, only when someone chose one; unset means the Evra website

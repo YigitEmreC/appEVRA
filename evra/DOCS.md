@@ -105,8 +105,9 @@ Then:
        - https://home.example.com
    ```
 
-The assistant isn't reachable from outside yet: it still runs on a computer at
-home, and a secure page can't talk to an insecure address.
+The assistant works from anywhere: it runs on the Evra website
+(`https://evrasmarthome.com/api/assistant`) and comes with the Premium plan. It never
+connects to this Home Assistant; the app sends it only the device list it needs.
 
 ## Keeping it safe
 

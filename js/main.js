@@ -17,7 +17,7 @@ import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_
 import { arrangeable } from './edit.js';
 import { ensureSky } from './sky.js';
 import { renderAuthGate } from './views/auth-gate.js';
-import { member, memberHome, canUseAssistant, onAccount, refreshMember } from './account.js';
+import { member, memberHome, canUseAssistant, onAccount, refreshMember, plansUrl } from './account.js';
 import { showHere, refreshPush } from './push.js';
 import { watchForUpdates } from './updates.js';
 
@@ -140,18 +140,31 @@ const main = h('main', { id: 'view', tabindex: '-1' });
 const nav = h('nav', { class: 'nav', 'aria-label': 'Main' });
 const brand = h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra home', title: 'Evra' }, icon('evra', 22));
 
-// Members whose account doesn't include the assistant don't get its tab. (The
-// assistant server checks membership itself either way.)
+// Members whose account doesn't include the assistant (it comes with Premium) see its
+// tab with a lock; tapping it opens the plans on the website instead. The assistant
+// itself is never contacted for them (and the server checks membership either way).
 const assistantBlocked = () => !!member() && !canUseAssistant();
+nav.addEventListener('click', (e) => {
+  const tab = e.target.closest?.('.nav-item.nav-locked');
+  if (!tab || isEditing()) return;
+  e.preventDefault();
+  window.open(plansUrl(), '_blank', 'noopener');
+});
 
 // Tabs in the person's chosen order, without the ones they hid (while
 // editing, hidden tabs show faded so they can be brought back). Screens with
 // nav: false never get a tab.
 function buildNav() {
   const { nav: cfg } = getCustom();
-  const all = ordered(VIEWS.filter((v) => v.nav !== false && !(v.id === 'chat' && assistantBlocked())), cfg);
+  const all = ordered(VIEWS.filter((v) => v.nav !== false), cfg);
   const tabs = all.filter((v) => isEditing() || LOCKED_NAV.includes(v.id) || !isHidden(cfg, v.id));
-  nav.replaceChildren(brand, ...tabs.map((v) => h('a', { href: `#/${v.id}`, 'data-view': v.id, 'data-id': v.id, 'data-name': v.label, class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}` }, h('span', { class: 'nav-icon' }, icon(v.icon, 22)), h('span', { class: 'nav-label' }, v.label))));
+  const locked = (v) => v.id === 'chat' && assistantBlocked();
+  nav.replaceChildren(brand, ...tabs.map((v) => h('a', {
+    href: `#/${v.id}`, 'data-view': v.id, 'data-id': v.id, 'data-name': v.label,
+    class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}${locked(v) ? ' nav-locked' : ''}`,
+    ...(locked(v) ? { title: 'Asistan Premium planla gelir. Planları görmek için dokunun.', 'aria-label': `${v.label} (kilitli: Premium planla gelir, planları açar)` } : {}),
+  }, h('span', { class: 'nav-icon' }, icon(v.icon, 22), locked(v) ? h('span', { class: 'nav-lock', 'aria-hidden': 'true' }, icon('lock', 12)) : null),
+  h('span', { class: 'nav-label' }, v.label))));
   arrangeable(nav, 'nav', { whole: true, locked: LOCKED_NAV, all: all.map((v) => v.id) });
   markActive();
 }

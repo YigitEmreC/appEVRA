@@ -6,6 +6,7 @@
 import { h } from '../util.js';
 import { icon } from '../icons.js';
 import { accountPanel } from './account-ui.js';
+import { openLegal } from '../legal.js';
 import { accountStatus, accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, websiteOrigin } from '../account.js';
 
 export function renderAuthGate(cleanup) {
@@ -45,6 +46,12 @@ export function renderAuthGate(cleanup) {
   // The stand-in signs up through its own first-run form, so it needs no Create account tab.
   accountStatus().then((s) => { if (s.kind !== 'website') tabs.hidden = true; }).catch(() => { /* the panel shows the problem */ });
 
+  // The legal texts (Turkish), readable before signing in.
+  const legalLink = (id, label) => h('button', { class: 'link-btn', type: 'button', onclick: () => openLegal(id) }, label);
+  const legal = h('p', { class: 'gate-legal muted small' },
+    'Evra\'yı kullanarak ', legalLink('kosullar', 'Kullanım Koşulları'), '\'nı kabul etmiş olursunuz. Kişisel verileriniz ',
+    legalLink('gizlilik', 'Gizlilik Politikası ve KVKK Aydınlatma Metni'), '\'ne göre işlenir.');
+
   draw();
   return h('div', { class: 'gate' },
     h('div', { class: 'gate-card' },
@@ -52,5 +59,5 @@ export function renderAuthGate(cleanup) {
         h('span', { class: 'gate-logo', 'aria-hidden': 'true' }, icon('evra', 34)),
         h('h1', null, 'Welcome to Evra'),
         h('p', { class: 'muted' }, 'Sign in to see and control your home.')),
-      tabs, body, elsewhere));
+      tabs, body, elsewhere, legal));
 }

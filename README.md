@@ -162,14 +162,15 @@ When it connects, you name it and choose its room.
 **The assistant:**
 - It comes with the **Premium** plan.
 - Admins, and who gets it regardless of their plan, are set in the website's database (`evra_app_access`, see the webEVRA README, step 7). The app has no screen for that.
-- Members without it don't see the Assistant tab, and the assistant server refuses them too.
+- Members without it see the Assistant tab with a lock. Tapping it opens the plans on the website (`abonelik.html`). The app sends nothing to the assistant for them, and the assistant refuses them too.
+- Premium members have a monthly question limit (300 by default, the website's `ASSISTANT_MONTHLY_LIMIT`); the chat header shows how many are used.
 
 **Where it runs:** the website does this in `lib/accounts.js` (webEVRA repository), on its own D1 member tables. Its README, step 7, has the one-time setup, including how to make the first admin.
 
 **Working without the website:** `tools/accounts/` is a stand-in with its own members and usernames, on port 8770. `Start Evra.bat` starts it. To use it:
 1. Turn developer mode on.
 2. Under **Settings → Evra account**, press **This computer**.
-3. Set the assistant's `ACCOUNTS_URL` to `http://127.0.0.1:8770/api`.
+3. The assistant on the website doesn't know the stand-in's members, so the Assistant tab only works with website accounts.
 
 `tools/accounts/README.md` lists the differences.
 
@@ -177,7 +178,7 @@ In the app, `js/account.js` handles accounts, with `views/auth-gate.js` (the fir
 
 ## The assistant
 
-The assistant is called **Evra** and speaks Turkish first (it answers in English when written to in English). Besides the home, it knows Evra's whole range: products, prices, packages and plans (from `../EvrAI/gemini_home_starter/products.json`), and it walks people through pairing a new device step by step. The Assistant tab is in Turkish too.
+The assistant is called **Evra** and speaks Turkish first (it answers in English when written to in English). Besides the home, it knows Evra's whole range: products, prices, packages and plans (from the website's `lib/assistant/products.js`), and it walks people through pairing a new device step by step. The Assistant tab is in Turkish too.
 
 The assistant answers questions and prepares changes. You approve every change before it happens, and the app carries it out itself. It can prepare:
 - Device control: lights, plugs, TV and heater power, blinds, thermostats and valves.
@@ -190,14 +191,13 @@ The assistant answers questions and prepares changes. You approve every change b
 - It uses the browser's own text to speech, so nothing extra is sent anywhere.
 - Turkish replies get a Turkish voice when the device has one. Edge has natural-sounding online voices, including Turkish. On Windows, more voices can be added under Settings → Time & language → Speech.
 
-**Your own instructions** for the assistant go in `../EvrAI/gemini_home_starter/instructions.txt`, as plain sentences. Its README explains the file.
+**Your own instructions** for the assistant go in the website Worker's variable `ASSISTANT_INSTRUCTIONS` (Cloudflare → Workers → evra → Settings → Variables and Secrets), as plain sentences, one per line.
 
 **How it works:** each change arrives as a card that says exactly what will happen (written from the action itself, not by the AI), with **Approve** and **Cancel**. Automations also get **Review in editor**. On Approve, `js/assistant-actions.js` runs the change through the same backend the screens use (demo or live). It checks the result, for example by reading the light or the saved automation back, shows it on the card, and reports it to the assistant. Risky changes (removing, deleting, updates) are in red. Locks, cameras and alarms are never available to it.
 
-`js/views/chat.js` is the Assistant tab. It doesn't talk to Gemini itself: the Gemini key must never be in the browser. Instead it calls the assistant server on this computer (`../EvrAI/gemini_home_starter/server.py`, http://localhost:8765; change it with the `assistantUrl` setting). With each question it sends one of two things:
+`js/views/chat.js` is the Assistant tab. It doesn't talk to Gemini itself: the Gemini key must never be in the browser. Instead it calls the assistant on the Evra website (`https://evrasmarthome.com/api/assistant`, in the webEVRA repository; change it with the `assistantUrl` setting or `evra-config.json`). The website checks the Premium membership and the monthly limit, and keeps the Gemini key as a Cloudflare Secret.
 
-- **Live mode:** the Home Assistant address and the app's sign-in token. The server reads the home with it, read-only.
-- **Demo mode:** the demo home's states, rooms and devices.
+With each question it sends only a filtered list of the home: devices, rooms, states and automations, the same in live and demo mode. Locks, cameras, alarms, people and phone locations stay in the app, the Home Assistant sign-in is never sent, and neither are the member's name, e-mail, address or phone. The assistant never connects to the home.
 
 It also sends notes from `js/config.js`, so the assistant knows the TV and heater states are tracked and can be wrong.
 

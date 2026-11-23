@@ -7,6 +7,7 @@ import { icon } from '../icons.js';
 import { card, toggle } from '../components.js';
 import { signOut } from '../backends/live.js';
 import { accountPanel } from './account-ui.js';
+import { openLegal } from '../legal.js';
 import { pushState, enablePush, disablePush, showHere, pushEntities } from '../push.js';
 import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome } from '../account.js';
 
@@ -121,8 +122,34 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('label', { class: 'field' }, h('span', null, 'Electricity price (€ per kWh)'), price)),
     demoCard,
     card({ title: 'Sensor batteries', iconName: 'battery' }, batteryList),
+    legalCard(),
     h('p', { class: 'muted small about' }, 'Evra · runs on Home Assistant', h('span', { class: 'dev-only' }, ' · the product range is in js/catalog.js')),
   );
+}
+
+// Gizlilik ve koşullar: the legal texts (js/legal.js) and the assistant consent,
+// which can be taken back here (KVKK: consent can be withdrawn at any time).
+function legalCard() {
+  const consentLine = h('p', { class: 'muted small' });
+  const withdraw = h('button', { class: 'btn ghost small', type: 'button' }, 'Onayı geri al');
+  const paint = () => {
+    const c = loadSettings().aiConsent;
+    consentLine.textContent = c
+      ? `Yapay zekâ asistanı için açık rıza verildi (${new Date(c.at).toLocaleDateString('tr-TR')}).`
+      : 'Yapay zekâ asistanı için açık rıza verilmedi; asistan ilk açıldığında sorulur.';
+    withdraw.hidden = !c;
+  };
+  withdraw.addEventListener('click', () => {
+    saveSettings({ aiConsent: null });
+    paint();
+    toast('Onay geri alındı. Asistan, tekrar onay verene kadar kullanılamaz.');
+  });
+  paint();
+  const open = (id, label) => h('button', { class: 'btn ghost small', type: 'button', onclick: () => openLegal(id) }, icon('external', 14), label);
+  return card({ title: 'Gizlilik ve koşullar', iconName: 'lock' },
+    h('div', { class: 'btn-row' },
+      open('gizlilik', 'Gizlilik ve KVKK'), open('kosullar', 'Kullanım koşulları'), open('yapayzeka', 'Yapay zekâ onayı')),
+    h('div', { class: 'btn-row' }, consentLine, withdraw));
 }
 
 // Developer mode: where Evra accounts live. The local service on this computer,

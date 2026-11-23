@@ -1887,3 +1887,32 @@ button, a, .nav-item, .room-chip { touch-action: manipulation; }
 /* Scenes are scaled to fill the screen; anything reaching above their box
    (like the fire's glow) carries on fading out instead of being cut off. */
 .sky-fire, .sky-mountains, .sky-istanbul, .retro-mountains { overflow: visible; }
+
+/* ---- Gizlilik ve koşullar (js/legal.js) ---------------------------------------- */
+.legal-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / 0.55); }
+.legal-sheet { display: flex; flex-direction: column; width: min(780px, 100%); max-height: min(88vh, 920px); background: var(--bg); color: var(--text); border: 1px solid var(--line-strong, var(--line)); border-radius: var(--radius); box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6); overflow: hidden; }
+.legal-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--line); }
+.legal-tabs { flex: 1; min-width: 0; overflow-x: auto; }
+.legal-tabs button { white-space: nowrap; }
+.legal-close { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--text); cursor: pointer; }
+.legal-body { overflow-y: auto; padding: 6px 22px 28px; line-height: 1.55; outline: none; }
+.legal-body h2 { margin: 14px 0 4px; font-size: 20px; }
+.legal-body h3 { margin: 20px 0 6px; font-size: 15px; }
+.legal-body p, .legal-body li { font-size: 14px; }
+.legal-body ul { margin: 6px 0; padding-left: 20px; }
+.legal-body li { margin: 4px 0; }
+.legal-lead { color: var(--muted); }
+.gate-legal { margin: 14px 0 0; text-align: center; line-height: 1.5; }
+.gate-legal .link-btn, .chat-consent .btn-row { flex-wrap: wrap; }
+@media (max-width: 560px) { .legal-overlay { padding: 0; } .legal-sheet { max-height: 100%; height: 100%; border-radius: 0; } .legal-body { padding: 4px 16px 24px; } }
+/* The assistant's tab for members without it: faded, with a lock on top; it opens the plans. */
+.nav-locked .nav-icon { position: relative; }
+.nav-locked .nav-icon > svg { opacity: 0.6; }
+.nav-locked .nav-label { opacity: 0.7; }
+.nav-lock { position: absolute; top: -3px; right: 6px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent-fill); color: var(--accent-fill-ink); box-shadow: 0 0 0 2px var(--card); opacity: 1; }
+.nav-locked:hover .nav-icon > svg, .nav-locked:focus-visible .nav-icon > svg { opacity: 1; }
+.chat-plans { display: flex; flex-direction: column; gap: 10px; }
+.chat-plans ul { margin: 0; padding-left: 20px; }
+.chat-plans li { margin: 3px 0; }
+.chat-usage { margin-left: 6px; }
