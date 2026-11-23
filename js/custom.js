@@ -242,13 +242,16 @@ export function applyLook(dark) {
     for (const [k, v] of Object.entries(dark ? pal.dark : pal.light)) set(SURFACE_VARS[k], v);
     if (!dark) set('--violet', pal.light.accent);
   }
-  if (c.accent) {
-    const lum = luminance(c.accent);
-    set('--accent-fill', c.accent);
+  // Buttons, switches and the active tab: the person's accent, or else, while a
+  // moving background shows, the colour that suits it (themes.js → btn).
+  const accent = c.accent || (skyFor(c).length ? pal.btn : '') || '';
+  if (accent) {
+    const lum = luminance(accent);
+    set('--accent-fill', accent);
     set('--accent-fill-ink', lum < 0.4 ? '#ffffff' : '#10162A');
     set('--accent', dark
-      ? (lum < 0.3 ? `color-mix(in srgb, ${c.accent} 60%, #ffffff)` : c.accent)
-      : (lum > 0.25 ? `color-mix(in srgb, ${c.accent} 50%, #0b1020)` : c.accent));
+      ? (lum < 0.3 ? `color-mix(in srgb, ${accent} 60%, #ffffff)` : accent)
+      : (lum > 0.25 ? `color-mix(in srgb, ${accent} 50%, #0b1020)` : accent));
   }
   if (RADII[c.corners]) {
     const [r, md, sm] = RADII[c.corners];
