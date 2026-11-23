@@ -1,6 +1,6 @@
 // Keeps the app's own files cached so it opens instantly and even without a
 // connection. Home Assistant data is never cached.
-const CACHE = 'evra-v25';
+const CACHE = 'evra-v26';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './css/app.css', './icons/icon.svg',
   './js/boot.js', './js/main.js', './js/config.js', './js/catalog.js', './js/store.js', './js/util.js', './js/icons.js', './js/components.js',
@@ -24,20 +24,42 @@ self.addEventListener('activate', (event) => {
     .then(() => self.clients.claim()));
 });
 
-// Network first, so updates show up straight away; the cache is the fallback.
+// Network first, so updates show up straight away, but never waiting long: on a
+// slow or patchy connection (mobile data, a tunnel) one stalled file would leave
+// Evra on "Loading Evra…". After NETWORK_WAIT the saved copy is used, and the
+// network's answer still refreshes the cache for next time. Server errors (a
+// Cloudflare page when the hub or tunnel is down) count as no answer, so Evra
+// still opens from its saved copy. sw.js and evra-config.json get longer, as
+// they say which version and which Home Assistant this is.
+const NETWORK_WAIT = 3000;
+const LIVE_WAIT = 6000;
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== location.origin || !url.pathname.startsWith(new URL('./', location.href).pathname)) return;
-  event.respondWith(
-    // "no-cache" makes the browser check the server for a newer file every time.
-    fetch(event.request.url, { cache: 'no-cache', credentials: 'same-origin' })
-      .then((res) => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(event.request, copy)); }
-        return res;
-      })
-      .catch(() => caches.match(event.request).then((r) => r || caches.match('./index.html'))),
-  );
+  const live = /\/(sw\.js|evra-config\.json)$/.test(url.pathname);
+  event.respondWith(networkOrSaved(event, live ? LIVE_WAIT : NETWORK_WAIT));
 });
+
+function networkOrSaved(event, wait) {
+  // "no-cache" makes the browser check the server for a newer file every time.
+  const network = fetch(event.request.url, { cache: 'no-cache', credentials: 'same-origin' }).then((res) => {
+    if (res.status >= 500) throw new Error(`server error ${res.status}`);
+    if (res.ok) { const copy = res.clone(); return caches.open(CACHE).then((c) => c.put(event.request, copy)).then(() => res, () => res); }
+    return res;
+  });
+  event.waitUntil(network.catch(() => {})); // let a slow answer still reach the cache
+  const slow = new Promise((resolve) => setTimeout(() => resolve('slow'), wait));
+  return Promise.race([network.catch(() => 'failed'), slow]).then(async (first) => {
+    if (first !== 'slow' && first !== 'failed') return first;
+    const saved = await caches.match(event.request);
+    if (saved) return saved;
+    // Nothing saved yet: keep waiting for the network if it's only slow.
+    if (first === 'slow') { try { return await network; } catch { /* fall through */ } }
+    if (event.request.mode === 'navigate') { const page = await caches.match('./index.html'); if (page) return page; }
+    return Response.error();
+  });
+}
 
 // ---- notifications from Home Assistant (js/push.js) ----------------------------------
 // The "HTML5 Push Notifications" integration sends JSON: title, body, tag,
