@@ -17,9 +17,12 @@ import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_
 import { arrangeable } from './edit.js';
 import { ensureSky } from './sky.js';
 import { renderAuthGate } from './views/auth-gate.js';
-import { member, canUseAssistant, onAccount, refreshMember } from './account.js';
+import { member, memberHome, canUseAssistant, onAccount, refreshMember } from './account.js';
 import { showHere, refreshPush } from './push.js';
 import { watchForUpdates } from './updates.js';
+
+// Every part of Evra has loaded (js/boot.js stops waiting).
+document.documentElement.dataset.evraStarted = '1';
 
 // The Evra add-on's settings (evra-config.json) come first: everything below reads settings.
 await loadSiteConfig();
@@ -189,13 +192,21 @@ function showGate() {
 
 // A change of account (or of what it may use) re-draws the tabs, or swaps app and welcome screen.
 let lastBlocked = assistantBlocked();
+let lastHome = memberHome()?.url || null;
 onAccount(() => {
   if (!!member() !== signedIn) {
     signedIn = !!member();
+    lastHome = memberHome()?.url || null;
     if (signedIn) { if (!location.hash || location.hash === '#/settings') location.hash = '#/home'; showApp(); } else showGate();
     return;
   }
   if (assistantBlocked() !== lastBlocked) { lastBlocked = assistantBlocked(); buildNav(); }
+  // The account's home was linked or moved (Evra admin page): connect to it.
+  const home = memberHome()?.url || null;
+  if (home !== lastHome) {
+    lastHome = home;
+    if (started && loadSettings().hassUrl === home) { connect(); route({ keepScroll: true }); }
+  }
 });
 refreshMember();
 // Pick up access changes (plan, app access), when the app comes back into view.

@@ -9,7 +9,7 @@
 // This only decides what the app shows. The assistant server checks membership
 // itself on every request, so hiding a tab isn't the only protection.
 
-import { loadSettings, saveSettings } from './util.js';
+import { loadSettings, saveSettings, setAccountHome } from './util.js';
 
 export const WEBSITE_ACCOUNTS = 'https://evrasmarthome.com/api/accounts';
 export const LOCAL_ACCOUNTS = 'http://localhost:8770/api';
@@ -35,6 +35,10 @@ export const accountToken = () => current?.token || null;
 export const isAdmin = (u = member()) => !!u && !u.disabled && u.role === 'admin';
 export const canUseAssistant = (u = member()) => !!u && !u.disabled && (u.role === 'admin' || !!u.features?.ai);
 export function onAccount(fn) { subs.add(fn); return () => subs.delete(fn); }
+/** The member's home: { id, name, url } (url = its Home Assistant's internet address), or null. */
+export const memberHome = (u = member()) => (u?.home?.url ? u.home : null);
+// The shared app (app.evrasmarthome.com) connects to this home by itself (util.js placeDefaults).
+setAccountHome(() => memberHome()?.url || null);
 
 function unreachable() {
   let host = '';

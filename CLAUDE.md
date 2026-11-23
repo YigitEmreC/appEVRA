@@ -59,6 +59,15 @@ index.html → js/main.js (shell, hash router, theme, connect())
 - **Self-reload** (`js/updates.js`): every 10 minutes the app reads `sw.js`'s `CACHE` from the server; when it changed, it reloads when the page is hidden or untouched for 2 minutes, never while editing, chatting, in the automation editor, in the Customize panel or typing.
 - **Old engines** (wall panels): `js/boot.js` (a classic script) loads `main.js` only if the browser supports modules and CSS `color-mix()`; otherwise it shows which engine it found, with a "Try anyway" button.
 
+## The shared app and Evra homes
+
+- **One app for every client: `https://app.evrasmarthome.com`** (Cloudflare Pages: build `python3 tools/build_site.py`, output `dist/site`). `tools/build_site.py` copies the app files, writes Pages' `_headers` from the add-on's nginx settings (same CSP) and stamps sw.js's `CACHE` with the commit. No `evra-config.json` there.
+- **Homes:** the website (webEVRA `lib/accounts.js`, `lib/tunnels.js`, table `evra_homes`, admin page `public/evra-evler.html`) keeps each client's home with its Home Assistant's internet address, and makes one Cloudflare tunnel + `h-xxxxxx.evrasmarthome.com` address per house through Cloudflare's API. `/me` returns `home: {id, name, url}`; any number of accounts can share a home. One tunnel per house on purpose: the same token on several Pis would make Cloudflare spread visitors between houses.
+- **In the app:** `account.js` hands `memberHome()?.url` to `util.js` (`setAccountHome`, because util can't import account). `placeDefaults()` picks Home Assistant in this order: the add-on's settings file (Pi, panels: local, no internet needed), the account's home, the old defaults; a choice in Settings > Connection still wins, and defaults are never saved. `main.js` reconnects when the account's home changes. Settings > Connection says where the address comes from (`homeSource()`).
+- **The accounts stand-in** (`tools/accounts/server.py`) has the same homes requests (`GET/POST /api/homes`, `PATCH/DELETE /api/homes/{id}`, `home_id` on `PATCH /api/members/{id}`), with typed-in addresses (no tunnels). **Keep the two APIs in step.**
+- Each house's Home Assistant needs `cors_allowed_origins: https://app.evrasmarthome.com`, and the website's `ACCOUNTS_ORIGINS` needs it once.
+- **Work only in this repository folder** (the GitHub Desktop clone). Copying an older copy of the app over it once undid committed work.
+
 ## Tunnel test (https on a real phone, without the Pi)
 
 - `Start tunnel test.bat` builds the app, then starts the test hub (with `--origin https://evra-test.evrasmarthome.com`), `tools/tunnel_test/serve_app.py` (port 8090: **only** `dist/addon/evra/app`, the add-on's headers read from `evra/rootfs/etc/nginx/`, an `evra-config.json` with `hassUrlHttps`) and `cloudflared` (token from git-ignored `tools/tunnel_test/token.txt`, passed as `TUNNEL_TOKEN`). Steps: `tools/tunnel_test/README.md`.

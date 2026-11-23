@@ -256,6 +256,22 @@ Evra runs on the Pi as a Home Assistant add-on, so phones, computers and wall pa
 
 **Releasing a new version (for developers):** raise `version` in `evra/config.yaml`, add a line to `evra/CHANGELOG.md`, push, then tag the commit (`git tag v0.1.1 && git push --tags`). GitHub checks it, builds the images and publishes them; Home Assistant then offers the update. To try a version on the Pi before releasing it, run `python tools/build_addon.py` and copy `dist/addon/evra` to the Pi's `addons` share (it then appears under Local add-ons).
 
+## The shared app (app.evrasmarthome.com)
+
+Every client uses the same app address. After they sign in with their evrasmarthome.com account, Evra connects to **their own home**: the website keeps which home each account belongs to, with that home's Home Assistant address (`https://h-xxxxxx.evrasmarthome.com`, through the house's own Cloudflare tunnel). Wall panels keep using the add-on on the Pi, so they work without internet.
+
+**Which Home Assistant Evra connects to**, in order: a choice made in Settings > Connection; the Evra add-on's settings file (on the Pi and panels); the home in the Evra account; the old defaults.
+
+**Hosting (once), with Cloudflare Pages:**
+1. Cloudflare > **Workers & Pages > Create > Pages > Connect to Git** > choose `YigitEmreC/appEVRA`.
+2. Production branch `main`. Build command `python3 tools/build_site.py`. Build output directory `dist/site`. Save and deploy.
+3. The project > **Custom domains > Set up a custom domain** > `app.evrasmarthome.com`.
+4. Website (Workers > evra > Settings > Variables): add `https://app.evrasmarthome.com` to `ACCOUNTS_ORIGINS`.
+
+Every merge into `main` then publishes a new version; open apps reload by themselves when nobody is using them. `tools/build_site.py` copies only the app files, adds the add-on's security headers (`_headers`) and stamps the version. There's no `evra-config.json` there, so the account's home is used. If the site serves files like `README.md` or `tools/`, the build settings are missing: Pages is then publishing the repository as-is, without the security headers.
+
+**Homes** are created on the website (`evrasmarthome.com/evra-evler.html`, admins only; setup in the webEVRA repository's UYELIK.md, "Evra evleri"). Each home gets its own tunnel and address automatically; the page shows the token for the house's Cloudflared add-on, and any number of accounts (partners, family) can be linked to one home by e-mail. The accounts stand-in on this PC (`tools/accounts/server.py`) has homes too, with typed-in addresses, for testing.
+
 ## Live mode (when the Pi is back)
 
 None of live mode has been tested against the real Home Assistant yet, because the Pi has been offline since everything was built. That includes connecting, pairing, room changes, removing devices and saving automations. The demo mode follows the same calls, but expect to fix small things on first contact.

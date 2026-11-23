@@ -1,6 +1,6 @@
 import { HOME } from '../config.js';
 import { store } from '../store.js';
-import { h, num, numVal, isAvailable, loadSettings, saveSettings, setPrefs, toast, effectiveTheme } from '../util.js';
+import { h, num, numVal, isAvailable, loadSettings, saveSettings, setPrefs, toast, effectiveTheme, homeSource } from '../util.js';
 import { getCustom, setCustom } from '../custom.js';
 import { PALETTES } from '../themes.js';
 import { icon } from '../icons.js';
@@ -8,7 +8,7 @@ import { card, toggle } from '../components.js';
 import { signOut } from '../backends/live.js';
 import { accountPanel } from './account-ui.js';
 import { pushState, enablePush, disablePush, showHere, pushEntities } from '../push.js';
-import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS } from '../account.js';
+import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome } from '../account.js';
 
 export function renderSettings(root, cleanup, { reconnect }) {
   const settings = loadSettings();
@@ -25,6 +25,16 @@ export function renderSettings(root, cleanup, { reconnect }) {
   const urlInput = h('input', { class: 'input', type: 'url', value: settings.hassUrl, 'aria-label': 'Home Assistant address', placeholder: 'http://homeassistant.local:8123' });
   const urlField = h('label', { class: 'field' }, h('span', null, 'Home Assistant address'), urlInput);
   const liveHelp = h('p', { class: 'muted small' }, 'Connecting opens Home Assistant\'s own login page. Your password goes only to Home Assistant; the app keeps a sign-in token on this device.');
+  // Where the home's address comes from by itself: the Evra add-on on the Pi, or the Evra account.
+  const home = memberHome();
+  const source = homeSource();
+  const homeNote = source === 'account'
+    ? h('p', { class: 'hint' }, icon('home', 16), `Your Evra account connects you to ${home?.name ? `"${home.name}"` : 'your home'} by itself.`)
+    : source === 'site'
+      ? h('p', { class: 'hint' }, icon('home', 16), 'This Evra comes from your home\'s hub, so it connects to it directly.')
+      : (member() && settings.mode === 'demo'
+        ? h('p', { class: 'hint' }, icon('home', 16), 'Your Evra account isn\'t linked to a home yet, so this is the demo. Evra links it when your home is installed.')
+        : null);
   const drawMode = () => {
     modeTabs.replaceChildren(...[['demo', 'Demo'], ['live', 'Live']].map(([id, label]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': String(mode === id), class: mode === id ? 'active' : '',
@@ -102,7 +112,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('a', { class: 'shortcut', href: '#/remotes' }, icon('remote', 20), h('span', null, 'Remotes'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/devices?tab=rooms' }, icon('rooms', 20), h('span', null, 'Rooms'), icon('right', 16))),
     card({ title: 'Evra account', iconName: 'person', className: 'account-card' }, accountPanel(cleanup), accountsServerField()),
-    card({ title: 'Connection', iconName: 'home' }, statusLine, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
+    card({ title: 'Connection', iconName: 'home' }, statusLine, homeNote, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
     notifyCard(cleanup),
     lookCard(),
     card({ title: 'Preferences', iconName: 'gear' },

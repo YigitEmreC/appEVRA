@@ -48,11 +48,40 @@ web engine needs an update (Android System WebView), or use a newer browser.
 - **Home Assistant address**: leave empty to use this Pi (port 8123). Fill it in
   only if devices reach Home Assistant at another address.
 
-## Outside the house (https://)
+## Outside the house: the Evra app on phones
 
-With a secure internet address, Evra works away from home, installs as a full
-app on phones, and can send phone notifications. For example with the
-**Cloudflared** add-on and two addresses on your own domain:
+Evra clients use one app for everyone, **https://app.evrasmarthome.com**. After
+signing in with their Evra account, it connects to their own home by itself.
+Evra sets this up when installing the house (evrasmarthome.com, "Evra homes"):
+the house gets its own Cloudflare tunnel and address, and you get a token.
+
+1. Install the **Cloudflared** add-on and paste the token Evra gave you into its
+   configuration. Start it.
+2. Add to `configuration.yaml`, then check the configuration and restart:
+
+   ```yaml
+   http:
+     use_x_forwarded_for: true
+     trusted_proxies:
+       - 172.30.33.0/24
+     ip_ban_enabled: true
+     login_attempts_threshold: 5
+     cors_allowed_origins:
+       - http://192.168.1.50:8099
+       - https://app.evrasmarthome.com
+   ```
+
+3. On each phone, open `https://app.evrasmarthome.com`, install it (Android:
+   Install app; iPhone: Share > Add to Home Screen) and sign in.
+
+The wall panel keeps using `http://<your Pi's address>:8099`: it talks to the Pi
+directly and works without internet.
+
+## Outside the house with your own addresses (https://)
+
+Without an Evra home, you can give Evra and Home Assistant secure addresses
+yourself. For example with the **Cloudflared** add-on and two addresses on your
+own domain:
 
 - `https://ha.example.com` → Home Assistant (`http://homeassistant:8123`)
 - `https://home.example.com` → Evra (`http://<your Pi's address>:8099`)

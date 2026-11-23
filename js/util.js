@@ -147,12 +147,25 @@ const SETTINGS_KEY = 'smarthome.settings';
 // Elsewhere (the dev server on a PC) there is no file and nothing changes.
 // main.js loads it before anything reads the settings.
 let site = {};
+const SITE_KEY = 'evra.site';
+// Never waits more than a few seconds, so a slow connection can't hold Evra on
+// "Loading Evra…". When the file can't be read (offline, the Pi or tunnel down),
+// the last one that was read is used, so an installed app doesn't fall back to demo mode.
 export async function loadSiteConfig() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 7000);
   try {
-    const res = await fetch('evra-config.json', { cache: 'no-store' });
+    const res = await fetch('evra-config.json', { cache: 'no-store', signal: ctrl.signal });
+    if (res.status === 404) { site = {}; try { localStorage.removeItem(SITE_KEY); } catch { /* storage blocked */ } return; }
     const data = res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
-    site = data && typeof data === 'object' ? data : {};
-  } catch { site = {}; }
+    if (!data || typeof data !== 'object') throw new Error('no usable settings file');
+    site = data;
+    try { localStorage.setItem(SITE_KEY, JSON.stringify(data)); } catch { /* storage blocked */ }
+  } catch {
+    try { site = JSON.parse(localStorage.getItem(SITE_KEY) || '{}') || {}; } catch { site = {}; }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 function siteHassUrl() {
   // Opened through the secure internet address (e.g. https://home.example.com via
@@ -172,16 +185,32 @@ function siteAssistantUrl() {
 // The assistant runs on the computer that serves the app: localhost on that computer,
 // its home-network address on a phone (phone mode, "Start Evra on phone.bat").
 const defaultAssistantUrl = () => siteAssistantUrl() || `http://${location.hostname || 'localhost'}:8765`;
+// The home in the signed-in Evra account (its Home Assistant's internet address),
+// for the one app everyone opens (app.evrasmarthome.com). js/account.js hands this
+// in, because it imports this file and can't be imported back.
+let accountHome = () => null;
+export function setAccountHome(getUrl) { accountHome = getUrl; }
+function accountHomeUrl() {
+  try { const u = accountHome(); return u ? String(u).replace(/\/+$/, '') : null; } catch { return null; }
+}
+
 // What these settings are when nobody chose them. They depend on where the app was
 // opened, so they're never saved: moving the Pi or the add-on can't leave stale ones.
+// Which Home Assistant, in order: the add-on's settings file (on the Pi and wall
+// panels, so they stay local and work without internet), then the home in the Evra
+// account (the shared app), then the old guesses.
 function placeDefaults() {
   const servedByHa = location.pathname.startsWith('/local/') || location.hostname === 'homeassistant.local';
+  const fromSite = siteHassUrl();
+  const fromAccount = fromSite ? null : accountHomeUrl();
   return {
-    mode: site.mode === 'live' || site.mode === 'demo' ? site.mode : (servedByHa ? 'live' : 'demo'),
-    hassUrl: siteHassUrl() || (servedByHa ? location.origin : 'http://homeassistant.local:8123'),
+    mode: site.mode === 'live' || site.mode === 'demo' ? site.mode : (servedByHa || fromAccount ? 'live' : 'demo'),
+    hassUrl: fromSite || fromAccount || (servedByHa ? location.origin : 'http://homeassistant.local:8123'),
     assistantUrl: defaultAssistantUrl(),
   };
 }
+/** Which Home Assistant this place would use by itself (for Settings > Connection). */
+export const homeSource = () => (siteHassUrl() ? 'site' : accountHomeUrl() ? 'account' : null);
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { saved = {}; }

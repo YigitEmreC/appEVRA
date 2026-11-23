@@ -17,8 +17,18 @@ Endpoints (JSON; "token" means the header  Authorization: Bearer <token>):
     POST   /api/me/password             token, {current, new}
     GET    /api/members                 admin token
     POST   /api/members                 admin token, {name, username, password, role, features}
-    PATCH  /api/members/{id}            admin token, any of {name, role, features, disabled, password}
+    PATCH  /api/members/{id}            admin token, any of {name, role, features, disabled, password, home_id}
     DELETE /api/members/{id}            admin token
+    GET    /api/homes                   admin token -> {homes: [{id, name, url, members}]}
+    POST   /api/homes                   admin token, {name, url} -> {home}
+    PATCH  /api/homes/{id}              admin token, any of {name, url}
+    DELETE /api/homes/{id}              admin token (its members are unlinked)
+
+Homes: each client's house, with its Home Assistant's internet address. A member
+linked to a home gets it in /me as "home": {id, name, url}, and the shared Evra app
+(app.evrasmarthome.com) connects there by itself. The website creates the house's
+Cloudflare tunnel and address when a home is made; this stand-in can't, so the
+address is typed in.
 
 Passwords are hashed with PBKDF2-SHA256 at 100,000 iterations: the highest that
 Cloudflare Workers' Web Crypto allows, so existing hashes can move there unchanged.
@@ -81,21 +91,28 @@ class Store:
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
         self.users: dict[str, dict] = data.get("users", {})
+        self.homes: dict[str, dict] = data.get("homes", {})          # id -> {id, name, url, created}
         self.sessions: dict[str, dict] = data.get("sessions", {})   # sha256(token) -> {user, expires, created}
         self.prune()
 
     def save(self):
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"v": 1, "users": self.users, "sessions": self.sessions}, indent=1), encoding="utf-8")
+        tmp.write_text(json.dumps({"v": 1, "users": self.users, "sessions": self.sessions, "homes": self.homes}, indent=1), encoding="utf-8")
         tmp.replace(self.path)
 
     def prune(self):
         now = time.time()
         self.sessions = {k: s for k, s in self.sessions.items() if s["expires"] > now and s["user"] in self.users}
 
-    @staticmethod
-    def public(u: dict) -> dict:
-        return {k: u[k] for k in ("id", "username", "name", "role", "features", "disabled", "created", "last_login")}
+    def public(self, u: dict) -> dict:
+        out = {k: u[k] for k in ("id", "username", "name", "role", "features", "disabled", "created", "last_login")}
+        h = self.homes.get(u.get("home_id") or "")
+        out["home"] = {"id": h["id"], "name": h["name"], "url": h["url"]} if h else None
+        return out
+
+    def home_public(self, h: dict) -> dict:
+        members = [{"id": u["id"], "name": u["name"], "username": u["username"]} for u in self.users.values() if u.get("home_id") == h["id"]]
+        return {"id": h["id"], "name": h["name"], "url": h["url"], "created": h["created"], "members": members}
 
     def by_username(self, username: str):
         return next((u for u in self.users.values() if u["username"] == username), None)
@@ -308,6 +325,10 @@ class Accounts:
             u["password"] = hash_password(b["password"])
             if u["id"] != me["id"]:
                 self.store.end_sessions(u["id"])  # a reset signs the member out everywhere
+        if "home_id" in b:
+            if b["home_id"] is not None and b["home_id"] not in self.store.homes:
+                return error("No such home.", 404)
+            u["home_id"] = b["home_id"]
         u["updated"] = time.time()
         self.store.save()
         print(f"Member updated: '{u['username']}' ({', '.join(k for k in b if k != 'password') or 'password'}{', password' if 'password' in b and len(b) > 1 else ''})", flush=True)
@@ -326,6 +347,63 @@ class Accounts:
         print(f"Member deleted: '{u['username']}'", flush=True)
         return web.json_response({"ok": True})
 
+    # ---- homes ------------------------------------------------------------------------
+
+    @staticmethod
+    def clean_url(value):
+        url = str(value or "").strip().rstrip("/")
+        return url if re.match(r"^https?://[^\s/]+(:\d+)?$", url) else None
+
+    async def list_homes(self, request):
+        self.admin(request)
+        homes = sorted(self.store.homes.values(), key=lambda h: h["name"].lower())
+        return web.json_response({"homes": [self.store.home_public(h) for h in homes], "tunnels": False})
+
+    async def add_home(self, request):
+        self.admin(request)
+        b = await self.body(request)
+        name = str(b.get("name", "")).strip()[:80]
+        if not name:
+            return error("Give the home a name.")
+        url = self.clean_url(b.get("url"))
+        if not url:
+            return error("Type the home's Home Assistant address, like https://h-1042.example.com (this stand-in can't make tunnels).")
+        hid = secrets.token_hex(6)
+        self.store.homes[hid] = {"id": hid, "name": name, "url": url, "created": time.time()}
+        self.store.save()
+        print(f"Home added: '{name}' -> {url}", flush=True)
+        return web.json_response({"home": self.store.home_public(self.store.homes[hid])}, status=201)
+
+    async def update_home(self, request):
+        self.admin(request)
+        h = self.store.homes.get(request.match_info["id"])
+        if not h:
+            return error("No such home.", 404)
+        b = await self.body(request)
+        if "name" in b:
+            if not str(b["name"]).strip():
+                return error("The name can't be empty.")
+            h["name"] = str(b["name"]).strip()[:80]
+        if "url" in b:
+            url = self.clean_url(b["url"])
+            if not url:
+                return error("That isn't an address like https://h-1042.example.com.")
+            h["url"] = url
+        self.store.save()
+        return web.json_response({"home": self.store.home_public(h)})
+
+    async def delete_home(self, request):
+        self.admin(request)
+        h = self.store.homes.pop(request.match_info["id"], None)
+        if not h:
+            return error("No such home.", 404)
+        for u in self.store.users.values():
+            if u.get("home_id") == h["id"]:
+                u["home_id"] = None
+        self.store.save()
+        print(f"Home deleted: '{h['name']}'", flush=True)
+        return web.json_response({"ok": True})
+
     def app(self):
         app = web.Application(middlewares=[self.cors], client_max_size=64 * 1024)
         r = app.router
@@ -339,6 +417,10 @@ class Accounts:
         r.add_post("/api/members", self.add_member)
         r.add_patch("/api/members/{id}", self.update_member)
         r.add_delete("/api/members/{id}", self.delete_member)
+        r.add_get("/api/homes", self.list_homes)
+        r.add_post("/api/homes", self.add_home)
+        r.add_patch("/api/homes/{id}", self.update_home)
+        r.add_delete("/api/homes/{id}", self.delete_home)
         return app
 
 

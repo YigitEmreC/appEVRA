@@ -50,7 +50,7 @@ rem ---- build the app exactly like the add-on ---------------------------------
 if errorlevel 1 goto :failed
 
 echo Starting the test hub, the app and the tunnel...
-start "Evra tunnel test - test hub" cmd /k ""%PY%" "%APP_DIR%tools\test_hub\hub.py" --port %HUB_PORT% --origin https://%EVRA_HOST% --origin http://localhost:%APP_PORT% --origin http://127.0.0.1:%APP_PORT% --origin http://localhost:8010 --origin http://127.0.0.1:8010"
+start "Evra tunnel test - test hub" cmd /k ""%PY%" "%APP_DIR%tools\test_hub\hub.py" --port %HUB_PORT% --origin https://%EVRA_HOST% --origin https://app.evrasmarthome.com --origin http://localhost:%APP_PORT% --origin http://127.0.0.1:%APP_PORT% --origin http://localhost:8010 --origin http://127.0.0.1:8010"
 start "Evra tunnel test - app" cmd /k ""%PY%" -I "%APP_DIR%tools\tunnel_test\serve_app.py" --port %APP_PORT% --ha https://%HA_HOST%"
 rem cloudflared reads the token from TUNNEL_TOKEN, so it isn't on the command line.
 start "Evra tunnel test - Cloudflare Tunnel" cmd /k ""%CF%" tunnel --no-autoupdate run"
