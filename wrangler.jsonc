@@ -1,0 +1,14 @@
+// Cloudflare Workers settings for the shared Evra app (https://app.evrasmarthome.com).
+// Cloudflare's build runs "python3 tools/build_site.py" (it makes dist/site), then
+// "npx wrangler deploy", which reads this file and publishes only dist/site: the
+// built app with its security headers (_headers). Nothing else from the repository
+// (tools/, README, the add-on) is published. Root directory in the dashboard: empty.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Must match the Worker's name in the Cloudflare dashboard.
+  "name": "appevra",
+  "compatibility_date": "2025-11-01",
+  "assets": {
+    "directory": "./dist/site"
+  }
+}

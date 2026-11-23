@@ -1,16 +1,16 @@
-"""Builds the shared Evra app for Cloudflare Pages (https://app.evrasmarthome.com).
+"""Builds the shared Evra app for Cloudflare (https://app.evrasmarthome.com).
 
     python tools/build_site.py               -> dist/site/
     python tools/build_site.py --out PATH
 
-Cloudflare Pages runs this on every push to main (build command
-"python3 tools/build_site.py", output directory "dist/site"); see README.md,
-"The shared app".
+Cloudflare runs this on every push to main (the "appevra" Worker: build command
+"python3 tools/build_site.py", then "npx wrangler deploy", which publishes dist/site
+as wrangler.jsonc says); see README.md, "The shared app".
 
 What it does:
   - copies the app files (index.html, manifest, sw.js, css/, js/, icons/) and
     nothing else, like the add-on (tools/build_addon.py);
-  - writes Pages' _headers file with the add-on's security headers, read from
+  - writes the _headers file (Cloudflare serves it as headers) with the add-on's security headers, read from
     evra/rootfs/etc/nginx/, so both places send the same Content Security Policy;
   - stamps sw.js's CACHE name with the commit (or the time), so every deployment
     is a new version for the service worker and for open screens (js/updates.js);
