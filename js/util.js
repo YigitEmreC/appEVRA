@@ -147,25 +147,12 @@ const SETTINGS_KEY = 'smarthome.settings';
 // Elsewhere (the dev server on a PC) there is no file and nothing changes.
 // main.js loads it before anything reads the settings.
 let site = {};
-const SITE_KEY = 'evra.site';
-// Never waits more than a few seconds, so a slow connection can't hold Evra on
-// "Loading Evra…". When the file can't be read (offline, the Pi or tunnel down),
-// the last one that was read is used, so an installed app doesn't fall back to demo mode.
 export async function loadSiteConfig() {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 7000);
   try {
-    const res = await fetch('evra-config.json', { cache: 'no-store', signal: ctrl.signal });
-    if (res.status === 404) { site = {}; try { localStorage.removeItem(SITE_KEY); } catch { /* storage blocked */ } return; }
+    const res = await fetch('evra-config.json', { cache: 'no-store' });
     const data = res.ok && /json/.test(res.headers.get('content-type') || '') ? await res.json() : null;
-    if (!data || typeof data !== 'object') throw new Error('no usable settings file');
-    site = data;
-    try { localStorage.setItem(SITE_KEY, JSON.stringify(data)); } catch { /* storage blocked */ }
-  } catch {
-    try { site = JSON.parse(localStorage.getItem(SITE_KEY) || '{}') || {}; } catch { site = {}; }
-  } finally {
-    clearTimeout(timer);
-  }
+    site = data && typeof data === 'object' ? data : {};
+  } catch { site = {}; }
 }
 function siteHassUrl() {
   // Opened through the secure internet address (e.g. https://home.example.com via

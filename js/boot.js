@@ -7,31 +7,11 @@
 // in CSS and modern JavaScript). On an older engine, say so and name it, so the
 // panel's engine can be updated or a newer browser installed.
 (function () {
-  // On a bad connection Evra could otherwise sit on "Loading Evra…" for good: if a
-  // file fails, or it hasn't started after a while, say so and offer to try again.
-  // If it starts after all, main.js replaces this message with the app.
-  function stuck(why) {
-    if (document.documentElement.dataset.evraStarted) return;
-    var box = document.getElementById('app');
-    var p = document.createElement('p');
-    p.className = 'boot';
-    p.textContent = why;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn primary';
-    btn.textContent = 'Try again';
-    btn.onclick = function () { location.reload(); };
-    box.textContent = '';
-    box.appendChild(p);
-    box.appendChild(btn);
-  }
   function start() {
     var s = document.createElement('script');
     s.type = 'module';
     s.src = 'js/main.js';
-    s.onerror = function () { stuck('Evra couldn’t load. Check the connection, then try again.'); };
     document.body.appendChild(s);
-    setTimeout(function () { stuck('Evra is taking a long time to load. The connection may be slow.'); }, 15000);
   }
   var ok = 'noModule' in HTMLScriptElement.prototype && !!window.CSS && !!CSS.supports &&
     CSS.supports('color', 'color-mix(in srgb, red 50%, blue)');

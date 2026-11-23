@@ -21,9 +21,6 @@ import { member, canUseAssistant, onAccount, refreshMember } from './account.js'
 import { showHere, refreshPush } from './push.js';
 import { watchForUpdates } from './updates.js';
 
-// Every part of Evra has loaded (js/boot.js stops waiting).
-document.documentElement.dataset.evraStarted = '1';
-
 // The Evra add-on's settings (evra-config.json) come first: everything below reads settings.
 await loadSiteConfig();
 
