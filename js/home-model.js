@@ -3,12 +3,16 @@
 // every device as a glowing marker in its room, coloured by what it does (like the house
 // tour on the Evra website). Rooms with a light on glow warm; alarms pulse red.
 //
-//   homeModel({ rooms, devices, loose, selected, onPick, onDevice, cleanup }) -> element
+//   homeModel({ rooms, devices, loose, selected, onPick, onDevice, floors, floor, onFloor, enter, cleanup }) -> element
 //     rooms     the areas to draw, in order (each becomes one room of the plan)
 //     devices   the home's devices; loose: those without a room (a row under the house)
 //     selected  the picked area_id or 'all'
 //     onPick    (area_id | 'all') when a room (or "Tüm odalar") is tapped
 //     onDevice  (device) when a marker is tapped
+//     floors    with more than one floor: [{ key, name, level }]; the model shows one floor
+//               (rooms = that floor's rooms) and up/down buttons and a floor list beside it
+//     floor     the shown floor's key; onFloor(key) when another floor is chosen
+//     enter     'up' | 'down': the floor was just changed that way (a short slide)
 //
 // Geometry: plan coordinates in metres-ish, x to the lower right, y to the lower left,
 // z up; proj() turns them into SVG units. The back walls are at x = 0 and y = 0 (top left
@@ -95,16 +99,69 @@ function lift(el, z) { el.setAttribute('transform', `translate(0 ${(-z * ZS * U)
 
 const piece = (el, x, y) => ({ el, k: x + y });
 
+// A seam on a box's face (door and drawer lines, handles): a line through plan points.
+const seam = (...list) => s('polyline', { class: 'hm-seam', points: pts(list) });
+// A floor lamp: a thin pole with a shade (the shade glows while the room's light is on).
+function floorLamp(x, y) {
+  return s('g', null, box(x - 0.03, y - 0.03, 0.06, 0.06, 1.15, 'wood-dark'), box(x - 0.13, y - 0.13, 0.26, 0.26, 0.04, 'wood-dark'),
+    lift(box(x - 0.16, y - 0.16, 0.32, 0.32, 0.24, 'lamp', 'hm-lamp'), 1.02));
+}
+// A small lamp standing on something at height z.
+const tableLamp = (x, y, z) => lift(box(x, y, 0.2, 0.2, 0.2, 'lamp', 'hm-lamp'), z);
+// An armchair facing the room (back against +x).
+function armchair(x, y, colour = 'sofa-2') {
+  return s('g', null, box(x, y, 0.62, 0.62, 0.32, colour), box(x + 0.44, y, 0.18, 0.62, 0.66, colour),
+    box(x, y, 0.62, 0.14, 0.46, colour), box(x, y + 0.48, 0.62, 0.14, 0.46, colour),
+    lift(box(x + 0.06, y + 0.14, 0.38, 0.34, 0.08, 'cushion'), 0.32));
+}
+// A wardrobe against the x = 0 wall, its doors facing the room.
+function wardrobe(x, y, len, hgt = 1.3, colour = 'wood-light') {
+  const fx = x + 0.58;
+  return s('g', null, box(x, y, 0.58, len, hgt, colour),
+    seam([fx, y + len / 2, 0.06], [fx, y + len / 2, hgt - 0.06]),
+    seam([fx, y + len / 2 - 0.1, hgt * 0.5], [fx, y + len / 2 - 0.1, hgt * 0.62]),
+    seam([fx, y + len / 2 + 0.1, hgt * 0.5], [fx, y + len / 2 + 0.1, hgt * 0.62]));
+}
+// A low cabinet against the y = 0 wall with drawers on its front.
+function sideboard(x, y, w, hgt, colour) {
+  const fy = y + 0.42;
+  const g = s('g', null, box(x, y, w, 0.42, hgt, colour));
+  const n = Math.max(2, Math.round(w / 0.5));
+  for (let i = 1; i < n; i++) g.append(seam([x + (w / n) * i, fy, 0.04], [x + (w / n) * i, fy, hgt - 0.04]));
+  return g;
+}
+// A toilet against the x = 0 wall.
+function toilet(x, y) {
+  return s('g', null, box(x, y, 0.2, 0.46, 0.78, 'porcelain'), box(x + 0.2, y + 0.05, 0.42, 0.36, 0.36, 'porcelain'),
+    lift(box(x + 0.22, y + 0.07, 0.38, 0.32, 0.04, 'linen-2'), 0.36));
+}
+// A washbasin with a mirror above it, against the y = 0 wall.
+function basin(x, y, w = 0.56) {
+  return s('g', null, box(x + w / 2 - 0.08, y + 0.08, 0.16, 0.16, 0.62, 'porcelain'),
+    lift(box(x, y, w, 0.4, 0.12, 'porcelain'), 0.62), lift(box(x + 0.08, y + 0.08, w - 0.16, 0.24, 0.01, 'water'), 0.73),
+    lift(box(x + 0.04, y - 0.02, w - 0.08, 0.04, 0.5, 'mirror'), 0.95));
+}
+
 const FURNISH = {
   living({ x, y, w, d }) {
-    const tvw = Math.min(1.8, w * 0.42);
+    const sl = Math.min(2.2, d * 0.5), sy = y + d * 0.25;
+    const tvw = Math.min(1.8, w * 0.42), tvx = x + w * 0.42;
+    const tw = Math.min(0.8, w * 0.18), tx = x + w * 0.36, ty = y + d * 0.42;
     return [
-      piece(s('g', null, box(x + M, y + d * 0.26, 0.8, d * 0.48, 0.32, 'sofa'), box(x + M, y + d * 0.26, 0.24, d * 0.48, 0.66, 'sofa'),
-        box(x + M, y + d * 0.26, 0.8, 0.2, 0.46, 'sofa'), box(x + M, y + d * 0.74 - 0.2, 0.8, 0.2, 0.46, 'sofa')), x + M, y + d * 0.26),
-      piece(box(x + w * 0.44, y + d * 0.42, Math.min(0.9, w * 0.2), 0.9, 0.24, 'table'), x + w * 0.44, y + d * 0.42),
-      piece(s('g', null, box(x + w * 0.42, y + M, tvw, 0.42, 0.32, 'wood-dark'),
-        lift(box(x + w * 0.42 + 0.15, y + M + 0.16, tvw - 0.3, 0.06, 0.62, 'screen', 'hm-tv'), 0.32)), x + w * 0.42, y + M),
-      piece(s('g', null, box(x + w * 0.7, y + d * 0.66, 0.6, 0.6, 0.3, 'sofa-2'), box(x + w * 0.7 + 0.44, y + d * 0.66, 0.18, 0.6, 0.62, 'sofa-2')), x + w * 0.7, y + d * 0.66),
+      piece(s('g', null,
+        box(x + M, sy, 0.86, sl, 0.34, 'sofa'), box(x + M, sy, 0.24, sl, 0.76, 'sofa'),
+        box(x + M, sy, 0.86, 0.2, 0.5, 'sofa'), box(x + M, sy + sl - 0.2, 0.86, 0.2, 0.5, 'sofa'),
+        lift(box(x + M + 0.24, sy + 0.22, 0.58, sl / 2 - 0.24, 0.1, 'cushion'), 0.34),
+        lift(box(x + M + 0.24, sy + sl / 2 + 0.02, 0.58, sl / 2 - 0.24, 0.1, 'cushion'), 0.34),
+        lift(box(x + M + 0.26, sy + 0.3, 0.14, 0.42, 0.3, 'sofa-2'), 0.44),
+        lift(box(x + M + 0.26, sy + sl - 0.72, 0.14, 0.42, 0.3, 'toy'), 0.44)), x + M, sy),
+      piece(floorLamp(x + M + 0.3, sy - 0.32), x + M + 0.15, sy - 0.47),
+      piece(s('g', null, box(tx, ty, tw, 0.95, 0.24, 'table'), lift(box(tx + 0.12, ty + 0.2, 0.22, 0.3, 0.05, 'blanket'), 0.24),
+        lift(box(tx + tw - 0.26, ty + 0.62, 0.12, 0.12, 0.18, 'pot'), 0.24)), tx, ty),
+      piece(s('g', null, sideboard(tvx, y + M, tvw, 0.34, 'wood-dark'),
+        lift(box(tvx + 0.15, y + M + 0.16, tvw - 0.3, 0.06, 0.66, 'screen', 'hm-tv'), 0.34),
+        lift(box(tvx + tvw * 0.3, y + M + 0.26, tvw * 0.4, 0.1, 0.07, 'screen'), 0.34)), tvx, y + M),
+      piece(armchair(x + w * 0.7, y + d * 0.66), x + w * 0.7, y + d * 0.66),
       piece(plant(x + w - 0.42, y + 0.45, 1.1), x + w - 0.6, y + 0.3),
     ];
   },
@@ -113,23 +170,29 @@ const FURNISH = {
     const bx = x + w * 0.52 - bw / 2, by = y + M;
     return [
       piece(s('g', null, ...bed(bx, by, bw, bl)), bx, by),
-      piece(box(bx - 0.55, by + 0.05, 0.42, 0.42, 0.42, 'wood'), bx - 0.55, by),
-      piece(box(bx + bw + 0.13, by + 0.05, 0.42, 0.42, 0.42, 'wood'), bx + bw + 0.13, by),
-      piece(box(x + M, y + d * 0.5, 0.58, Math.min(1.5, d * 0.36), 1.25, 'wood-light'), x + M, y + d * 0.5),
+      piece(s('g', null, box(bx - 0.55, by + 0.05, 0.42, 0.42, 0.44, 'wood'), seam([bx - 0.55, by + 0.47, 0.22], [bx - 0.13, by + 0.47, 0.22]), tableLamp(bx - 0.44, by + 0.16, 0.44)), bx - 0.55, by),
+      piece(s('g', null, box(bx + bw + 0.13, by + 0.05, 0.42, 0.42, 0.44, 'wood'), seam([bx + bw + 0.13, by + 0.47, 0.22], [bx + bw + 0.55, by + 0.47, 0.22]), tableLamp(bx + bw + 0.24, by + 0.16, 0.44)), bx + bw + 0.13, by),
+      piece(box(bx + 0.1, by + bl + 0.22, bw - 0.2, 0.36, 0.4, 'sofa-2'), bx + 0.1, by + bl + 0.22),
+      piece(wardrobe(x + M, y + d * 0.5, Math.min(1.5, d * 0.36)), x + M, y + d * 0.5),
       piece(plant(x + w - 0.42, y + d - 0.5, 0.9), x + w - 0.6, y + d - 0.7),
     ];
   },
   kitchen({ x, y, w, d }) {
     const cl = Math.max(1, Math.min(w * 0.62, w - 1.15, 3.2));
     const iw = Math.min(1.6, w * 0.36);
+    const fy = y + M + 0.62;
     return [
-      piece(s('g', null, box(x + M, y + M, cl, 0.62, 0.52, 'cabinet'), lift(box(x + M, y + M, cl, 0.62, 0.05, 'counter'), 0.52),
-        lift(box(x + M + cl * 0.45, y + M + 0.12, 0.5, 0.38, 0.01, 'screen'), 0.57),
-        lift(box(x + M, y + M, cl * 0.8, 0.34, 0.4, 'cabinet'), 0.95)), x + M, y + M),
+      piece(s('g', null, box(x + M, y + M, cl, 0.62, 0.52, 'cabinet'),
+        ...Array.from({ length: Math.max(1, Math.floor(cl / 0.6)) }, (_, i) => seam([x + M + 0.6 * (i + 1), fy, 0.04], [x + M + 0.6 * (i + 1), fy, 0.48])),
+        lift(box(x + M, y + M, cl, 0.62, 0.05, 'counter'), 0.52),
+        lift(box(x + M + cl * 0.15, y + M + 0.14, 0.44, 0.34, 0.01, 'water'), 0.575),
+        lift(box(x + M + cl * 0.55, y + M + 0.12, 0.5, 0.38, 0.01, 'screen'), 0.575),
+        lift(box(x + M, y + M, cl * 0.8, 0.34, 0.4, 'cabinet'), 0.98)), x + M, y + M),
       piece(s('g', null, box(x + M, y + M + 0.62, 0.62, Math.min(1.4, d * 0.32), 0.52, 'cabinet'),
         lift(box(x + M, y + M + 0.62, 0.62, Math.min(1.4, d * 0.32), 0.05, 'counter'), 0.52)), x + M, y + M + 0.62),
-      piece(box(x + M + cl + 0.06, y + M, 0.7, 0.66, 1.26, 'steel'), x + M + cl + 0.06, y + M),
-      piece(s('g', null, box(x + w * 0.42, y + d * 0.52, iw, 0.78, 0.52, 'cabinet'), lift(box(x + w * 0.42, y + d * 0.52, iw, 0.78, 0.05, 'counter-light'), 0.52)), x + w * 0.42, y + d * 0.52),
+      piece(s('g', null, box(x + M + cl + 0.06, y + M, 0.7, 0.66, 1.32, 'steel'), seam([x + M + cl + 0.06, y + M + 0.66, 0.85], [x + M + cl + 0.76, y + M + 0.66, 0.85])), x + M + cl + 0.06, y + M),
+      piece(s('g', null, box(x + w * 0.42, y + d * 0.52, iw, 0.78, 0.52, 'cabinet'), lift(box(x + w * 0.42, y + d * 0.52, iw, 0.78, 0.05, 'counter-light'), 0.52),
+        lift(box(x + w * 0.42 + iw * 0.6, y + d * 0.52 + 0.2, 0.22, 0.22, 0.2, 'pot'), 0.57)), x + w * 0.42, y + d * 0.52),
       piece(box(x + w * 0.42 + 0.18, y + d * 0.52 + 0.95, 0.26, 0.26, 0.4, 'stool'), x + w * 0.42 + 0.18, y + d * 0.52 + 0.95),
       piece(box(x + w * 0.42 + 0.78, y + d * 0.52 + 0.95, 0.26, 0.26, 0.4, 'stool'), x + w * 0.42 + 0.78, y + d * 0.52 + 0.95),
       piece(plant(x + w - 0.4, y + d - 0.5, 0.8), x + w - 0.55, y + d - 0.65),
@@ -137,39 +200,61 @@ const FURNISH = {
   },
   bath({ x, y, w, d }) {
     const tw = Math.min(1.7, w * 0.5);
-    const sw = Math.max(0.6, w - tw - M * 2 - 0.1);
+    const sw = Math.min(1.3, Math.max(0.6, w - tw - M * 2 - 0.1));
     return [
-      piece(s('g', null, box(x + M, y + M, sw, 1, 0.04, 'porcelain'), box(x + M + sw, y + M, 0.04, 1, 1.2, 'glass', 'hm-glass')), x + M, y + M),
+      piece(s('g', null, box(x + M, y + M, sw, 1, 0.04, 'porcelain'), box(x + M + sw, y + M, 0.04, 1, 1.2, 'glass', 'hm-glass'),
+        lift(box(x + M + 0.1, y + M - 0.02, 0.2, 0.04, 0.1, 'steel'), 1.5)), x + M, y + M),
       piece(s('g', null, box(x + w - M - tw, y + M, tw, 0.8, 0.46, 'porcelain'), lift(box(x + w - M - tw + 0.1, y + M + 0.1, tw - 0.2, 0.6, 0.02, 'water'), 0.44)), x + w - M - tw, y + M),
-      piece(s('g', null, box(x + M, y + d * 0.4, 0.52, 0.85, 0.5, 'wood-light'), lift(box(x + M, y + d * 0.4, 0.55, 0.85, 0.06, 'porcelain'), 0.5),
-        lift(box(x + M - 0.02, y + d * 0.4 + 0.12, 0.04, 0.6, 0.55, 'mirror'), 0.78)), x + M, y + d * 0.4),
-      piece(s('g', null, box(x + M, y + d * 0.72, 0.48, 0.42, 0.34, 'porcelain'), box(x + M, y + d * 0.72, 0.16, 0.42, 0.62, 'porcelain')), x + M, y + d * 0.72),
+      piece(s('g', null, box(x + M, y + d * 0.4, 0.52, 0.85, 0.5, 'wood-light'), seam([x + M + 0.52, y + d * 0.4 + 0.425, 0.05], [x + M + 0.52, y + d * 0.4 + 0.425, 0.45]),
+        lift(box(x + M, y + d * 0.4, 0.55, 0.85, 0.06, 'porcelain'), 0.5), lift(box(x + M + 0.1, y + d * 0.4 + 0.22, 0.32, 0.42, 0.01, 'water'), 0.56),
+        lift(box(x + M - 0.02, y + d * 0.4 + 0.12, 0.04, 0.6, 0.55, 'mirror'), 0.82)), x + M, y + d * 0.4),
+      piece(toilet(x + M, y + d * 0.72), x + M, y + d * 0.72),
+      piece(lift(box(x + w * 0.55, y + M - 0.03, 0.4, 0.05, 0.5, 'blanket'), 0.7), x + w * 0.55, y + M),
+    ];
+  },
+  wc({ x, y, w, d }) {
+    return [
+      piece(toilet(x + M, y + d * 0.42), x + M, y + d * 0.42),
+      piece(basin(x + w * 0.42, y + M), x + w * 0.42, y + M),
+      piece(lift(box(x + w - M - 0.4, y + M - 0.03, 0.3, 0.05, 0.42, 'blanket'), 0.75), x + w - M - 0.4, y + M),
+      piece(plant(x + w - 0.38, y + d - 0.45, 0.7), x + w - 0.5, y + d - 0.6),
     ];
   },
   office({ x, y, w, d }) {
     const dw = Math.min(1.6, w * 0.45), dx = x + w * 0.3;
     return [
       piece(s('g', null, box(dx, y + M, 0.06, 0.7, 0.48, 'wood-dark'), box(dx + dw - 0.06, y + M, 0.06, 0.7, 0.48, 'wood-dark'),
-        lift(box(dx, y + M, dw, 0.7, 0.05, 'wood'), 0.48), lift(box(dx + dw * 0.3, y + M + 0.12, dw * 0.4, 0.05, 0.38, 'screen', 'hm-tv'), 0.53)), dx, y + M),
+        lift(box(dx, y + M, dw, 0.7, 0.05, 'wood'), 0.48), lift(box(dx + dw * 0.3, y + M + 0.12, dw * 0.4, 0.05, 0.38, 'screen', 'hm-tv'), 0.53),
+        tableLamp(dx + dw - 0.3, y + M + 0.15, 0.53)), dx, y + M),
       piece(s('g', null, box(dx + dw * 0.35, y + M + 0.85, 0.5, 0.5, 0.3, 'sofa'), box(dx + dw * 0.35, y + M + 1.23, 0.5, 0.12, 0.66, 'sofa')), dx + dw * 0.35, y + M + 0.85),
-      piece(box(x + M, y + d * 0.36, 0.38, Math.min(1.5, d * 0.38), 1.2, 'wood-light'), x + M, y + d * 0.36),
+      piece(s('g', null, box(x + M, y + d * 0.36, 0.38, Math.min(1.5, d * 0.38), 1.3, 'wood-light'),
+        ...[0.35, 0.7, 1.05].map((z) => seam([x + M + 0.38, y + d * 0.36, z], [x + M + 0.38, y + d * 0.36 + Math.min(1.5, d * 0.38), z]))), x + M, y + d * 0.36),
       piece(plant(x + w - 0.42, y + 0.45, 1), x + w - 0.6, y + 0.3),
     ];
   },
   kids({ x, y, w, d }) {
     const bw = Math.min(1.05, w * 0.32), bl = Math.min(1.7, d * 0.42);
+    const dx = x + w - M - 1.1;
     return [
       piece(s('g', null, ...bed(x + M + 0.05, y + M, bw, bl, 'toy')), x + M, y + M),
-      piece(box(x + w - M - 0.62, y + M, 0.62, 0.45, 0.42, 'toy-2'), x + w - M - 0.62, y + M),
-      piece(box(x + M, y + d * 0.62, 0.36, 1.1, 0.9, 'wood-light'), x + M, y + d * 0.62),
+      piece(s('g', null, box(dx, y + M, 1.1, 0.55, 0.05, 'wood-light'), box(dx, y + M, 0.05, 0.55, 0.55, 'wood-light'), box(dx + 1.05, y + M, 0.05, 0.55, 0.55, 'wood-light'),
+        lift(box(dx, y + M, 1.1, 0.55, 0.05, 'wood-light'), 0.55), tableLamp(dx + 0.8, y + M + 0.12, 0.6),
+        lift(box(dx + 0.2, y + M + 0.15, 0.3, 0.22, 0.05, 'toy-2'), 0.6)), dx, y + M),
+      piece(box(dx + 0.35, y + M + 0.7, 0.4, 0.4, 0.34, 'toy-2'), dx + 0.35, y + M + 0.7),
+      piece(s('g', null, box(x + M, y + d * 0.6, 0.36, 1.1, 0.9, 'wood-light'),
+        lift(box(x + M + 0.06, y + d * 0.6 + 0.12, 0.24, 0.16, 0.26, 'toy'), 0.9), lift(box(x + M + 0.06, y + d * 0.6 + 0.36, 0.24, 0.12, 0.2, 'blanket'), 0.9),
+        lift(box(x + M + 0.06, y + d * 0.6 + 0.6, 0.24, 0.2, 0.3, 'toy-2'), 0.9)), x + M, y + d * 0.6),
+      piece(s('g', null, box(x + w * 0.5, y + d * 0.68, 0.7, 0.45, 0.4, 'toy'), seam([x + w * 0.5, y + d * 0.68 + 0.45, 0.3], [x + w * 0.5 + 0.7, y + d * 0.68 + 0.45, 0.3])), x + w * 0.5, y + d * 0.68),
       piece(plant(x + w - 0.42, y + d - 0.5, 0.85), x + w - 0.6, y + d - 0.7),
     ];
   },
   hall({ x, y, w, d }) {
     return [
-      piece(box(x + M, y + d * 0.3, 0.4, Math.min(1.3, d * 0.34), 0.6, 'wood-light'), x + M, y + d * 0.3),
+      piece(s('g', null, box(x + M, y + d * 0.3, 0.4, Math.min(1.3, d * 0.34), 0.62, 'wood-light'),
+        seam([x + M + 0.4, y + d * 0.3, 0.32], [x + M + 0.4, y + d * 0.3 + Math.min(1.3, d * 0.34), 0.32])), x + M, y + d * 0.3),
       piece(lift(box(x + w * 0.4, y + M - 0.02, Math.min(0.7, w * 0.3), 0.04, 0.8, 'mirror'), 0.45), x + w * 0.4, y + M),
-      piece(box(x + M + 0.12, y + d * 0.74, 0.08, 0.08, 1.3, 'wood-dark'), x + M + 0.12, y + d * 0.74),
+      piece(s('g', null, box(x + M + 0.12, y + d * 0.74, 0.08, 0.08, 1.4, 'wood-dark'), lift(box(x + M + 0.02, y + d * 0.74 - 0.1, 0.28, 0.28, 0.3, 'blanket'), 0.95)), x + M + 0.12, y + d * 0.74),
+      piece(box(x + w * 0.4, y + M + 0.2, Math.min(0.9, w * 0.35), 0.36, 0.42, 'sofa-2'), x + w * 0.4, y + M + 0.2),
       piece(plant(x + w - 0.45, y + 0.5, 1), x + w - 0.6, y + 0.35),
     ];
   },
@@ -178,13 +263,15 @@ const FURNISH = {
       piece(plant(x + 0.5, y + 0.5, 1.4), x + 0.3, y + 0.3),
       piece(plant(x + w - 0.5, y + 0.5, 1.2), x + w - 0.7, y + 0.3),
       piece(plant(x + 0.5, y + d - 0.6, 1), x + 0.3, y + d - 0.8),
-      piece(s('g', null, box(x + w * 0.38, y + d * 0.36, 0.7, 1.5, 0.22, 'sofa-2'), box(x + w * 0.38, y + d * 0.36, 0.7, 0.3, 0.5, 'sofa-2')), x + w * 0.38, y + d * 0.36),
+      piece(s('g', null, box(x + w * 0.38, y + d * 0.36, 0.7, 1.5, 0.22, 'sofa-2'), box(x + w * 0.38, y + d * 0.36, 0.7, 0.3, 0.5, 'sofa-2'),
+        lift(box(x + w * 0.38 + 0.08, y + d * 0.36 + 0.4, 0.54, 0.9, 0.06, 'cushion'), 0.22)), x + w * 0.38, y + d * 0.36),
       piece(box(x + w * 0.38 + 0.95, y + d * 0.5, 0.45, 0.45, 0.36, 'table'), x + w * 0.38 + 0.95, y + d * 0.5),
     ];
   },
   storage({ x, y, w, d }) {
     return [
-      piece(box(x + M, y + M, Math.min(w * 0.6, 2.4), 0.45, 1.2, 'steel'), x + M, y + M),
+      piece(s('g', null, box(x + M, y + M, Math.min(w * 0.6, 2.4), 0.45, 1.2, 'steel'),
+        ...[0.4, 0.8].map((z) => seam([x + M, y + M + 0.45, z], [x + M + Math.min(w * 0.6, 2.4), y + M + 0.45, z]))), x + M, y + M),
       piece(s('g', null, box(x + M + 0.1, y + M + 0.65, 0.5, 0.5, 0.4, 'crate'), lift(box(x + M + 0.15, y + M + 0.7, 0.4, 0.4, 0.3, 'crate'), 0.4)), x + M + 0.1, y + M + 0.65),
       piece(box(x + M + 0.75, y + M + 0.7, 0.45, 0.45, 0.35, 'crate'), x + M + 0.75, y + M + 0.7),
       piece(box(x + M, y + d * 0.55, 0.45, Math.min(1.4, d * 0.33), 1, 'steel'), x + M, y + d * 0.55),
@@ -199,15 +286,15 @@ const FURNISH = {
       piece(box(x + M, y + d * 0.55, 0.5, 0.5, 0.45, 'crate'), x + M, y + d * 0.55),
     ];
   },
+  // A room whose name says nothing: a sitting corner, no bed (it could be anything).
   room({ x, y, w, d }) {
-    const bw = Math.min(1.4, w * 0.3), bl = Math.min(2, d * 0.48);
-    const bx = x + w - M - bw - 0.55;
     return [
-      piece(s('g', null, ...bed(bx, y + M, bw, bl)), bx, y + M),
-      piece(box(bx + bw + 0.1, y + M + 0.05, 0.4, 0.4, 0.42, 'wood'), bx + bw + 0.1, y + M),
-      piece(box(x + M, y + d * 0.3, 0.4, Math.min(1.4, d * 0.34), 1.15, 'wood-light'), x + M, y + d * 0.3),
-      piece(s('g', null, box(x + w * 0.3, y + d * 0.6, 0.62, 0.62, 0.3, 'sofa-2'), box(x + w * 0.3, y + d * 0.6, 0.18, 0.62, 0.62, 'sofa-2')), x + w * 0.3, y + d * 0.6),
-      piece(box(x + w * 0.3 + 0.85, y + d * 0.62, 0.5, 0.5, 0.32, 'table'), x + w * 0.3 + 0.85, y + d * 0.62),
+      piece(s('g', null, box(x + M, y + d * 0.3, 0.4, Math.min(1.4, d * 0.34), 1.2, 'wood-light'),
+        ...[0.4, 0.8].map((z) => seam([x + M + 0.4, y + d * 0.3, z], [x + M + 0.4, y + d * 0.3 + Math.min(1.4, d * 0.34), z]))), x + M, y + d * 0.3),
+      piece(armchair(x + w * 0.62, y + d * 0.3), x + w * 0.62, y + d * 0.3),
+      piece(armchair(x + w * 0.62, y + d * 0.3 + 1.1, 'sofa'), x + w * 0.62, y + d * 0.3 + 1.1),
+      piece(box(x + w * 0.62 - 0.6, y + d * 0.3 + 0.75, 0.45, 0.45, 0.34, 'table'), x + w * 0.62 - 0.6, y + d * 0.3 + 0.75),
+      piece(floorLamp(x + w * 0.62 + 0.3, y + d * 0.3 - 0.35), x + w * 0.62 + 0.15, y + d * 0.3 - 0.5),
       piece(plant(x + 0.45, y + d - 0.5, 0.95), x + 0.3, y + d - 0.7),
     ];
   },
@@ -218,10 +305,12 @@ const RUGS = {
   kids: ({ x, y, w, d }) => roundRug(x + w * 0.58, y + d * 0.58, Math.min(w, d) * 0.24, 'rug-kids'),
   office: ({ x, y, w, d }) => flat(x + w * 0.28, y + M + 0.7, Math.min(1.6, w * 0.45) + 0.2, 1.2, 'rug'),
   hall: ({ x, y, w, d }) => flat(x + w * 0.36, y + d * 0.18, w * 0.28, d * 0.64, 'rug-2'),
-  room: ({ x, y, w, d }) => roundRug(x + w * 0.36, y + d * 0.68, Math.min(w, d) * 0.22, 'rug'),
+  bath: ({ x, y, w, d }) => flat(x + w * 0.5, y + d * 0.45, Math.min(0.9, w * 0.3), 0.55, 'rug-2'),
+  wc: ({ x, y, w, d }) => flat(x + M + 0.7, y + d * 0.42, 0.5, 0.46, 'rug-2'),
+  room: ({ x, y, w, d }) => roundRug(x + w * 0.55, y + d * 0.3 + 0.95, Math.min(w, d) * 0.24, 'rug'),
 };
-const FLOOR = { bath: 'tile', laundry: 'tile', kitchen: 'wood-light', garden: 'deck', storage: 'concrete', hall: 'wood' };
-const WEIGHT = { living: 1.4, kitchen: 1.15, bedroom: 1.2, kids: 1, office: 0.95, bath: 0.8, hall: 0.75, laundry: 0.7, storage: 0.8, garden: 1, room: 1.1 };
+const FLOOR = { bath: 'tile', wc: 'tile', laundry: 'tile', kitchen: 'wood-light', garden: 'deck', storage: 'concrete', hall: 'wood' };
+const WEIGHT = { living: 1.4, kitchen: 1.15, bedroom: 1.2, kids: 1, office: 0.95, bath: 0.8, wc: 0.6, hall: 0.75, laundry: 0.7, storage: 0.8, garden: 1, room: 1.05 };
 
 // Plank or tile lines on a floor.
 function floorLines(r, kind) {
@@ -238,7 +327,9 @@ function floorLines(r, kind) {
 
 function layout(rooms) {
   const n = rooms.length;
-  const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
+  // Rows as even as possible, so no room is left alone stretched across a whole row
+  // (3 rooms: one row of 3; 5: 3 + 2; 7: 4 + 3).
+  const cols = n <= 3 ? n : n === 4 ? 2 : n <= 6 ? 3 : n <= 8 ? 4 : n === 9 ? 3 : 4;
   const W = cols === 1 ? 5.4 : cols * 4.2;
   const rows = [];
   for (let i = 0; i < n; i += cols) rows.push(rooms.slice(i, i + cols));
@@ -341,30 +432,54 @@ export function deviceTone(device, kind = kindOf(device)) {
   return { tone: 'off', text: '' };
 }
 
-// Marker spots inside a room: a loose grid that keeps clear of the label's front corner.
+// Marker spots inside a room: rows across the back half (the room's label sits in the
+// middle of its floor), then one row near the front when there are many.
 function spots(r, n) {
   if (!n) return [];
-  const x0 = r.x + 0.55, x1 = r.x + r.w - 0.8, y0 = r.y + 0.55, y1 = r.y + r.d - 1.35;
-  const cols = Math.max(1, Math.min(n, Math.round(Math.sqrt((n * (x1 - x0)) / Math.max(0.5, y1 - y0)))));
-  const rows = Math.ceil(n / cols);
+  const cap = Math.max(1, Math.floor((r.w - 0.9) / 0.78));
+  const rows = [r.y + 0.6, r.y + r.d * 0.36, r.y + r.d - 0.55];
+  const x0 = r.x + 0.5, x1 = r.x + r.w - 0.5;
   const out = [];
-  for (let i = 0; i < n; i++) {
-    const row = Math.floor(i / cols), col = i % cols;
-    const inRow = Math.min(cols, n - row * cols);
-    const cw = (x1 - x0) / inRow;
-    out.push([x0 + cw * (col + 0.5) + (row % 2 ? cw * 0.18 : 0), y0 + ((y1 - y0) / rows) * (row + 0.5)]);
+  let left = n;
+  for (let i = 0; i < rows.length && left > 0; i++) {
+    const k = i === rows.length - 1 ? left : Math.min(cap, left);
+    for (let j = 0; j < k; j++) out.push([x0 + ((x1 - x0) / k) * (j + 0.5) + (i === 1 ? 0.2 : 0), rows[i]]);
+    left -= k;
   }
   return out;
 }
 
+// Short names for the floor list: 2, 1, Z (ground), B (basement).
+const floorCode = (f) => (f.level > 0 ? String(f.level) : f.level < 0 ? (f.level === -1 ? 'B' : `B${-f.level}`) : 'Z');
+
+/** Up / down buttons and the list of floors (top floor first). */
+function floorNav(floors, current, onFloor) {
+  const list = [...floors].sort((a, b) => b.level - a.level);
+  const i = Math.max(0, list.findIndex((f) => f.key === current));
+  const up = list[i - 1], down = list[i + 1];
+  const go = (f) => () => { if (f) onFloor?.(f.key); };
+  return h('div', { class: 'hm-floornav', role: 'group', 'aria-label': 'Katlar' },
+    h('button', { type: 'button', class: 'hm-fbtn', disabled: !up, title: up ? `Yukarı: ${up.name}` : 'Yukarıda kat yok', 'aria-label': up ? `Yukarı: ${up.name}` : 'Yukarıda kat yok', onclick: go(up) }, icon('up', 16)),
+    ...list.map((f) => h('button', {
+      type: 'button', class: `hm-flevel${f.key === current ? ' active' : ''}`, title: f.name, 'aria-label': f.name,
+      'aria-pressed': String(f.key === current), onclick: go(f.key === current ? null : f),
+    }, floorCode(f))),
+    h('button', { type: 'button', class: 'hm-fbtn', disabled: !down, title: down ? `Aşağı: ${down.name}` : 'Aşağıda kat yok', 'aria-label': down ? `Aşağı: ${down.name}` : 'Aşağıda kat yok', onclick: go(down) }, icon('down', 16)),
+    h('span', { class: 'hm-fname' }, list[i]?.name || ''));
+}
+
 // ---- the component ------------------------------------------------------------------------
 
-export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick, onDevice, cleanup }) {
+export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick, onDevice, floors = [], floor = null, onFloor, enter = null, cleanup }) {
   const list = rooms.map((a) => ({ id: a.area_id, name: a.name, type: roomType(a.name) }));
   const wrap = h('div', { class: 'hm' });
+  if (floors.length > 1) {
+    wrap.classList.add('has-floors');
+    wrap.append(floorNav(floors, floor, onFloor));
+  }
   if (!list.length) {
     wrap.append(h('div', { class: 'hm-empty' }, icon('rooms', 28),
-      h('p', null, 'Odalarınızı ekleyin; eviniz burada, cihazlarıyla birlikte görünür.'),
+      h('p', null, floors.length > 1 ? 'Bu katta oda yok. Odaları Cihazlar > Odalar > Gelişmiş ayarlar\'dan katlara yerleştirin.' : 'Odalarınızı ekleyin; eviniz burada, cihazlarıyla birlikte görünür.'),
       h('a', { class: 'btn small', href: '#/devices?tab=rooms' }, icon('plus', 14), 'Oda ekle')));
     return wrap;
   }
@@ -386,7 +501,7 @@ export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick
 
   // Floors (with their rugs and light glow), one group per room so a picked room stands out.
   const roomGroups = new Map();
-  const floors = s('g', { class: 'hm-floors' });
+  const floorLayer = s('g', { class: 'hm-floors' });
   for (const r of plan.rects) {
     const kind = FLOOR[r.type] || 'wood';
     const floor = s('polygon', { class: 'hm-floor', style: `--c: var(--hm-floor-${kind})`, points: pts([[r.x, r.y, 0], [r.x + r.w, r.y, 0], [r.x + r.w, r.y + r.d, 0], [r.x, r.y + r.d, 0]]) });
@@ -398,10 +513,10 @@ export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick
     const alarm = s('polygon', { class: 'hm-room-alarm', points: floor.getAttribute('points') });
     const g = s('g', { class: 'hm-room', 'data-room': r.id }, floor, floorLines(r, kind), RUGS[r.type]?.(r), glow, alarm);
     g.addEventListener('click', () => onPick?.(selected === r.id ? 'all' : r.id));
-    floors.append(g);
+    floorLayer.append(g);
     roomGroups.set(r.id, { floor: g });
   }
-  svg.append(floors);
+  svg.append(floorLayer);
 
   // The back walls with their windows.
   const back = s('g', { class: 'hm-walls' },
@@ -467,10 +582,10 @@ export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick
       const [left, top] = pct(places[MAX - 1][0], places[MAX - 1][1], MARKER_Z);
       layer.append(h('button', { type: 'button', class: 'hm-dot hm-more', style: `left:${left.toFixed(2)}%;top:${top.toFixed(2)}%`, onclick: () => onPick?.(r.id), 'aria-label': `${r.name}: ${devs.length - MAX + 1} cihaz daha` }, `+${devs.length - MAX + 1}`));
     }
-    const [lx, ly] = pct(r.x + r.w - 0.35, r.y + r.d - 0.35, 0);
+    const [lx, ly] = pct(r.x + r.w / 2, r.y + r.d / 2, 0);
     const reading = h('span', { class: 'hm-label-val' });
     const label = h('button', {
-      type: 'button', class: `hm-label${selected === r.id ? ' active' : ''}`, style: `left:${lx.toFixed(2)}%;top:${ly.toFixed(2)}%;--ax:${lx > 78 ? -88 : lx < 22 ? -12 : -50}%`,
+      type: 'button', class: `hm-label${selected === r.id ? ' active' : ''}`, style: `left:${lx.toFixed(2)}%;top:${ly.toFixed(2)}%`,
       'aria-pressed': String(selected === r.id), title: selected === r.id ? 'Bütün odaları göster' : `${r.name} odasını göster`,
       onclick: () => onPick?.(selected === r.id ? 'all' : r.id),
     }, h('span', { class: 'hm-label-name' }, r.name), reading);
@@ -478,7 +593,7 @@ export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick
     layer.append(label);
   }
 
-  const frame = h('div', { class: 'hm-frame', style: `aspect-ratio: ${vb.w.toFixed(1)} / ${vb.h.toFixed(1)}` }, svg, layer);
+  const frame = h('div', { class: `hm-frame${enter ? ` hm-enter-${enter}` : ''}`, style: `aspect-ratio: ${vb.w.toFixed(1)} / ${vb.h.toFixed(1)}` }, svg, layer);
   wrap.append(frame);
   if (loose.length) {
     wrap.append(h('div', { class: 'hm-loose' }, h('span', null, 'Odası olmayan:'),
@@ -513,6 +628,7 @@ export function homeModel({ rooms, devices, loose = [], selected = 'all', onPick
       const lit = badges.find((b) => b.key === 'lights')?.tone === 'on';
       const alarm = badges.some((b) => b.tone === 'alarm');
       g.floor.classList.toggle('lit', !!lit);
+      g.furniture?.classList.toggle('lit', !!lit);
       g.floor.classList.toggle('alarm', alarm);
       g.furniture?.classList.toggle('tv-on', markers.some((m) => m.room === r.id && m.kind === 'ir' && m.btn.dataset.tone === 'on')
         || roomHasMediaOn(r.id));

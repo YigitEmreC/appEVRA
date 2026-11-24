@@ -229,6 +229,7 @@ export function loadSettings() {
     devMode: saved.devMode === true,
     pricePerKwh: saved.pricePerKwh ?? 3.0,
     room: saved.room,
+    homeFloor: saved.homeFloor,
     remote: saved.remote,
     sceneRooms: saved.sceneRooms,
     lastScene: saved.lastScene,

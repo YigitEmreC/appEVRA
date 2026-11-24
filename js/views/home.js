@@ -10,6 +10,7 @@ import { arrangeable } from '../edit.js';
 import { mascot } from '../mascot.js';
 import { member, canUseAssistant, onAccount, plansUrl } from '../account.js';
 import { homeModel } from '../home-model.js';
+import { roomsByFloor } from '../rooms.js';
 
 // Home follows the person's layout (js/custom.js). In edit mode everything
 // here can be dragged and hidden on the screen itself: the sections, the quick
@@ -25,6 +26,9 @@ export function renderHome(root, cleanup) {
   const rooms = () => ordered(sortedAreas(), getCustom().rooms, (a) => a.area_id).filter((a) => shown(getCustom().rooms, a.area_id));
   // Without the house model there's no way to pick a room, so show them all.
   let room = shows('rooms') && !isHidden(custom.sections, 'rooms') ? loadSettings().room || 'all' : 'all';
+  // The floor shown on the house model (its floor_id; null = ground floor), when there are floors.
+  let floorKey = loadSettings().homeFloor ?? null;
+  let floorEnter = null;
   const alerts = h('div', { class: 'alerts' });
   const heroSlot = h('div', { class: 'hero-slot' });
   const model = h('div', { class: 'home-model' });
@@ -96,7 +100,30 @@ export function renderHome(root, cleanup) {
   function drawRooms() {
     const devs = userDevices();
     const loose = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id));
-    model.replaceChildren(homeModel({ rooms: rooms(), devices: devs, loose, selected: room, onPick: pickRoom, onDevice: showDevice, cleanup: local }));
+    // With rooms on more than one floor the model shows one floor, with a floor switch.
+    const groups = roomsByFloor(rooms()).filter((g) => g.rooms.length);
+    const keyOf = (g) => g.floor.floor_id ?? null;
+    let cur = groups.find((g) => keyOf(g) === floorKey) || groups[0];
+    // A picked room (also from a device marker) shows its own floor, and that floor stays.
+    const roomFloor = room !== 'all' ? groups.find((g) => g.rooms.some((a) => a.area_id === room)) : null;
+    if (roomFloor) { cur = roomFloor; floorKey = keyOf(roomFloor); }
+    const multi = groups.length > 1;
+    const floors = multi ? groups.map((g) => ({ key: keyOf(g), name: g.floor.name, level: g.floor.level ?? 0 })) : [];
+    const onFloor = (key) => {
+      const from = floors.find((f) => f.key === (cur ? keyOf(cur) : null));
+      const to = floors.find((f) => f.key === key);
+      floorEnter = from && to ? (to.level > from.level ? 'up' : 'down') : null;
+      floorKey = key;
+      saveSettings({ homeFloor: key });
+      const g = groups.find((x) => keyOf(x) === key);
+      if (room !== 'all' && !g?.rooms.some((a) => a.area_id === room)) { room = 'all'; saveSettings({ room: 'all' }); }
+      draw();
+    };
+    model.replaceChildren(homeModel({
+      rooms: multi ? cur.rooms : rooms(), devices: devs, loose: !multi || cur === groups[0] ? loose : [], selected: room, onPick: pickRoom, onDevice: showDevice,
+      floors, floor: cur ? keyOf(cur) : null, onFloor, enter: floorEnter, cleanup: local,
+    }));
+    floorEnter = null;
     chips.hidden = !editing;
     if (!editing) { chips.replaceChildren(); return; }
     const count = (areaId) => devs.filter((d) => (d.area_id || null) === areaId).length;

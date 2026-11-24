@@ -10,16 +10,22 @@ const dc = (s) => s.attributes?.device_class;
 const OCCUPANCY = ['occupancy', 'motion', 'presence'];
 const OPENING = ['opening', 'door', 'window', 'garage_door'];
 
-// What kind of room a name means (Turkish or English): it picks the room's icon and,
-// on Home's house model, its furniture. Anything else is a plain room.
+// What kind of room a name means (Turkish or English, with or without Turkish letters:
+// "Çocuk odası" and "Cocuk odasi" are the same): it picks the room's icon and, on Home's
+// house model, its furniture. Anything else is a plain room. The first match wins, so
+// "Çocuk yatak odası" is a child's room and "Misafir banyosu" a bathroom.
 const NAME_TYPES = [
-  [/yatak|bed|uyku/, 'bedroom', 'bed'], [/mutfak|kitchen|yemek|dining/, 'kitchen', 'dinner'], [/banyo|bath|tuvalet|wc|duş/, 'bath', 'droplet'],
-  [/salon|oturma|living|lounge|tv/, 'living', 'tv'], [/çocuk|bebek|kid|child|nursery|oyun/, 'kids', 'party'], [/çalışma|ofis|office|study/, 'office', 'devices'],
-  [/bahçe|balkon|teras|garden|balcony|terrace/, 'garden', 'sprout'], [/giriş|koridor|antre|hall|entrance|hol/, 'hall', 'door'],
-  [/garaj|garage|depo|kiler/, 'storage', 'lock'], [/çamaşır|laundry/, 'laundry', 'air'],
+  [/cocuk|bebek|kid|child|nursery|oyun/, 'kids', 'party'], [/tuvalet|\bwc\b|lavabo|toilet/, 'wc', 'droplet'],
+  [/banyo|bath|dus|shower/, 'bath', 'droplet'], [/mutfak|kitchen|yemek|dining/, 'kitchen', 'dinner'],
+  [/yatak|bed|uyku|misafir odasi|guest|ebeveyn|master/, 'bedroom', 'bed'], [/salon|oturma|living|lounge|\btv\b/, 'living', 'tv'],
+  [/calisma|ofis|office|study/, 'office', 'devices'], [/bahce|balkon|teras|garden|balcony|terrace/, 'garden', 'sprout'],
+  [/giris|koridor|antre|hall|entrance|\bhol\b/, 'hall', 'door'], [/garaj|garage|depo|kiler|storage/, 'storage', 'lock'],
+  [/camasir|laundry/, 'laundry', 'air'],
 ];
+const FOLD = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', â: 'a', î: 'i', û: 'u' };
+const fold = (name) => String(name || '').toLocaleLowerCase('tr-TR').replace(/[çğıöşüâîû]/g, (c) => FOLD[c]);
 const typeEntry = (name) => {
-  const n = String(name || '').toLocaleLowerCase('tr-TR');
+  const n = fold(name);
   return NAME_TYPES.find(([re]) => re.test(n)) || [null, 'room', 'rooms'];
 };
 export const roomType = (name) => typeEntry(name)[1];
