@@ -343,6 +343,12 @@ export function createLiveBackend(hassUrl) {
         try { await send({ type: 'call_service', domain: 'zha', service: 'remove', service_data: { ieee: zha[1] } }, 60000); } catch { /* checked below */ }
         if (await gone(30000)) return {};
       }
+      // Newer Home Assistant (2026.11+) removes a device in one command; the per-connection
+      // command below is deprecated there (removed in 2027.9) but still the only one before.
+      try {
+        await send({ type: 'config/device_registry/remove', device_id: deviceId });
+        if (await gone(3000)) return {};
+      } catch { /* an older Home Assistant, or the integration refused: the old way below */ }
       for (const entryId of device?.config_entries || []) {
         try {
           await send({ type: 'config/device_registry/remove_config_entry', device_id: deviceId, config_entry_id: entryId });

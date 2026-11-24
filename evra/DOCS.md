@@ -55,9 +55,20 @@ signing in with their Evra account, it connects to their own home by itself.
 Evra sets this up when installing the house (evrasmarthome.com, "Evra homes"):
 the house gets its own Cloudflare tunnel and address, and you get a token.
 
-1. Install the **Cloudflared** add-on and paste the token Evra gave you into its
-   configuration. Start it.
-2. Add to `configuration.yaml`, then check the configuration and restart:
+The full step-by-step guide, with a troubleshooting table, is `KURULUM.md` in the
+webEVRA repository (Turkish). In short:
+
+1. Add the add-on repository `https://github.com/brenner-tobias/ha-addons`
+   (Add-on store > ⋮ > Repositories), install **Cloudflared**, and set its
+   configuration to only `tunnel_token: "<the token>"` and `additional_hosts: []`.
+   Start it; its log shows "Registered tunnel connection".
+   If Home Assistant isn't on port 8123 (it opens at `http://<Pi>` with no port, so
+   80), say so when making the home, or use **Portu değiştir** (change port) on its card.
+2. Let Home Assistant trust the tunnel and allow the app. On newer Home Assistant
+   (late 2026 on, where `http:` in `configuration.yaml` is ignored): Settings >
+   System > Network: reverse proxy / X-Forwarded-For on, trusted proxies
+   `172.30.33.0/24`, CORS allowed origins `https://app.evrasmarthome.com`. On older
+   versions, add to `configuration.yaml`, then check the configuration and restart:
 
    ```yaml
    http:
@@ -71,6 +82,8 @@ the house gets its own Cloudflare tunnel and address, and you get a token.
        - https://app.evrasmarthome.com
    ```
 
+   Restart Home Assistant fully afterwards. Then **Bağlantıyı test et** (test connection) on the home's
+   card at evrasmarthome.com/evra-evler.html should show three ✓.
 3. On each phone, open `https://app.evrasmarthome.com`, install it (Android:
    Install app; iPhone: Share > Add to Home Screen) and sign in.
 
