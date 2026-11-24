@@ -301,6 +301,7 @@ export const DOCS = [
     [
      [
       "Asistana yazdığınız veya söylediğiniz sorular,",
+      "Mikrofonla sorarsanız sesiniz, tarayıcınızın veya telefonunuzun kendi ses tanıma hizmetinde (Google ya da Apple) yazıya çevrilir; Evra'ya yalnızca yazıya çevrilmiş soru gelir, ses kaydı alınmaz ve saklanmaz,",
       "Yanıt için gereken cihaz bilgileri: cihaz ve oda adları, cihazların durumları, otomasyonlar ve sahneler."
      ],
      "Adınız, e-posta adresiniz, adresiniz ve telefon numaranız; kamera görüntüleri, kilit ve alarm bilgileri, evdeki kişilerin konumları, Home Assistant oturumunuz, şifreler ve ödeme bilgileri asistana gönderilmez."

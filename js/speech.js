@@ -84,5 +84,50 @@ export function stopSpeaking() {
 
 export const speakingId = () => current?.id ?? null;
 
+// ---- listening: the browser's own speech to text, for asking Evra by voice ----
+// Chrome, Edge and Safari (iPhone too) have it; it needs a secure page (https or
+// localhost), so on a plain http:// home-network address the mic button isn't shown.
+// The browser's speech service (Google or Apple) turns the voice into text; Evra gets
+// only the text and never records or keeps audio.
+const Recognition = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition || null) : null;
+export const canListen = () => Boolean(Recognition) && Boolean(window.isSecureContext);
+
+const LISTEN_ERRORS = {
+  'not-allowed': 'Mikrofon izni verilmedi. Tarayıcının adres çubuğundan mikrofona izin verin.',
+  'service-not-allowed': 'Bu tarayıcıda sesli giriş kapalı.',
+  'audio-capture': 'Mikrofon bulunamadı.',
+  network: 'Ses tanıma için internet bağlantısı gerekiyor.',
+  'language-not-supported': 'Bu tarayıcı Türkçe ses tanımayı desteklemiyor.',
+};
+
+/**
+ * Listens for one question. onText(text) is called as the words come in. Returns
+ * { done, stop, cancel }: done resolves with the final text ('' when nothing was
+ * heard) or rejects with a Turkish message; stop ends and keeps the words, cancel drops them.
+ */
+export function listen({ lang = 'tr-TR', onText } = {}) {
+  stopSpeaking(); // don't let Evra hear itself
+  const rec = new Recognition();
+  rec.lang = lang;
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+  let text = '';
+  let cancelled = false;
+  const done = new Promise((resolve, reject) => {
+    rec.onresult = (e) => {
+      text = [...e.results].map((r) => r[0]?.transcript || '').join('');
+      onText?.(text);
+    };
+    rec.onerror = (e) => {
+      if (['no-speech', 'aborted'].includes(e.error)) return; // onend follows with whatever was heard
+      reject(new Error(LISTEN_ERRORS[e.error] || `Ses tanıma çalışmadı (${e.error}).`));
+    };
+    rec.onend = () => resolve(cancelled ? '' : text.trim());
+  });
+  try { rec.start(); } catch (e) { return { done: Promise.reject(new Error('Ses tanıma başlatılamadı.')), stop() {}, cancel() {} }; }
+  return { done, stop: () => rec.stop(), cancel: () => { cancelled = true; rec.abort(); } };
+}
+
 // Chrome and Edge load their voice list a moment after the page; asking early starts that.
 if (canSpeak()) speechSynthesis.getVoices();

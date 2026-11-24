@@ -29,6 +29,7 @@ const P = {
   play: 'M8 5v14l11-7z',
   pause: 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z',
   stop: 'M6 6h12v12H6z',
+  mic: 'M12 3.5a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0v-5a3 3 0 0 1 3-3zM6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6',
   rewind: 'M11 7v10l-7-5zM20 7v10l-7-5z',
   forward: 'M4 7v10l7-5zM13 7v10l7-5z',
   volume: 'M4 9.5h3.5L12 6v12l-4.5-3.5H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11',

@@ -13,12 +13,12 @@
 
 import { HOME } from '../config.js';
 import { store } from '../store.js';
-import { h, loadSettings, saveSettings } from '../util.js';
+import { h, loadSettings, saveSettings, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { PRODUCTS, PAIRING_LABEL } from '../catalog.js';
 import { SCENES } from '../scenes.js';
 import { runProposal, openInEditor } from '../assistant-actions.js';
-import { canSpeak, speak, stopSpeaking, speakingId, guessLang } from '../speech.js';
+import { canSpeak, speak, stopSpeaking, speakingId, guessLang, canListen, listen } from '../speech.js';
 import { member, accountToken, canUseAssistant, onAccount, refreshMember, plansUrl } from '../account.js';
 import { accountPanel } from './account-ui.js';
 import { openLegal, AI_CONSENT_VERSION } from '../legal.js';
@@ -261,10 +261,14 @@ function chatView(root, cleanup, prefill = '') {
     'aria-describedby': 'chat-note', enterkeyhint: 'send', autocomplete: 'off',
   });
   const send = h('button', { class: 'btn primary chat-send', type: 'submit' }, icon('send', 18), h('span', { class: 'sr-only' }, 'Gönder'));
+  // Ask by voice: tap, speak, and the question goes by itself; the reply is read aloud.
+  const mic = canListen() ? h('button', { class: 'btn ghost chat-mic', type: 'button', 'aria-pressed': 'false', title: 'Sesle sorun' },
+    icon('mic', 18), h('span', { class: 'sr-only' }, 'Sesle sorun')) : null;
   const form = h('form', { class: 'chat-form' },
-    h('label', { for: 'chat-input', class: 'sr-only' }, 'Evra\'ya mesaj'), input, send);
+    h('label', { for: 'chat-input', class: 'sr-only' }, 'Evra\'ya mesaj'), input, mic, send);
   const note = h('p', { id: 'chat-note', class: 'chat-note muted small' },
-    'Yanıt için sorunuz ve cihazlarınızın adları, odaları ve durumları Google Gemini\'ye gönderilir.');
+    'Yanıt için sorunuz ve cihazlarınızın adları, odaları ve durumları Google Gemini\'ye gönderilir.',
+    mic ? ' Sesle sorduğunuzda sesiniz tarayıcınızın ses tanıma hizmetinde yazıya çevrilir; Evra ses kaydı almaz.' : '');
 
   // ---- changes the assistant prepared: nothing happens until Approve ----
   const KIND_ICON = { control: 'power', press: 'remote', scene: 'scenes', automation: 'robot', room: 'rooms', device: 'devices', update: 'refresh', setting: 'gear' };
@@ -371,7 +375,7 @@ function chatView(root, cleanup, prefill = '') {
     suggest.hidden = chat.messages.length > 0;
   }
 
-  async function ask(text, isRetry = false) {
+  async function ask(text, isRetry = false, byVoice = false) {
     text = String(text || '').trim();
     if (!text || busy) return;
     if (!isRetry) add({ role: 'user', text });
@@ -400,7 +404,7 @@ function chatView(root, cleanup, prefill = '') {
       if (alive) {
         const reply = { role: 'assistant', text: j.reply, proposals: (j.proposals || []).map((p) => ({ ...p, status: 'pending' })) };
         add(reply);
-        if (loadSettings().speakReplies) speakMessage(reply);
+        if (loadSettings().speakReplies || byVoice) speakMessage(reply); // asked by voice: answered by voice
       }
     } catch (e) {
       const message = e instanceof TypeError
@@ -414,6 +418,32 @@ function chatView(root, cleanup, prefill = '') {
       send.disabled = false;
     }
   }
+
+  // ---- listening ----
+  let hearing = null;
+  const paintMic = (on) => {
+    mic.setAttribute('aria-pressed', String(on));
+    mic.classList.toggle('listening', on);
+    mic.title = on ? 'Dinliyorum… bitirmek için dokunun' : 'Sesle sorun';
+    input.placeholder = on ? 'Dinliyorum…' : 'Evra\'ya sorun…';
+  };
+  mic?.addEventListener('click', async () => {
+    if (hearing) { hearing.stop(); return; }
+    if (busy) return;
+    const before = input.value;
+    hearing = listen({ onText: (t) => { input.value = t; grow(); } });
+    paintMic(true);
+    try {
+      const text = await hearing.done;
+      if (text && alive) { input.value = ''; grow(); ask(text, false, true); } else if (alive) input.value = before;
+    } catch (err) {
+      if (alive) { input.value = before; toast(err.message, 'error'); }
+    } finally {
+      hearing = null;
+      if (alive) paintMic(false);
+    }
+  });
+  cleanup.push(() => hearing?.cancel());
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();

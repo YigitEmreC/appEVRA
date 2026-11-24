@@ -1975,3 +1975,9 @@ button, a, .nav-item, .room-chip { touch-action: manipulation; }
 
 /* Error replies can have a second line (details for admins). */
 .msg.error .msg-body p { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* Asking by voice: the mic beside Send; while it listens it glows and pulses. */
+.chat-mic { flex: none; width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 14px; }
+.chat-mic.listening { background: var(--danger); color: var(--danger-ink); border-color: transparent; animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); } 50% { box-shadow: 0 0 0 10px transparent; } }
+@media (prefers-reduced-motion: reduce) { .chat-mic.listening { animation: none; } }
