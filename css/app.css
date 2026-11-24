@@ -2319,3 +2319,10 @@ button, a, .nav-item, .room-chip { touch-action: manipulation; }
 /* The puppet's gloves follow the theme like the badge mascot's rings (js/mascot.js); the
    house itself keeps its blue. */
 .puppet { --ms-orange: var(--mascot-a); --ms-orange-2: color-mix(in srgb, var(--mascot-a) 80%, #000); }
+
+/* TR/EN switch (js/i18n.js): small, in the top bar and on the sign-in screen. */
+.lang-switch { display: inline-flex; align-items: center; gap: 2px; height: 34px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; font-size: 12px; letter-spacing: 0.04em; cursor: pointer; }
+.lang-switch b { font-weight: 800; }
+.lang-switch b.off { font-weight: 500; opacity: 0.45; }
+.lang-switch:hover b.off { opacity: 0.8; }
+.gate-lang { position: fixed; top: calc(env(safe-area-inset-top) + 12px); right: 12px; z-index: 5; }

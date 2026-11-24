@@ -24,6 +24,7 @@ import { accountPanel } from './account-ui.js';
 import { openLegal, AI_CONSENT_VERSION } from '../legal.js';
 import { mascot } from '../mascot.js';
 import { pauseWake, resumeWake } from '../wake.js';
+import { getLang } from '../i18n.js';
 import { createMascot } from '../mascot-puppet.js';
 
 const CHAT_KEY = 'evra.chat';
@@ -409,7 +410,7 @@ function chatView(root, cleanup, prefill = '') {
       const home = await homeContext();
       const res = await fetch(`${base}/chat`, {
         method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ session: chat.session, message: text, home }),
+        body: JSON.stringify({ session: chat.session, message: text, home, lang: getLang() }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {

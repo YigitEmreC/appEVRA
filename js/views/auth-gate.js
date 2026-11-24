@@ -7,6 +7,7 @@ import { h } from '../util.js';
 import { icon } from '../icons.js';
 import { accountPanel } from './account-ui.js';
 import { openLegal } from '../legal.js';
+import { langSwitch } from '../i18n.js';
 import { accountStatus, accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, websiteOrigin } from '../account.js';
 
 export function renderAuthGate(cleanup) {
@@ -54,6 +55,7 @@ export function renderAuthGate(cleanup) {
 
   draw();
   return h('div', { class: 'gate' },
+    h('div', { class: 'gate-lang' }, langSwitch()),
     h('div', { class: 'gate-card' },
       h('div', { class: 'gate-brand' },
         h('span', { class: 'gate-logo', 'aria-hidden': 'true' }, icon('evra', 34)),

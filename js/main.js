@@ -4,6 +4,7 @@ import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, t
 import { icon } from './icons.js';
 import { mascot } from './mascot.js';
 import { syncWake } from './wake.js';
+import { startI18n, langSwitch } from './i18n.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
 import { startWeather } from './weather.js';
@@ -22,7 +23,7 @@ import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_
 import { arrangeable } from './edit.js';
 import { ensureSky } from './sky.js';
 import { renderAuthGate } from './views/auth-gate.js';
-import { member, memberHome, canUseAssistant, onAccount, refreshMember, plansUrl } from './account.js';
+import { member, memberHome, canUseAssistant, onAccount, refreshMember, plansUrl, websiteOrigin } from './account.js';
 import { showHere, refreshPush } from './push.js';
 import { watchForUpdates } from './updates.js';
 
@@ -31,6 +32,8 @@ document.documentElement.dataset.evraStarted = '1';
 
 // The Evra add-on's settings (evra-config.json) come first: everything below reads settings.
 await loadSiteConfig();
+// TR/EN (js/i18n.js): Turkish by default; in English the page's texts are swapped as they appear.
+startI18n({ api: `${websiteOrigin() || 'https://evrasmarthome.com'}/api/i18n`, loadIndex: () => import('./i18n-index.js') });
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [
@@ -111,7 +114,7 @@ function layoutHeader() {
   for (const [id, el] of Object.entries(parts)) { el.dataset.id = id; el.hidden = !editing && isHidden(header, id); }
   const order = ordered(HEADER_ITEMS, header).map((i) => i.id);
   topLeft.replaceChildren(...order.filter((id) => id === 'title' || id === 'clock').map((id) => parts[id]));
-  topRight.replaceChildren(...order.filter((id) => id === 'mode' || id === 'status').map((id) => parts[id]), backBtn, customBtn);
+  topRight.replaceChildren(...order.filter((id) => id === 'mode' || id === 'status').map((id) => parts[id]), backBtn, langSwitch(), customBtn);
   const names = Object.fromEntries(HEADER_ITEMS.map((i) => [i.id, i.label]));
   arrangeable(topLeft, 'header', { whole: true, all: order, names });
   arrangeable(topRight, 'header', { whole: true, all: order, names });
