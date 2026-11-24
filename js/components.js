@@ -1,6 +1,6 @@
 // Reusable UI pieces: cards, switches, sliders, IR buttons and charts.
 
-import { h, hourText } from './util.js';
+import { h, hourText, dec } from './util.js';
 import { icon } from './icons.js';
 import { store } from './store.js';
 
@@ -300,7 +300,7 @@ export function lineChart({ series, start, end, height = 160, unit = '', band, d
   if (!values.length) {
     const t = document.createElementNS(svgNS, 'text');
     t.setAttribute('x', W / 2); t.setAttribute('y', H / 2); t.setAttribute('text-anchor', 'middle'); t.setAttribute('class', 'chart-empty');
-    t.textContent = 'No data in this period';
+    t.textContent = 'Bu dönemde veri yok';
     svg.append(t);
     return svg;
   }
@@ -322,7 +322,7 @@ export function lineChart({ series, start, end, height = 160, unit = '', band, d
   }
   for (const v of [lo + pad, hi - pad]) {
     add('line', { x1: padL, x2: W - padR, y1: y(v), y2: y(v), class: 'chart-grid' });
-    add('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end', class: 'chart-label' }, v.toFixed(digits));
+    add('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end', class: 'chart-label' }, dec(v, digits));
   }
   const ticks = W < 440 ? 2 : 4;
   for (let i = 0; i <= ticks; i++) {
@@ -336,7 +336,7 @@ export function lineChart({ series, start, end, height = 160, unit = '', band, d
     if (line) add('path', { d: line, class: `chart-line ${s.cls || ''}` });
     if (last) add('circle', { cx: last[0].toFixed(1), cy: last[1].toFixed(1), r: 3.5, class: `chart-dot ${s.cls || ''}` });
   }
-  svg.setAttribute('aria-label', `Chart${unit ? ' in ' + unit : ''}`);
+  svg.setAttribute('aria-label', `Grafik${unit ? ' (' + unit + ')' : ''}`);
   return svg;
 }
 

@@ -3,7 +3,7 @@ import { h, relTime, isAvailable, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { toggle } from '../components.js';
 import { renderAutomationEditor } from './automation-editor.js';
-import { CAPS, CATEGORIES, ideasForHome, buildIdea } from '../ideas.js';
+import { CAPS, CATEGORIES, CATEGORY_LABEL, ideasForHome, buildIdea } from '../ideas.js';
 import { takeTemplate } from '../assistant-actions.js';
 
 export function renderAutomations(root, cleanup, ctx) {
@@ -11,7 +11,7 @@ export function renderAutomations(root, cleanup, ctx) {
   // Prepared by the assistant ("Review in editor").
   if (ctx.query.get('template') === 'assistant') {
     const template = takeTemplate();
-    if (!template) toast('That draft is no longer available.', 'error');
+    if (!template) toast('Bu taslak artık yok.', 'error');
     return renderAutomationEditor(root, cleanup, first === 'edit' && second ? decodeURIComponent(second) : null, template);
   }
   if (first === 'new') {
@@ -23,7 +23,7 @@ export function renderAutomations(root, cleanup, ctx) {
       if (started || !store.devices.size) return;
       started = true;
       const template = buildIdea(ideaId);
-      if (!template) toast('That idea needs devices this home doesn\'t have yet.', 'error');
+      if (!template) toast('Bu fikir, evde henüz olmayan cihazlar gerektiriyor.', 'error');
       renderAutomationEditor(root, cleanup, null, template);
     };
     cleanup.push(store.onRegistry(start));
@@ -43,15 +43,26 @@ export function renderAutomations(root, cleanup, ctx) {
     drawn = key;
     if (!autos.length) {
       list.replaceChildren(h('div', { class: 'empty' }, icon('robot', 28),
-        h('p', null, store.status.state === 'connected' ? 'No automations yet.' : 'Automations appear once the app is connected.'),
-        h('a', { class: 'btn primary', href: '#/automations/new' }, icon('plus', 16), 'New automation')));
+        h('p', null, store.status.state === 'connected' ? 'Henüz otomasyon yok.' : 'Uygulama bağlanınca otomasyonlar görünür.'),
+        h('a', { class: 'btn primary', href: '#/automations/new' }, icon('plus', 16), 'Yeni otomasyon')));
       return;
     }
     list.replaceChildren(...autos.map((a) => row(a.entity_id)));
   };
 
   function iconFor(label) {
-    const l = label.toLowerCase();
+    const l = label.toLocaleLowerCase('tr-TR');
+    if (/süpür|vacuum/.test(l)) return 'vacuum';
+    if (/mama|feed/.test(l)) return 'paw';
+    if (/kum kabı|litter/.test(l)) return 'litter';
+    if (/su ısıtıcı|kettle|su hazır/.test(l)) return 'kettle';
+    if (/vantilatör|\bfan\b/.test(l)) return 'fan';
+    if (/temizleyici|purifier/.test(l)) return 'air';
+    if (/pencere|kapı/.test(l)) return 'window';
+    if (/hareket|varlık/.test(l)) return 'person';
+    if (/ısıt|kombi|radyatör/.test(l)) return 'heater';
+    if (/ışık|lamba/.test(l)) return 'bulb';
+    if (/duman|gaz|kaçak/.test(l)) return 'alert';
     return /window|door/.test(l) ? 'window' : /presence|motion|kapkan/.test(l) ? 'person' : /heater|heat/.test(l) ? 'heater'
       : /\btv\b/.test(l) ? 'tv' : /light|led|lamp/.test(l) ? 'bulb' : /smoke|gas|leak|water|alarm/.test(l) ? 'alert' : 'robot';
   }
@@ -61,20 +72,20 @@ export function renderAutomations(root, cleanup, ctx) {
     const name = h('h3', null, '–');
     const desc = h('p', { class: 'auto-desc' });
     const meta = h('p', { class: 'auto-meta' });
-    const sw = toggle('Automation on or off', (on) => store.call('automation', on ? 'turn_on' : 'turn_off', entityId));
-    const run = h('button', { class: 'btn ghost', type: 'button' }, icon('play', 14), 'Run now');
+    const sw = toggle('Otomasyon açık ya da kapalı', (on) => store.call('automation', on ? 'turn_on' : 'turn_off', entityId));
+    const run = h('button', { class: 'btn ghost', type: 'button' }, icon('play', 14), 'Şimdi çalıştır');
     run.addEventListener('click', async () => {
       const s = store.get(entityId);
-      if (!confirm(`Run "${s?.attributes?.friendly_name}" now? It does everything the automation does, including sending IR codes.`)) return;
-      try { await store.call('automation', 'trigger', entityId, { skip_condition: true }); toast('Automation started'); } catch { /* toast shown */ }
+      if (!confirm(`"${s?.attributes?.friendly_name}" şimdi çalıştırılsın mı? Otomasyonun yaptığı her şeyi yapar, kumanda kodlarını göndermek dahil.`)) return;
+      try { await store.call('automation', 'trigger', entityId, { skip_condition: true }); toast('Otomasyon çalıştırıldı'); } catch { /* toast shown */ }
     });
     const configId = s0?.attributes?.id;
-    const edit = configId ? h('a', { class: 'btn ghost', href: `#/automations/edit/${encodeURIComponent(configId)}` }, icon('edit', 14), 'Edit') : null;
-    const del = configId ? h('button', { class: 'btn ghost danger-text', type: 'button' }, icon('trash', 14), 'Delete') : null;
+    const edit = configId ? h('a', { class: 'btn ghost', href: `#/automations/edit/${encodeURIComponent(configId)}` }, icon('edit', 14), 'Düzenle') : null;
+    const del = configId ? h('button', { class: 'btn ghost danger-text', type: 'button' }, icon('trash', 14), 'Sil') : null;
     del?.addEventListener('click', async () => {
-      const label = store.get(entityId)?.attributes?.friendly_name || 'this automation';
-      if (!confirm(`Delete "${label}"? This can't be undone.`)) return;
-      try { await store.backend.deleteAutomation(configId); toast('Automation deleted'); } catch (e) { toast(`Couldn't delete: ${e.message}`, 'error'); }
+      const label = store.get(entityId)?.attributes?.friendly_name || 'bu otomasyon';
+      if (!confirm(`"${label}" silinsin mi? Bu geri alınamaz.`)) return;
+      try { await store.backend.deleteAutomation(configId); toast('Otomasyon silindi'); } catch (e) { toast(`Silinemedi: ${e.message}`, 'error'); }
     });
     const el = h('article', { class: 'auto-item' },
       h('div', { class: 'auto-top' },
@@ -90,7 +101,7 @@ export function renderAutomations(root, cleanup, ctx) {
       sw.set(s.state === 'on', !isAvailable(s));
       el.classList.toggle('off', s.state !== 'on');
       el.classList.toggle('running', !!s.attributes.current);
-      meta.textContent = `${s.attributes.current ? 'Running now' : s.state === 'on' ? 'On' : 'Off'} · last ran ${relTime(s.attributes.last_triggered)}`;
+      meta.textContent = `${s.attributes.current ? 'Şu an çalışıyor' : s.state === 'on' ? 'Açık' : 'Kapalı'} · son çalışma ${relTime(s.attributes.last_triggered)}`;
     };
     cleanup.push(store.watch(entityId, tick));
     const t = setInterval(tick, 30000);
@@ -117,11 +128,11 @@ export function renderAutomations(root, cleanup, ctx) {
   let tab = ctx.query.get('tab') === 'ideas' ? 'ideas' : 'mine';
   const tabs = h('div', { class: 'segmented', role: 'tablist' });
   const mine = h('div', { class: 'auto-mine' },
-    h('p', { class: 'muted intro' }, 'Automations run inside Home Assistant, so they keep working when the app is closed.'), list);
+    h('p', { class: 'muted intro' }, 'Otomasyonlar merkezde çalışır; uygulama kapalıyken de çalışmaya devam eder.'), list);
   const ideas = h('div', { class: 'ideas' });
   const drawTabs = () => {
     const ready = ideasForHome().filter((i) => i.ready).length;
-    tabs.replaceChildren(...[['mine', 'My automations', null], ['ideas', 'Ideas', ready]].map(([id, label, count]) => h('button', {
+    tabs.replaceChildren(...[['mine', 'Otomasyonlarım', null], ['ideas', 'Fikirler', ready]].map(([id, label, count]) => h('button', {
       type: 'button', role: 'tab', 'aria-selected': String(tab === id), class: tab === id ? 'active' : '',
       onclick: () => { tab = id; history.replaceState(null, '', id === 'ideas' ? '#/automations?tab=ideas' : '#/automations'); drawTabs(); show(); },
     }, label, count ? h('span', { class: 'tab-count' }, String(count)) : null)));
@@ -142,8 +153,8 @@ export function renderAutomations(root, cleanup, ctx) {
   }));
 
   root.append(
-    h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/automations/new', 'aria-label': 'New automation' }, icon('plus', 16),
-      h('span', { class: 'wide-text' }, 'New automation'), h('span', { class: 'narrow-text' }, 'New'))),
+    h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/automations/new', 'aria-label': 'Yeni otomasyon' }, icon('plus', 16),
+      h('span', { class: 'wide-text' }, 'Yeni otomasyon'), h('span', { class: 'narrow-text' }, 'Yeni'))),
     mine,
     ideas,
   );
@@ -155,7 +166,7 @@ export function renderAutomations(root, cleanup, ctx) {
 
 const CATEGORY_TONE = {
   Lighting: 'var(--accent)', Comfort: 'var(--warm)', Entertainment: 'var(--cool)', Energy: 'var(--ok)',
-  Safety: 'var(--danger)', Security: 'var(--violet)', Garden: 'var(--ok)',
+  Safety: 'var(--danger)', Security: 'var(--violet)', Garden: 'var(--ok)', Appliances: 'var(--cool)', Pets: 'var(--warm)',
 };
 
 function drawIdeas(el) {
@@ -164,13 +175,13 @@ function drawIdeas(el) {
   const ready = all.filter((i) => i.ready).sort(byCat);
   const later = all.filter((i) => !i.ready).sort((a, b) => a.missing.length - b.missing.length || byCat(a, b));
   el.replaceChildren(
-    h('p', { class: 'muted intro' }, 'Ideas for what your devices can do together. Ready ones open in the editor already filled in; you can change anything before saving.'),
+    h('p', { class: 'muted intro' }, 'Cihazlarınızın birlikte neler yapabileceğine dair fikirler. Hazır olanlar düzenleyicide doldurulmuş açılır; kaydetmeden önce her şeyi değiştirebilirsiniz.'),
     h('section', { class: 'idea-group' },
-      h('h3', { class: 'group-title' }, 'Ready to set up', h('span', { class: 'muted' }, ` · ${ready.length}`)),
-      ready.length ? h('div', { class: 'idea-grid' }, ready.map(ideaCard)) : h('p', { class: 'muted pad' }, 'Add a device to get ideas.')),
+      h('h3', { class: 'group-title' }, 'Kurulmaya hazır', h('span', { class: 'muted' }, ` · ${ready.length}`)),
+      ready.length ? h('div', { class: 'idea-grid' }, ready.map(ideaCard)) : h('p', { class: 'muted pad' }, 'Fikir görmek için bir cihaz ekleyin.')),
     later.length ? h('section', { class: 'idea-group' },
-      h('h3', { class: 'group-title' }, 'Needs more devices', h('span', { class: 'muted' }, ` · ${later.length}`)),
-      h('p', { class: 'muted small' }, 'These need Evra products you don\'t have yet. The dashed chips show what\'s missing; tap one to see the product.'),
+      h('h3', { class: 'group-title' }, 'Başka cihaz gerekiyor', h('span', { class: 'muted' }, ` · ${later.length}`)),
+      h('p', { class: 'muted small' }, 'Bunlar henüz sizde olmayan Evra ürünleri gerektiriyor. Kesik çizgili etiketler eksik olanı gösterir; ürünü görmek için birine dokunun.'),
       h('div', { class: 'idea-grid' }, later.map(ideaCard))) : null,
   );
 }
@@ -180,9 +191,9 @@ function capChip(cap, device, missing = false, optional = false) {
   if (!c) return null;
   const label = device ? deviceName(device) : c.name;
   if (missing) {
-    const why = optional ? `Optional: ${c.name}` : `Needs a ${c.name.toLowerCase()}`;
-    return h('a', { class: `idea-chip missing${optional ? ' optional' : ''}`, href: `#/devices/add/${c.products[0]}`, title: `${why}. Tap to see it in the catalogue.`, 'aria-label': `${why}. See it in the catalogue.` },
-      icon(c.icon, 14), label, optional ? h('span', { class: 'chip-note' }, 'optional') : icon('plus', 12));
+    const why = optional ? `İsteğe bağlı: ${c.name}` : `Gerekli: ${c.name.toLocaleLowerCase('tr-TR')}`;
+    return h('a', { class: `idea-chip missing${optional ? ' optional' : ''}`, href: `#/devices/add/${c.products[0]}`, title: `${why}. Katalogda görmek için dokunun.`, 'aria-label': `${why}. Katalogda görün.` },
+      icon(c.icon, 14), label, optional ? h('span', { class: 'chip-note' }, 'isteğe bağlı') : icon('plus', 12));
   }
   return h('span', { class: 'idea-chip', title: c.name }, icon(c.icon, 14), label);
 }
@@ -199,12 +210,12 @@ function ideaCard({ idea, ready, missing, uses, optionalMissing }) {
   return h('article', { class: `idea${ready ? '' : ' unavailable'}`, style: { '--tone': CATEGORY_TONE[idea.category] || 'var(--accent)' } },
     h('div', { class: 'idea-top' },
       h('span', { class: 'idea-icon' }, icon(idea.icon, 20)),
-      h('div', { class: 'idea-titles' }, h('h4', null, idea.title), h('span', { class: 'idea-cat' }, idea.category)),
-      ready ? null : h('span', { class: 'idea-lock', title: 'Needs more devices' }, icon('lock', 14))),
+      h('div', { class: 'idea-titles' }, h('h4', null, idea.title), h('span', { class: 'idea-cat' }, CATEGORY_LABEL[idea.category] || idea.category)),
+      ready ? null : h('span', { class: 'idea-lock', title: 'Başka cihaz gerekiyor' }, icon('lock', 14))),
     h('p', { class: 'idea-text' }, idea.text),
     h('div', { class: 'idea-chips' },
       used.map((u) => capChip(u.cap, u.device)),
       missing.map((c) => capChip(c, null, true)),
       ready ? optionalMissing.map((c) => capChip(c, null, true, true)) : null),
-    ready ? h('a', { class: 'btn primary small', href: `#/automations/new?idea=${idea.id}` }, icon('sparkle', 14), 'Set it up') : null);
+    ready ? h('a', { class: 'btn primary small', href: `#/automations/new?idea=${idea.id}` }, icon('sparkle', 14), 'Kur') : null);
 }

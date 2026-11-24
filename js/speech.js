@@ -23,7 +23,7 @@ export function speakable(text) {
   return String(text || '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`([^`]*)`/g, '$1')
-    .replace(/https?:\/\/\S+/g, 'a link')
+    .replace(/https?:\/\/\S+/g, 'bir bağlantı')
     .split(/\n+/)
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').replace(/\*\*|__|[*#>]/g, '').trim())
     .filter(Boolean)

@@ -4,6 +4,7 @@ import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, t
 import { icon } from './icons.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
+import { startWeather } from './weather.js';
 import { renderHome } from './views/home.js';
 import { renderRemotes } from './views/remotes.js';
 import { renderEnergy } from './views/energy.js';
@@ -29,17 +30,17 @@ await loadSiteConfig();
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [
-  { id: 'home', label: 'Home', icon: 'home', render: renderHome, title: HOME.room },
-  { id: 'devices', label: 'Devices', icon: 'devices', render: renderDevices, title: 'Devices' },
-  { id: 'scenes', label: 'Scenes', icon: 'scenes', render: renderScenes, title: 'Scenes' },
-  { id: 'automations', label: 'Automations', icon: 'robot', render: renderAutomations, title: 'Automations' },
-  { id: 'energy', label: 'Energy', icon: 'chart', render: renderEnergy, title: 'Energy & climate', mobile: false },
-  { id: 'remotes', label: 'Remotes', icon: 'remote', render: renderRemotes, title: 'Remotes', mobile: false },
-  { id: 'chat', label: 'Assistant', icon: 'devil', render: renderChat, title: 'Assistant' },
-  { id: 'settings', label: 'Settings', icon: 'gear', render: renderSettings, title: 'Settings' },
+  { id: 'home', label: 'Ana sayfa', icon: 'home', render: renderHome, title: HOME.room },
+  { id: 'devices', label: 'Cihazlar', icon: 'devices', render: renderDevices, title: 'Cihazlar' },
+  { id: 'scenes', label: 'Sahneler', icon: 'scenes', render: renderScenes, title: 'Sahneler' },
+  { id: 'automations', label: 'Otomasyonlar', short: 'Otomasyon', icon: 'robot', render: renderAutomations, title: 'Otomasyonlar' },
+  { id: 'energy', label: 'Enerji', icon: 'chart', render: renderEnergy, title: 'Enerji ve iklim', mobile: false },
+  { id: 'remotes', label: 'Kumandalar', icon: 'remote', render: renderRemotes, title: 'Kumandalar', mobile: false },
+  { id: 'chat', label: 'Evra', icon: 'devil', render: renderChat, title: 'Evra asistanı' },
+  { id: 'settings', label: 'Ayarlar', icon: 'gear', render: renderSettings, title: 'Ayarlar' },
   // Reached from Settings, not shown in the navigation.
 ];
-const SUBTITLES = { 'devices/add': 'Add a device', 'automations/new': 'New automation', 'automations/edit': 'Edit automation' };
+const SUBTITLES = { 'devices/add': 'Cihaz ekle', 'automations/new': 'Yeni otomasyon', 'automations/edit': 'Otomasyonu düzenle' };
 
 // ---- theme and developer mode ------------------------------------------------
 
@@ -53,15 +54,15 @@ themeBtn.addEventListener('click', () => setPrefs({ theme: effectiveTheme() === 
 // "Customize" button next to it goes back to the panel.
 const customBtn = h('button', { class: 'theme-btn custom-btn', type: 'button' });
 customBtn.addEventListener('click', () => { if (isEditing()) setEditing(false); else openPanel(); });
-const backBtn = h('button', { class: 'theme-btn cz-back-btn', type: 'button', hidden: true, title: 'Back to Customize', 'aria-label': 'Back to Customize' },
-  h('span', { class: 'custom-btn-icon' }, icon('palette', 16)), h('span', null, 'Customize'));
+const backBtn = h('button', { class: 'theme-btn cz-back-btn', type: 'button', hidden: true, title: 'Özelleştir\'e dön', 'aria-label': 'Özelleştir\'e dön' },
+  h('span', { class: 'custom-btn-icon' }, icon('palette', 16)), h('span', null, 'Özelleştir'));
 backBtn.addEventListener('click', () => { setEditing(false); openPanel(); });
 function paintCustomBtn() {
   const on = isEditing();
-  customBtn.replaceChildren(...[h('span', { class: 'custom-btn-icon' }, icon(on ? 'check' : 'palette', 18)), on ? h('span', null, 'Done') : null].filter(Boolean));
+  customBtn.replaceChildren(...[h('span', { class: 'custom-btn-icon' }, icon(on ? 'check' : 'palette', 18)), on ? h('span', null, 'Bitti') : null].filter(Boolean));
   customBtn.setAttribute('aria-pressed', String(on));
-  customBtn.setAttribute('aria-label', on ? 'Done moving things' : 'Customize: themes, buttons and layout');
-  customBtn.title = on ? 'Done' : 'Customize';
+  customBtn.setAttribute('aria-label', on ? 'Taşımayı bitir' : 'Özelleştir: temalar, düğmeler ve yerleşim');
+  customBtn.title = on ? 'Bitti' : 'Özelleştir';
   if (on) customBtn.removeAttribute('aria-haspopup'); else customBtn.setAttribute('aria-haspopup', 'dialog');
   backBtn.hidden = !on;
 }
@@ -71,7 +72,7 @@ window.addEventListener('evra-customize', (e) => { setEditing(false); openPanel(
 // The panel's "Move things on the screen" asks for moving mode with this event.
 window.addEventListener('evra-move', () => {
   setEditing(true);
-  toast('Drag things to move them. Tap an eye to hide one. Done is at the top.');
+  toast('Taşımak için sürükleyin. Gizlemek için göze dokunun. Bitti düğmesi yukarıda.');
 });
 // Escape while moving goes back to the panel.
 document.addEventListener('keydown', (e) => {
@@ -85,7 +86,7 @@ function applyTheme() {
   // Without developer mode, anything marked .dev-only is hidden by the CSS.
   document.documentElement.classList.toggle('dev', devMode);
   const dark = effectiveTheme() === 'dark';
-  const label = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  const label = dark ? 'Açık temaya geç' : 'Koyu temaya geç';
   themeBtn.replaceChildren(icon(dark ? 'sun' : 'moon', 18));
   themeBtn.setAttribute('aria-label', label);
   themeBtn.title = label;
@@ -123,6 +124,7 @@ function connect() {
   store.backend = settings.mode === 'live' ? createLiveBackend(settings.hassUrl) : createDemoBackend();
   store.setStatus({ mode: settings.mode, state: 'connecting', message: '' });
   store.backend.connect((msg) => store.apply(msg), (patch) => store.setStatus(patch));
+  startWeather();
 }
 
 // ---- shell ------------------------------------------------------------------
@@ -137,8 +139,8 @@ const pill = h('a', { class: 'status-pill', href: '#/settings' }, pillBody);
 const topLeft = h('div', { class: 'top-left' });
 const topRight = h('div', { class: 'top-right' });
 const main = h('main', { id: 'view', tabindex: '-1' });
-const nav = h('nav', { class: 'nav', 'aria-label': 'Main' });
-const brand = h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra home', title: 'Evra' }, icon('evra', 22));
+const nav = h('nav', { class: 'nav', 'aria-label': 'Ana menü' });
+const brand = h('a', { class: 'nav-brand', href: '#/home', 'aria-label': 'Evra ana sayfa', title: 'Evra' }, icon('evra', 22));
 
 // Members whose account doesn't include the assistant (it comes with Premium) see its
 // tab with a lock; tapping it opens the plans on the website instead. The assistant
@@ -164,7 +166,7 @@ function buildNav() {
     class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}${locked(v) ? ' nav-locked' : ''}`,
     ...(locked(v) ? { title: 'Asistan Premium planla gelir. Planları görmek için dokunun.', 'aria-label': `${v.label} (kilitli: Premium planla gelir, planları açar)` } : {}),
   }, h('span', { class: 'nav-icon' }, icon(v.icon, 22), locked(v) ? h('span', { class: 'nav-lock', 'aria-hidden': 'true' }, icon('lock', 12)) : null),
-  h('span', { class: 'nav-label' }, v.label))));
+  h('span', { class: 'nav-label' }, v.short || v.label))));
   arrangeable(nav, 'nav', { whole: true, locked: LOCKED_NAV, all: all.map((v) => v.id) });
   markActive();
 }
@@ -200,7 +202,7 @@ function showGate() {
   if (store.backend) { store.backend.disconnect(); store.backend = null; started = false; }
   appEl.classList.add('gated');
   appEl.replaceChildren(renderAuthGate(gateCleanup));
-  document.title = 'Sign in · Evra';
+  document.title = 'Giriş · Evra';
 }
 
 // A change of account (or of what it may use) re-draws the tabs, or swaps app and welcome screen.
@@ -227,13 +229,13 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 function greeting() {
   const hr = new Date().getHours();
-  return hr < 5 ? 'Good night' : hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+  return hr < 5 ? 'İyi geceler' : hr < 12 ? 'Günaydın' : hr < 18 ? 'İyi günler' : 'İyi akşamlar';
 }
 let currentView = null;
 let currentTitle = '';
 function drawHeader() {
   if (!currentView) return;
-  const date = new Date().toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  const date = new Date().toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
   titleText.textContent = currentView.id === 'home' ? greeting() : currentTitle || currentView.title;
   subText.textContent = currentView.id === 'home' ? `${HOME.room} · ${date} · ${clockText()}` : `${date} · ${clockText()}`;
 }
@@ -252,8 +254,8 @@ store.onStatus((s) => {
 
 store.onStatus((s) => {
   const text = s.mode === 'demo'
-    ? (s.state === 'error' ? 'Demo · problem' : 'Demo')
-    : { connected: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', error: 'Offline', idle: 'Offline' }[s.state] || s.state;
+    ? (s.state === 'error' ? 'Örnek ev · sorun' : 'Örnek ev')
+    : { connected: 'Canlı', connecting: 'Bağlanıyor', reconnecting: 'Yeniden bağlanıyor', error: 'Çevrimdışı', idle: 'Çevrimdışı' }[s.state] || s.state;
   pill.classList.remove('demo', 'connected', 'connecting', 'reconnecting', 'error', 'idle');
   pill.classList.add(s.mode === 'demo' && s.state === 'connected' ? 'demo' : s.state);
   pillBody.replaceChildren(h('span', { class: 'status-dot' }), text);
@@ -288,9 +290,9 @@ function route(opts) {
   main.replaceChildren();
   main.className = `view view-${view.id}${params.length ? ' view-sub' : ''}`;
   currentView = view;
-  currentTitle = SUBTITLES[`${view.id}/${params[0]}`] || (view.id === 'devices' && params[0] ? 'Device' : '');
+  currentTitle = SUBTITLES[`${view.id}/${params[0]}`] || (view.id === 'devices' && params[0] ? 'Cihaz' : '');
   drawHeader();
-  document.title = `${currentTitle || view.label} · Evra`;
+  document.title = `${currentTitle || (view.id === 'chat' ? view.title : view.label)} · Evra`;
   markActive();
   view.render(main, cleanup, { reconnect: connect, applyTheme, params, query: new URLSearchParams(qs || '') });
   // A new screen slides in from the side of the tab it belongs to (not on a re-draw in place).
@@ -316,7 +318,7 @@ window.addEventListener('evra-custom', (e) => {
 
 window.addEventListener('hashchange', route);
 // Notifications sent by automations in demo mode show as a toast.
-window.addEventListener('demo-notify', (e) => toast(`Notification: ${e.detail}`));
+window.addEventListener('demo-notify', (e) => toast(`Bildirim: ${e.detail}`));
 // The ones meant for phones also appear as real notifications when they're on here.
 window.addEventListener('demo-push', (e) => { showHere(e.detail.title, e.detail.message).catch(() => {}); });
 const mq = window.matchMedia('(prefers-color-scheme: dark)');

@@ -30,7 +30,6 @@ PRODUCTS = [
     ("led-strip", "LED strip", "TP-Link", "L900-5", "light", "wifi", "tplink"),
     ("leak", "Water leak sensor", "Shelly", "Shelly Flood Gen4", "leak", "wifi", "shelly"),
     ("boiler-relay", "Boiler relay", "Shelly", "Shelly 1 Gen4", "relay", "wifi", "shelly"),
-    ("ir-kit", "IR kit", "Espressif", "esp32 IR blaster", "ir", "wifi", "esphome"),
     ("camera-indoor", "Indoor camera", "TP-Link", "Tapo C210", "camera", "wifi", "onvif"),
     ("camera-outdoor", "Outdoor camera", "SONOFF", "CAM-B1P", "camera", "wifi", "onvif"),
     # Matter: added with the code printed on the device
@@ -39,6 +38,14 @@ PRODUCTS = [
     # Cloud: added through the maker's account (Tuya)
     ("siren", "Indoor siren", "Fonri", "Wi-Fi siren", "siren", "cloud", "tuya"),
     ("curtain", "Curtain", "Tuya", "Wi-Fi curtain motor", "cover", "cloud", "tuya"),
+    # Home appliances (added to the website on 22 Nov 2026)
+    ("ir-remote", "IR remote receiver", "Athom", "Athom RF433 IR Remote", "ir", "wifi", "esphome"),
+    ("smart-kettle", "Smart kettle", "Xiaomi", "Smart Kettle 2 Pro", "kettle", "wifi", "xiaomi_ble"),
+    ("robot-vacuum", "Robot vacuum", "Dreame", "Dreame L10s Pro Gen 2", "vacuum", "cloud", "xiaomi_miio"),
+    ("air-purifier", "Air purifier", "Xiaomi", "Smart Air Purifier 4 Compact", "fan", "cloud", "xiaomi_miio"),
+    ("smart-fan", "Standing fan", "Xiaomi", "Smart Standing Fan 2", "fan", "cloud", "xiaomi_miio"),
+    ("pet-feeder", "Pet feeder", "Xiaomi", "Smart Pet Food Feeder 2", "feeder", "cloud", "xiaomi_miio"),
+    ("cat-litter", "Litter box", "Petkit", "Pura Max 2", "litter", "cloud", "petkit"),
 ]
 
 BY_ID = {p[0]: p for p in PRODUCTS}
@@ -124,4 +131,31 @@ def templates(product_id):
     if kind == "cover":
         cls = {"blind-chain": "blind", "blind-tube": "shade", "curtain": "curtain", "shutter": "shutter"}.get(product_id, "blind")
         return [{"domain": "cover", "suffix": "", "label": "", "state": "open", "attrs": {"current_position": 100, "device_class": cls, "supported_features": 15}}]
+    if kind == "vacuum":
+        return [{"domain": "vacuum", "suffix": "", "label": "", "state": "docked",
+                 "attrs": {"fan_speed": "Standard", "fan_speed_list": ["Silent", "Standard", "Strong", "Turbo"], "supported_features": 14204}}, _battery()]
+    if kind == "fan":
+        if product_id == "air-purifier":
+            return [{"domain": "fan", "suffix": "", "label": "", "state": "off",
+                     "attrs": {"percentage": 30, "percentage_step": 1, "preset_modes": ["Auto", "Sleep", "Favorite"], "preset_mode": "Auto", "supported_features": 57}},
+                    {"domain": "sensor", "suffix": "pm25", "label": "PM2.5", "state": "9",
+                     "attrs": {"device_class": "pm25", "unit_of_measurement": "µg/m³", "state_class": "measurement"}},
+                    {"domain": "sensor", "suffix": "filter_life", "label": "Filter life", "state": "92",
+                     "attrs": {"unit_of_measurement": "%", "state_class": "measurement"}, "category": "diagnostic"}]
+        return [{"domain": "fan", "suffix": "", "label": "", "state": "off",
+                 "attrs": {"percentage": 40, "percentage_step": 1, "preset_modes": ["Normal", "Nature"], "preset_mode": "Normal", "oscillating": False, "supported_features": 59}}]
+    if kind == "feeder":
+        return [{"domain": "button", "suffix": "feed", "label": "Feed now", "state": "unknown", "attrs": {}},
+                {"domain": "number", "suffix": "portions", "label": "Portions", "state": "2", "attrs": {"min": 1, "max": 10, "step": 1, "mode": "box"}},
+                {"domain": "sensor", "suffix": "food_level", "label": "Food level", "state": "Enough", "attrs": {"device_class": "enum", "options": ["Enough", "Low", "Empty"]}}]
+    if kind == "litter":
+        return [{"domain": "button", "suffix": "clean", "label": "Clean now", "state": "unknown", "attrs": {}},
+                {"domain": "sensor", "suffix": "waste_level", "label": "Waste bin", "state": "20", "attrs": {"unit_of_measurement": "%", "state_class": "measurement"}},
+                {"domain": "sensor", "suffix": "visits_today", "label": "Visits today", "state": "3", "attrs": {"state_class": "total_increasing"}}]
+    if kind == "kettle":
+        return [{"domain": "switch", "suffix": "", "label": "", "state": "off", "attrs": {}},
+                {"domain": "sensor", "suffix": "water_temperature", "label": "Water temperature", "state": "24",
+                 "attrs": {"device_class": "temperature", "unit_of_measurement": "°C", "state_class": "measurement"}},
+                {"domain": "number", "suffix": "target_temperature", "label": "Target temperature", "state": "85",
+                 "attrs": {"min": 40, "max": 100, "step": 5, "unit_of_measurement": "°C", "mode": "slider"}}]
     return []

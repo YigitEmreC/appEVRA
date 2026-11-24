@@ -1,12 +1,14 @@
 # Evra app
 
-The Evra app, built on Home Assistant's API. Its colours come from the schemecolor.com palettes "Blue Silence" and "Pale Blue and Green" (listed at the top of `css/app.css`). Home Assistant keeps running the devices, Zigbee, the Pico and the automations; this app is what you look at and tap. It knows the whole Evra product range (34 products, from the November 2026 catalogue).
+The Evra app, built on Home Assistant's API. Its colours come from the schemecolor.com palettes "Blue Silence" and "Pale Blue and Green" (listed at the top of `css/app.css`). Home Assistant keeps running the devices, Zigbee, the Pico and the automations; this app is what you look at and tap. It knows the whole Evra product range: the 39 products of the newest product catalogue (`Evra_Urun_Katalogu Son.pdf`), including the home appliances (robot vacuum, air purifier, pet feeder, self-cleaning litter box, smart kettle, standing fan) and the AC and TV remote (IR + RF433). Each product page shows the catalogue's introduction, features, how it works, Evra's tip, questions to ask Evra, the installation steps, and its problems and solutions.
+
+**The whole app is in Turkish**: screens, messages, scenes, automation ideas and the assistant.
 
 It's plain HTML, CSS and JavaScript with no build step, so there's nothing to install except Python for the local server.
 
 ## Run it on this PC
 
-Double-click **`Start Evra.bat`**. It starts the local server in a small minimised window (close that window to stop it) and opens Evra in its own Edge or Chrome app window. If the server is already running it just opens the app. `"Start Evra.bat" 8020` uses another port.
+Double-click **`Start Evra.bat`**. It starts the local server in a small minimised window (close that window to stop it) and opens Evra in its own Edge or Chrome app window. If the server is already running it just opens the app. `"Start Evra.bat" 8020` uses another port. It also starts, each in its own minimised window and only if it isn't running yet: the accounts stand-in, the **test hub** (a pretend Home Assistant on http://localhost:8123, for live mode without the Pi) and the assistant. To skip the test hub, run `set EVRA_NO_HUB=1` first.
 
 By hand, from the `SMART` folder:
 
@@ -77,10 +79,10 @@ Customization is kept in this browser (`localStorage` key `evra.custom`), so the
 |---|---|
 | Home | Alerts for smoke, gas or water; the room's climate; quick actions; room chips; every device as a tile with its own controls |
 | Devices | All devices by room, the Rooms tab (create, rename, delete), device details (rename, move, remove) and **Add device** |
-| Scenes | Morning, Afternoon, Night, Sleep, Eco, Party, Movie, Entertainment, Music and Dinner. Each has room chips (All rooms or any mix) and a "What it does" list of the exact changes; only devices in the chosen rooms change. Plugs are never touched |
-| Automations | **My automations**: every automation with on/off, Run now, Edit and Delete, plus **New automation**. **Ideas**: about 40 automations the Evra range can do; ones your devices can already do open the editor filled in, the rest are faded with dashed chips for the missing products (tap one to see the product) |
+| Scenes | Sabah, Öğleden sonra, Akşam, Uyku, Eko, Parti, Film, Eğlence, Müzik, Akşam yemeği, Dışarıda (leaving home: everything off, door locked, the robot vacuum starts) and Temizlik (vacuum, blinds open, purifier at full speed). Scenes also work the home appliances: the purifier goes to sleep mode at night, the vacuum goes back to its base for a film or dinner, the kettle starts in the morning. Each has room chips (All rooms or any mix) and a "What it does" list of the exact changes; only devices in the chosen rooms change. Plugs are never touched |
+| Automations | **My automations**: every automation with on/off, Run now, Edit and Delete, plus **New automation**. **Ideas**: about 55 automations the Evra range can do, including the home appliances (vacuum when everyone has left, feeding at set times, purifier when the air gets dirty, fan when the room is warm, kettle in the morning, litter box full); ones your devices can already do open the editor filled in, the rest are faded with dashed chips for the missing products (tap one to see the product) |
 | Assistant | Chat with Evra, the assistant (Gemini), in Turkish first: answers about any device or room, Evra's products and plans, step-by-step help pairing new devices, and changes it prepares for you to approve (see "The assistant" below). Works in demo and live mode, for signed-in members with the assistant switched on. Needs the assistant server from `../EvrAI/gemini_home_starter`, which `Start Evra.bat` starts |
-| Settings | Evra account (who's signed in, change password, sign out), connection (demo or live), Look and layout (opens Customize), developer mode, electricity price, batteries, demo controls and the accounts address (developer mode), shortcuts to Energy, Remotes and Rooms |
+| Settings | Evra account (who's signed in, change password, sign out), connection (demo or live), **location and weather** (search for your city or use this device's location; Home's outside reading then shows that place's real weather from Open-Meteo, the demo home's weather and sunrise/sunset follow it, and in live mode a button moves the hub's own home location there), Look and layout (opens Customize), developer mode, electricity price, batteries, demo controls and the accounts address (developer mode), shortcuts to Energy, Remotes and Rooms |
 | Energy, Remotes | Power, temperature and activity charts; the full TV and heater remotes, one at a time: swipe sideways or use the tabs and arrows. In the side bar on wide screens, and linked from Settings on phones |
 
 ## The Evra range
@@ -97,8 +99,9 @@ Customization is kept in this browser (`localStorage` key `evra.custom`), so the
 | Camera (picture, motion, privacy) | Indoor and outdoor camera |
 | Alarm (turns red, safety advice) | Smoke, gas and water leak detectors |
 | Sensors | Motion, presence, door/window, temperature, CO₂, emergency button |
-| IR kit | Your Pico (TV and heater), or any other kit's learned buttons |
-| Information only | Hub, wall panel, underfloor actuator, night light, mesh Wi-Fi |
+| IR remote | Your Pico (TV and heater), or the AC and TV remote's learned buttons |
+| Home appliances | Robot vacuum, air purifier, standing fan, pet feeder, litter box, smart kettle |
+| Information only | Hub, wall panel, underfloor actuator, mesh Wi-Fi |
 
 ## Adding a device
 
@@ -126,28 +129,30 @@ When it connects, you name it and choose its room.
 
 **Ideas** (`js/ideas.js`) are written once and filled in with whatever devices the home has. Each idea lists the kinds of device it needs, such as a motion sensor and a light; `CAPS` says which catalogue products count for each kind. When the needs are met, "Set it up" opens the simple editor with the home's own devices, preferring ones in the same room. Notifications go to Home Assistant's notification list; safety alerts (smoke, gas, leak, emergency button) also go to phones with the Home Assistant app.
 
-**Scenes** (`js/scenes.js`) list what lights, the TV and heater (through the IR kit's power trackers), radiator valves, blinds and the lock should do. Room choices are kept on each device (in the browser), not in Home Assistant.
+**Scenes** (`js/scenes.js`) list what lights, the TV and heater (through the IR remote's power trackers), radiator valves, blinds, the lock and the home appliances should do. Room choices are kept on each device (in the browser), not in Home Assistant.
 
 ## Where things live
 
 | File | Purpose |
 |---|---|
-| `js/catalog.js` | The Evra range: products, categories, pairing methods, installation steps |
+| `js/catalog.js` | The Evra range: products, categories, pairing methods |
+| `js/catalog-details.js` | The product catalogue's text for each product (made by `tools/import_catalogue.py` from the PDF; don't edit by hand) |
 | `js/config.js` | This home's specifics: the heater/TV IR codes and trackers, colour presets, quick actions |
 | `js/store.js` | States, devices, rooms and entities; helpers used by every screen |
 | `js/ideas.js` | Automation ideas, what each needs, and how each is built from the home's devices |
 | `js/assistant-actions.js` | Carries out changes the assistant prepared, once approved, and checks they worked |
 | `js/speech.js` | Reads the assistant's replies aloud with the browser's own voices |
+| `js/weather.js`, `views/location-ui.js` | The weather for the chosen place (Open-Meteo, no key) and the Settings card to choose it |
 | `js/account.js`, `views/auth-gate.js`, `views/account-ui.js` | Evra accounts: the sign-in screen the app opens with, and the account panel |
 | `tools/accounts/` | A stand-in for the website's accounts, for working without the website (members, roles, assistant access) |
-| `js/scenes.js` | The ten scenes and how they're applied to the chosen rooms |
+| `js/scenes.js` | The twelve scenes and how they're applied to the chosen rooms |
 | `js/custom.js` | Each person's theme and layout: saving it, applying it, and putting things in their chosen order |
 | `js/themes.js` | The colour themes (still and moving), moving backgrounds and accent colours |
 | `js/sky.js` | The moving background layer |
 | `js/sky-scenes.js` | The illustrated backgrounds: Istanbul (Bosphorus, the bridge, Kız Kulesi), the fireplace, the mountains, the retro horizon |
 | `js/edit.js` | Editing the layout on the screen: dragging and hiding |
 | `js/views/customize.js` | The Customize panel |
-| `Start Evra.bat` | Starts the local server and opens the app |
+| `Start Evra.bat` | Starts the local server, the accounts stand-in, the test hub and the assistant, and opens the app |
 | `Start test hub.bat`, `tools/test_hub/` | The Home Assistant stand-in for testing live mode (hub.py: API and control panel, world.py: the home, engine.py: automations) |
 | `js/devices/cards.js` | The device tiles, one builder per kind |
 | `js/backends/demo.js` | The demo Home Assistant, including a small automation engine |
@@ -178,7 +183,7 @@ In the app, `js/account.js` handles accounts, with `views/auth-gate.js` (the fir
 
 ## The assistant
 
-The assistant is called **Evra** and speaks Turkish first (it answers in English when written to in English). Besides the home, it knows Evra's whole range: products, prices, packages and plans (from the website's `lib/assistant/products.js`), and it walks people through pairing a new device step by step. The Assistant tab is in Turkish too.
+The assistant is called **Evra** and speaks Turkish first (it answers in English when written to in English). Besides the home, it knows Evra's whole range: products, prices, packages and plans (from the website's `lib/assistant/products.js`), and it walks people through pairing a new device step by step. It also knows each product's problems and solutions from the catalogue. The questions on a product page ("Evra'ya sorun") open the Assistant tab with that question in the box.
 
 The assistant answers questions and prepares changes. You approve every change before it happens, and the app carries it out itself. It can prepare:
 - Device control: lights, plugs, TV and heater power, blinds, thermostats and valves.
@@ -214,7 +219,7 @@ The conversation is kept while the tab is open (sessionStorage), and **New chat*
 
 `tools/test_hub/` is a stand-in for Home Assistant. It speaks the same API the app uses in live mode (the login page and tokens, the WebSocket API, and the REST endpoints for automations and device setup), so live mode runs its real code against it. It starts with the home in `../ha-snapshot`, and runs automations itself, including your five.
 
-1. Double-click **`Start test hub.bat`**. It starts the hub in its own window, opens the hub's control panel (http://localhost:8123) and starts Evra.
+1. Double-click **`Start Evra.bat`** (it starts the hub minimised) or **`Start test hub.bat`** (the hub's window stays visible, and it also opens the hub's control panel at http://localhost:8123).
 2. In Evra: **Settings → Connection → Live**, address `http://localhost:8123` (already filled in), **Connect**.
 3. You land on the hub's login page. The test username and password are on the control panel; they're made for this PC and kept in `tools/test_hub/data/` (not in git).
 
@@ -225,7 +230,8 @@ The control panel is the "real world":
   - Zigbee: start pairing in the app, then press **Join** on the panel.
   - Wi-Fi: the panel lists the IP address to type in the app.
   - Matter: the panel shows the code to enter.
-  - Tuya/Smart Life: a pretend account page.
+  - Tuya/Smart Life, Xiaomi and Petkit: pretend account pages (the robot vacuum, purifier, fan, pet feeder and litter box come from the Xiaomi and Petkit ones).
+  - The IR remote receiver and the kettle wait on the network like the other Wi-Fi devices. A test home saved before 22 November doesn't have them yet: use the panel's reset.
 - See notifications automations send. Tick "a phone with the Home Assistant app" to make phone notifications exist.
 - Flip helpers (TV/heater trackers, day/night), read the activity log, and **Reset the test home**.
 

@@ -50,7 +50,8 @@ SERVICES = {
     "light": {"turn_on", "turn_off", "toggle"},
     "switch": {"turn_on", "turn_off", "toggle"},
     "siren": {"turn_on", "turn_off", "toggle"},
-    "fan": {"turn_on", "turn_off", "toggle"},
+    "fan": {"turn_on", "turn_off", "toggle", "set_percentage", "set_preset_mode", "oscillate"},
+    "vacuum": {"start", "pause", "stop", "return_to_base", "set_fan_speed"},
     "input_boolean": {"turn_on", "turn_off", "toggle"},
     "button": {"press"},
     "cover": {"open_cover", "close_cover", "stop_cover", "set_cover_position", "toggle"},
@@ -216,9 +217,10 @@ class World:
     def _add_waiting_devices(self):
         # Devices waiting to be added, so every pairing method can be tried.
         self.network = [{"product": p, "host": f"192.168.88.{101 + i}"} for i, p in
-                        enumerate(["plug", "bulb", "led-strip", "leak", "boiler-relay", "ir-kit", "camera-indoor", "camera-outdoor"])]
+                        enumerate(["plug", "bulb", "led-strip", "leak", "boiler-relay", "camera-indoor", "camera-outdoor",
+                                   "ir-remote", "smart-kettle"])]
         self.matter = [{"product": "lock", "code": "3497-011-2332"}, {"product": "co2", "code": "0251-520-0076"}]
-        self.cloud = [{"product": "siren"}, {"product": "curtain"}]
+        self.cloud = [{"product": p} for p in ("siren", "curtain", "robot-vacuum", "air-purifier", "smart-fan", "pet-feeder", "cat-litter")]
 
     @staticmethod
     def _integration_for(d):
@@ -507,9 +509,38 @@ class World:
                 self.set_state(eid, "off", context=context)
             else:
                 self._light_on(eid, data, context)
-        elif domain in ("switch", "input_boolean", "siren", "fan"):
+        elif domain == "fan":
+            if service == "turn_off" or (service == "toggle" and cur == "on"):
+                self.set_state(eid, "off", context=context)
+            elif service == "set_percentage":
+                pct = int(data.get("percentage", 0))
+                self.set_state(eid, "on" if pct > 0 else "off", {"percentage": pct} if pct > 0 else {}, context=context)
+            elif service == "set_preset_mode":
+                if data.get("preset_mode") not in (attrs.get("preset_modes") or []):
+                    raise HassError(f"Invalid preset mode: {data.get('preset_mode')}")
+                self.set_state(eid, "on", {"preset_mode": data["preset_mode"]}, context=context)
+            elif service == "oscillate":
+                self.set_state(eid, cur, {"oscillating": bool(data.get("oscillating"))}, context=context)
+            else:
+                extra = {k: data[k] for k in ("percentage", "preset_mode") if k in data}
+                self.set_state(eid, "on", extra, context=context)
+        elif domain == "vacuum":
+            if service == "return_to_base":
+                self.set_state(eid, "returning", context=context)
+                await asyncio.sleep(2.5)
+                if self.state_of(eid) == "returning":
+                    self.set_state(eid, "docked")
+            elif service == "set_fan_speed":
+                self.set_state(eid, cur, {"fan_speed": data.get("fan_speed")}, context=context)
+            else:
+                self.set_state(eid, {"start": "cleaning", "pause": "paused", "stop": "idle"}[service], context=context)
+        elif domain in ("switch", "input_boolean", "siren"):
             on = service == "turn_on" or (service == "toggle" and cur != "on")
             self.set_state(eid, "on" if on else "off", context=context)
+            base = eid.split(".", 1)[1]
+            if on and f"number.{base}_target_temperature" in self.states:  # a kettle heats up
+                await asyncio.sleep(2)
+                self.set_state(f"sensor.{base}_water_temperature", self.state_of(f"number.{base}_target_temperature"))
         elif domain == "button":
             self.set_state(eid, iso(), context=context)
         elif domain == "automation":

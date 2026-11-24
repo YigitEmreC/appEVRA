@@ -26,10 +26,10 @@ export const HOME = {
     sensitivity: 'select.kapkan_detection_sensitivity',
   },
 
-  light: { entity: 'light.bg_crib_led', name: 'LED strip' },
+  light: { entity: 'light.bg_crib_led', name: 'LED şerit' },
 
   plug: {
-    name: 'Plug',
+    name: 'Priz',
     switch: 'switch.bg_crib_plug',
     power: 'sensor.bg_crib_plug_current_consumption',
     today: 'sensor.bg_crib_plug_today_s_consumption',
@@ -41,7 +41,7 @@ export const HOME = {
   // The heater and TV are driven by infrared from the Pico. Their power codes
   // are toggles, so the "tracker" helpers record whether each one is on.
   heater: {
-    name: 'Heater',
+    name: 'Isıtıcı',
     tracker: 'input_boolean.heater_on',
     buttons: {
       power: IR + 'heater_power',
@@ -71,22 +71,22 @@ export const HOME = {
   },
 
   batteries: [
-    { name: 'Temperature sensor', entity: 'sensor.bg_crib_thermostat_battery' },
-    { name: 'Window sensor', entity: 'sensor.window_battery' },
-    { name: 'Motion sensor', entity: 'sensor.kapkan_battery' },
+    { name: 'Sıcaklık sensörü', entity: 'sensor.bg_crib_thermostat_battery' },
+    { name: 'Pencere sensörü', entity: 'sensor.window_battery' },
+    { name: 'Hareket sensörü', entity: 'sensor.kapkan_battery' },
   ],
 
   colorPresets: [
-    { name: 'Warm white', data: { color_temp_kelvin: 2700 }, css: '#ffb36b' },
-    { name: 'Cool white', data: { color_temp_kelvin: 5500 }, css: '#e3ecff' },
-    { name: 'Red', data: { hs_color: [0, 100] }, css: 'hsl(0 90% 55%)' },
-    { name: 'Orange', data: { hs_color: [30, 100] }, css: 'hsl(30 95% 55%)' },
-    { name: 'Yellow', data: { hs_color: [52, 100] }, css: 'hsl(52 95% 55%)' },
-    { name: 'Green', data: { hs_color: [120, 100] }, css: 'hsl(120 70% 45%)' },
-    { name: 'Cyan', data: { hs_color: [185, 100] }, css: 'hsl(185 85% 50%)' },
-    { name: 'Blue', data: { hs_color: [235, 100] }, css: 'hsl(235 90% 62%)' },
-    { name: 'Purple', data: { hs_color: [275, 90] }, css: 'hsl(275 80% 60%)' },
-    { name: 'Pink', data: { hs_color: [320, 85] }, css: 'hsl(320 85% 62%)' },
+    { name: 'Sıcak beyaz', data: { color_temp_kelvin: 2700 }, css: '#ffb36b' },
+    { name: 'Soğuk beyaz', data: { color_temp_kelvin: 5500 }, css: '#e3ecff' },
+    { name: 'Kırmızı', data: { hs_color: [0, 100] }, css: 'hsl(0 90% 55%)' },
+    { name: 'Turuncu', data: { hs_color: [30, 100] }, css: 'hsl(30 95% 55%)' },
+    { name: 'Sarı', data: { hs_color: [52, 100] }, css: 'hsl(52 95% 55%)' },
+    { name: 'Yeşil', data: { hs_color: [120, 100] }, css: 'hsl(120 70% 45%)' },
+    { name: 'Turkuaz', data: { hs_color: [185, 100] }, css: 'hsl(185 85% 50%)' },
+    { name: 'Mavi', data: { hs_color: [235, 100] }, css: 'hsl(235 90% 62%)' },
+    { name: 'Mor', data: { hs_color: [275, 90] }, css: 'hsl(275 80% 60%)' },
+    { name: 'Pembe', data: { hs_color: [320, 85] }, css: 'hsl(320 85% 62%)' },
   ],
 
   // Quick actions run from the app itself: a list of steps done in order.
@@ -101,14 +101,14 @@ export const HOME = {
 
   quickActions: [
     {
-      id: 'movie', name: 'Movie', icon: 'tv', hint: 'TV on, dim purple light', tone: 'var(--p-sky)',
+      id: 'movie', name: 'Film', icon: 'tv', hint: 'TV açık, loş mor ışık', tone: 'var(--p-sky)',
       steps: [
         { ensure: 'tv', on: true },
         { call: 'light.turn_on', target: 'light.bg_crib_led', data: { hs_color: [265, 90], brightness_pct: 15 } },
       ],
     },
     {
-      id: 'cosy', name: 'Cosy', icon: 'flame', hint: 'Heater on ECO, warm light', tone: 'var(--p-seawash)',
+      id: 'cosy', name: 'Sıcacık', icon: 'flame', hint: 'Isıtıcı ECO modunda, sıcak ışık', tone: 'var(--p-seawash)',
       steps: [
         { ensure: 'heater', on: true },
         { wait: 600 },
@@ -117,11 +117,11 @@ export const HOME = {
       ],
     },
     {
-      id: 'bright', name: 'Bright', icon: 'sun', hint: 'Full white light', tone: 'var(--p-splash)',
+      id: 'bright', name: 'Aydınlık', icon: 'sun', hint: 'Tam beyaz ışık', tone: 'var(--p-splash)',
       steps: [{ call: 'light.turn_on', target: 'light.bg_crib_led', data: { color_temp_kelvin: 5000, brightness_pct: 100 } }],
     },
     {
-      id: 'off', name: 'All off', icon: 'power', hint: 'TV, heater and light', tone: 'var(--p-stlouis)',
+      id: 'off', name: 'Hepsini kapat', icon: 'power', hint: 'TV, ısıtıcı ve ışık', tone: 'var(--p-stlouis)',
       steps: [
         { ensure: 'tv', on: false },
         { wait: 600 },

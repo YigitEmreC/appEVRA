@@ -56,7 +56,7 @@ export function arrangeable(container, key, { all, locked = [], whole = false, b
     el.classList.toggle('edit-hidden', canHide && cfg.hidden.includes(id));
     if (flag) el.classList.toggle(flag.cls, (cfg[flag.field] || []).includes(id));
     el.append(h('span', { class: `${TOOLS}${whole ? ' mini' : ''}` },
-      whole ? null : h('span', { class: 'edit-grip', title: `Drag to move ${name}` }, icon('grip', 16), h('small', null, name)),
+      whole ? null : h('span', { class: 'edit-grip', title: `${name} taşımak için sürükleyin` }, icon('grip', 16), h('small', null, name)),
       flag ? flagButton(el, key, id, name, flag) : null,
       canHide ? eye(el, key, id, name) : null));
   }
@@ -113,8 +113,8 @@ function eye(el, key, id, name) {
     const hidden = el.classList.contains('edit-hidden');
     btn.replaceChildren(icon(hidden ? 'eyeOff' : 'eye', 15));
     btn.setAttribute('aria-pressed', String(!hidden));
-    btn.setAttribute('aria-label', `${hidden ? 'Show' : 'Hide'} ${name}`);
-    btn.title = hidden ? 'Hidden: tap to show' : 'Tap to hide';
+    btn.setAttribute('aria-label', `${name}: ${hidden ? 'göster' : 'gizle'}`);
+    btn.title = hidden ? 'Gizli: göstermek için dokunun' : 'Gizlemek için dokunun';
   };
   btn.addEventListener('click', (e) => {
     e.preventDefault();

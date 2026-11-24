@@ -46,8 +46,8 @@ function unreachable() {
   let host = '';
   try { host = new URL(accountsUrl()).hostname; } catch { /* a bad address */ }
   return ['localhost', '127.0.0.1'].includes(host)
-    ? 'Evra accounts on this computer isn\'t running. Start it with "Start Evra.bat", or switch back to the Evra website in Settings (developer mode).'
-    : `Can't reach Evra accounts at ${host || accountsUrl()}. Check the internet connection and try again.`;
+    ? 'Bu bilgisayardaki Evra hesap hizmeti çalışmıyor. "Start Evra.bat" ile başlatın ya da Ayarlar\'dan (geliştirici modu) Evra web sitesine geri dönün.'
+    : `${host || accountsUrl()} adresindeki Evra hesaplarına ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.`;
 }
 
 async function api(method, path, body, auth = true) {
@@ -63,7 +63,7 @@ async function api(method, path, body, auth = true) {
   }
   const j = await res.json().catch(() => ({}));
   if (res.status === 401 && auth && accountToken()) write(null); // the sign-in ended (signed out elsewhere, switched off, password reset)
-  if (!res.ok) throw Object.assign(new Error(j.error || `Evra accounts answered ${res.status}.`), { status: res.status });
+  if (!res.ok) throw Object.assign(new Error(j.error || `Evra hesapları ${res.status} ile yanıt verdi.`), { status: res.status });
   return j;
 }
 
