@@ -296,7 +296,7 @@ Notes for live mode:
 
 - **Door lock:** the Aqara lock uses Thread and needs a second, Thread dongle on the hub.
 - **Siren and curtain motor:** the Fonri siren and Şımart curtain motor are cloud devices; link their maker's account in Home Assistant first.
-- **Removing devices:** Zigbee devices are removed from the Zigbee network. Wi-Fi devices are removed from their integration.
+- **Removing devices:** Zigbee devices are removed from the Zigbee network. Wi-Fi devices are removed from their integration. Removing always works, also for a device that is offline or never finished pairing: if Home Assistant can't remove it, Evra switches it off in Home Assistant (hidden everywhere), and pairing that product again brings it back.
 
 ## Put it on your phone
 
