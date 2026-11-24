@@ -127,9 +127,9 @@ export async function runProposal(p) {
       case 'device_remove': {
         const d = store.devices.get(a.device_id);
         if (!d) return { ok: false, detail: 'Bu cihaz zaten yok.' };
-        await b.removeDevice(a.device_id, d);
-        const ok = await until(() => !store.devices.has(a.device_id), 8000);
-        return { ok, detail: ok ? `${deviceName(d)} kaldırıldı` : 'Hâlâ listede' };
+        const r = await b.removeDevice(a.device_id, d);
+        const ok = await until(() => !store.devices.has(a.device_id) || Boolean(store.devices.get(a.device_id)?.disabled_by), 8000);
+        return { ok, detail: ok ? `${deviceName(d)} kaldırıldı${r?.hidden ? ' (ulaşılamadığı için gizlendi; yeniden kullanmak için tekrar eşleştirilmeli)' : ''}` : 'Hâlâ listede' };
       }
       case 'device_add':
         location.hash = `#/devices/add/${encodeURIComponent(a.product)}`;

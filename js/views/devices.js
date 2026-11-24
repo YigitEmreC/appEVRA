@@ -191,8 +191,8 @@ function renderDetail(root, cleanup, deviceId) {
       if (!confirm(`Remove ${deviceName(d)} from the network? To use it again you'll need to pair it again.`)) return;
       remove.disabled = true;
       try {
-        await store.backend.removeDevice(d.id, d);
-        toast(`${deviceName(d)} removed`);
+        const r = await store.backend.removeDevice(d.id, d);
+        toast(r?.hidden ? `${deviceName(d)} removed. It couldn't be reached, so pair it again to use it.` : `${deviceName(d)} removed`);
         location.hash = '#/devices';
       } catch (err) {
         toast(`Couldn't remove it: ${err.message}`, 'error');
@@ -289,8 +289,13 @@ function renderProduct(root, cleanup, p) {
         card({ title: 'Installation', iconName: 'check' }, h('ol', { class: 'steps' }, p.setup.map((s) => h('li', null, s)))))),
   );
 
-  const before = new Set(store.devices.keys());
-  const newDeviceId = () => [...store.devices.keys()].find((id) => !before.has(id));
+  // A device of this product that was removed while it couldn't be reached is only
+  // hidden (live.js removeDevice). Pairing the product again brings it back, and it
+  // counts as the new device.
+  const hidden = [...store.devices.values()].filter((d) => d.disabled_by === 'user' && productForDevice(d)?.id === p.id).map((d) => d.id);
+  const before = new Set([...store.devices.keys()].filter((id) => !hidden.includes(id)));
+  const newDeviceId = () => [...store.devices.keys()].find((id) => !before.has(id) && !store.devices.get(id)?.disabled_by);
+  const bringBack = () => hidden.forEach((id) => store.backend.updateDevice(id, { disabled_by: null }).catch(() => {}));
 
   // Empty parts (no hint, no title) are skipped; replaceChildren would print them as "null".
   function show(...kids) { if (alive) panel.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false)); }
@@ -347,6 +352,7 @@ function renderProduct(root, cleanup, p) {
     start.addEventListener('click', async () => {
       if (notConnected()) return;
       try { await store.backend.permitJoin(254, p); } catch (err) { toast(`Couldn't start pairing: ${err.message}`, 'error'); return; }
+      bringBack();
       stopJoin = () => store.backend.stopJoin();
       const ends = Date.now() + 254000;
       const count = h('strong', null, '4:14');
@@ -382,7 +388,7 @@ function renderProduct(root, cleanup, p) {
       if (!code.value.trim()) { toast('Enter the Matter code first', 'error'); return; }
       go.disabled = true;
       show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Connecting… this can take a minute.'));
-      try { await store.backend.matterCommission(code.value.trim(), p); await awaitDevice('Connected. Waiting for it to appear…'); }
+      try { await store.backend.matterCommission(code.value.trim(), p); bringBack(); await awaitDevice('Connected. Waiting for it to appear…'); }
       catch (err) { show(h('p', { class: 'error-line' }, `Couldn't connect: ${err.message}`), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Try again')); }
     });
     show(form);
@@ -419,6 +425,7 @@ function renderProduct(root, cleanup, p) {
   });
 
   async function begin() {
+    bringBack();
     try { renderStep(await store.backend.flowStart(domain, p)); }
     catch (err) { show(h('p', { class: 'error-line' }, `Couldn't start the setup: ${err.message}`), fallbackLink()); }
   }

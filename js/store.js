@@ -108,6 +108,7 @@ export function entityArea(entityId) {
 // Devices shown in Home and the Devices screen (hides Home Assistant's own parts).
 export function isUserDevice(d) {
   if (!d) return false;
+  if (d.disabled_by) return false; // switched off, or removed when it couldn't be reached (live.js removeDevice)
   if (productForDevice(d)) return true;
   if (d.entry_type === 'service') return false;
   if (SYSTEM_MAKERS.includes(d.manufacturer)) return false;

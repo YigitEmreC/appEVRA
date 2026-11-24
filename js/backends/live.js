@@ -310,30 +310,48 @@ export function createLiveBackend(hassUrl) {
 
     // ---- devices ----
     updateDevice(deviceId, patch) { return send({ type: 'config/device_registry/update', device_id: deviceId, ...patch }); },
+    // Removing always succeeds while Home Assistant is connected, also for a device that
+    // is offline, never finished pairing or can't be reached ("Failed to fetch"):
+    //   1. Zigbee: the hub forgets it (it asks the device to leave; an unreachable device
+    //      is forgotten anyway, which can take a while, so this waits for the registry);
+    //   2. otherwise each integration drops it, or its own connection (config entry) is
+    //      deleted when it's the only device on it (TP-Link, ESPHome, Shelly, cameras);
+    //   3. if it's still there (a shared account such as Smart Life, or Home Assistant
+    //      refused), it's switched off in the registry: hidden everywhere in Evra and
+    //      dead until it's paired again.
+    // Returns { hidden: true } in case 3.
     async removeDevice(deviceId, device) {
+      const list = () => send({ type: 'config/device_registry/list' });
+      const gone = async (waitMs = 0) => {
+        const until = Date.now() + waitMs;
+        for (;;) {
+          try { if (!(await list()).some((d) => d.id === deviceId)) return true; } catch { /* asked again below */ }
+          if (Date.now() >= until) return false;
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      };
       const zha = (device?.identifiers || []).find((i) => i[0] === 'zha');
       if (zha) {
-        await send({ type: 'call_service', domain: 'zha', service: 'remove', service_data: { ieee: zha[1] } }, 30000);
-        return;
+        try { await send({ type: 'call_service', domain: 'zha', service: 'remove', service_data: { ieee: zha[1] } }, 60000); } catch { /* checked below */ }
+        if (await gone(30000)) return {};
       }
-      const entries = device?.config_entries || [];
-      if (!entries.length) throw new Error('this device has no integration to remove it from');
-      for (const entryId of entries) {
+      for (const entryId of device?.config_entries || []) {
         try {
           await send({ type: 'config/device_registry/remove_config_entry', device_id: deviceId, config_entry_id: entryId });
-        } catch {
-          // The integration can't remove single devices. Deleting its whole entry is
-          // fine when this is its only device (TP-Link, ESPHome: one entry each),
-          // but a shared entry (a Tuya or Smart Life account) would take every
-          // other device with it.
-          const all = await send({ type: 'config/device_registry/list' });
-          const others = all.filter((d) => d.id !== deviceId && (d.config_entries || []).includes(entryId)).length;
-          if (others) {
-            throw new Error(`it shares its connection with ${others} other device${others === 1 ? '' : 's'}, so it can't be removed on its own. Remove it in its maker's app (for example Smart Life) instead`);
-          }
-          await rest('DELETE', `config/config_entries/entry/${entryId}`);
+          continue;
+        } catch { /* the integration can't remove single devices */ }
+        // Deleting the whole connection is fine when this is its only device, never when
+        // it's shared (a Tuya or Smart Life account would take every other device with it).
+        let others = 1;
+        try { others = (await list()).filter((d) => d.id !== deviceId && (d.config_entries || []).includes(entryId)).length; } catch { /* keep it */ }
+        if (others) continue;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try { await rest('DELETE', `config/config_entries/entry/${entryId}`); break; } catch { /* once more, then step 3 */ }
         }
       }
+      if (await gone(3000)) return {};
+      await send({ type: 'config/device_registry/update', device_id: deviceId, disabled_by: 'user' });
+      return { hidden: true };
     },
 
     // ---- notifications on this device (js/push.js) ----
