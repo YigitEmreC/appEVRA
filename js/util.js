@@ -41,26 +41,30 @@ export const isOn = (s) => !!s && s.state === 'on';
 
 export function num(s, digits = 1) {
   const v = typeof s === 'object' && s ? parseFloat(s.state) : parseFloat(s);
-  return Number.isFinite(v) ? v.toFixed(digits) : '–';
+  return Number.isFinite(v) ? dec(v, digits) : '–';
 }
+// A number the Turkish way: 24,5 and 1.400.
+// For searching: lower case the Turkish way and without accents, so "isik" finds "Işık".
+export const fold = (s) => String(s ?? '').toLocaleLowerCase('tr-TR').normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');
+export const dec = (v, digits = 1) => Number(v).toLocaleString('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 export function numVal(s) {
   const v = typeof s === 'object' && s ? parseFloat(s.state) : parseFloat(s);
   return Number.isFinite(v) ? v : null;
 }
 
 export function relTime(iso) {
-  if (!iso) return 'never';
+  if (!iso) return 'hiç';
   const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return 'never';
+  if (!Number.isFinite(t)) return 'hiç';
   const s = (Date.now() - t) / 1000;
-  if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} d ago`;
+  if (s < 45) return 'az önce';
+  if (s < 3600) return `${Math.round(s / 60)} dk önce`;
+  if (s < 86400) return `${Math.round(s / 3600)} sa önce`;
+  return `${Math.round(s / 86400)} gün önce`;
 }
 
-export const clockText = (d = new Date()) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-export const hourText = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+export const clockText = (d = new Date()) => d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+export const hourText = (t) => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
 // Colour helpers for the light strip.
 export function lightCss(s) {
@@ -223,7 +227,7 @@ export function loadSettings() {
     hassUrl: saved.hassUrl || place.hassUrl,
     theme: saved.theme || 'auto',
     devMode: saved.devMode === true,
-    pricePerKwh: saved.pricePerKwh ?? 0.30,
+    pricePerKwh: saved.pricePerKwh ?? 3.0,
     room: saved.room,
     remote: saved.remote,
     sceneRooms: saved.sceneRooms,
@@ -242,6 +246,8 @@ export function loadSettings() {
     // (accountsUrl() in js/account.js). Older versions saved "accountsUrl" with every
     // setting, so that key is ignored and dropped on the next save.
     accountsServer: saved.accountsServer || undefined,
+    // The place for the weather (js/weather.js): { name, admin1, country, latitude, longitude, timezone }.
+    weatherLocation: saved.weatherLocation || null,
   };
 }
 export function saveSettings(patch) {

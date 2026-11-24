@@ -1,6 +1,6 @@
 import { CATEGORIES, PRODUCTS, productById, productForDevice, PAIRING_LABEL } from '../catalog.js';
 import { store, userDevices, sortedAreas, deviceName, areaName, deviceEntities } from '../store.js';
-import { h, num, numVal, isAvailable, toast, sleep } from '../util.js';
+import { h, num, numVal, isAvailable, toast, sleep, fold } from '../util.js';
 import { icon } from '../icons.js';
 import { card } from '../components.js';
 import { deviceCardFor, kindIcon } from '../devices/cards.js';
@@ -23,29 +23,29 @@ function deviceStatus(d) {
   const ents = deviceEntities(d.id);
   const states = ents.map((e) => store.get(e.entity_id)).filter(Boolean);
   const main = states.filter((s) => !store.entities.get(s.entity_id)?.entity_category);
-  if (main.length && main.every((s) => s.state === 'unavailable')) return { text: 'Offline', cls: 'bad' };
+  if (main.length && main.every((s) => s.state === 'unavailable')) return { text: 'Çevrimdışı', cls: 'bad' };
   const batt = states.find((s) => s.attributes.device_class === 'battery');
   const v = numVal(batt);
-  if (v != null && v < 20) return { text: `Battery ${num(batt, 0)}%`, cls: 'warn' };
+  if (v != null && v < 20) return { text: `Pil %${num(batt, 0)}`, cls: 'warn' };
   return null;
 }
 
 function roomSelect(current, onChange) {
-  const sel = h('select', { class: 'select', 'aria-label': 'Room' },
-    h('option', { value: '' }, 'No room'),
+  const sel = h('select', { class: 'select', 'aria-label': 'Oda' },
+    h('option', { value: '' }, 'Odasız'),
     sortedAreas().map((a) => h('option', { value: a.area_id, selected: a.area_id === current }, a.name)),
-    h('option', { value: '__new__' }, 'New room…'));
+    h('option', { value: '__new__' }, 'Yeni oda…'));
   sel.addEventListener('change', async () => {
     if (sel.value === '__new__') {
-      const name = prompt('Name for the new room');
+      const name = prompt('Yeni odanın adı');
       if (!name || !name.trim()) { sel.value = current || ''; return; }
       try {
         const area = await store.backend.createArea(name.trim());
         await waitFor(() => store.areas.has(area.area_id));
-        sel.replaceChildren(h('option', { value: '' }, 'No room'), ...sortedAreas().map((a) => h('option', { value: a.area_id }, a.name)), h('option', { value: '__new__' }, 'New room…'));
+        sel.replaceChildren(h('option', { value: '' }, 'Odasız'), ...sortedAreas().map((a) => h('option', { value: a.area_id }, a.name)), h('option', { value: '__new__' }, 'Yeni oda…'));
         sel.value = area.area_id;
         onChange(area.area_id);
-      } catch (e) { toast(`Couldn't create the room: ${e.message}`, 'error'); sel.value = current || ''; }
+      } catch (e) { toast(`Oda oluşturulamadı: ${e.message}`, 'error'); sel.value = current || ''; }
       return;
     }
     onChange(sel.value || null);
@@ -62,7 +62,7 @@ async function waitFor(test, timeout = 8000) {
   return false;
 }
 
-// "Evra Smart Plug", plus maker and model number in developer mode. Devices
+// "Akıllı Priz", plus maker and model number in developer mode. Devices
 // that aren't in the catalogue keep their model, since it's all there is.
 function productLine(p, d, withMaker = false) {
   const extra = [withMaker ? d.manufacturer : null, d.model].filter((v) => v && v !== p?.name);
@@ -87,10 +87,10 @@ function renderList(root, cleanup, initialTab) {
   let query = '';
   const tabs = h('div', { class: 'segmented', role: 'tablist' });
   const body = h('div', { class: 'devices-body' });
-  const search = h('input', { class: 'input search', type: 'search', placeholder: 'Search devices', 'aria-label': 'Search devices' });
-  search.addEventListener('input', () => { query = search.value.trim().toLowerCase(); draw(); });
+  const search = h('input', { class: 'input search', type: 'search', placeholder: 'Cihaz ara', 'aria-label': 'Cihaz ara' });
+  search.addEventListener('input', () => { query = fold(search.value.trim()); draw(); });
 
-  const drawTabs = () => tabs.replaceChildren(...[['devices', 'Devices'], ['rooms', 'Rooms']].map(([id, label]) => h('button', {
+  const drawTabs = () => tabs.replaceChildren(...[['devices', 'Cihazlar'], ['rooms', 'Odalar']].map(([id, label]) => h('button', {
     type: 'button', role: 'tab', 'aria-selected': String(tab === id), class: tab === id ? 'active' : '',
     onclick: () => { tab = id; history.replaceState(null, '', id === 'rooms' ? '#/devices?tab=rooms' : '#/devices'); drawTabs(); draw(); },
   }, label)));
@@ -101,54 +101,54 @@ function renderList(root, cleanup, initialTab) {
   }
 
   function devicesPanel() {
-    const devs = userDevices().filter((d) => !query || `${deviceName(d)} ${d.model} ${productForDevice(d)?.name || ''}`.toLowerCase().includes(query));
+    const devs = userDevices().filter((d) => !query || fold(`${deviceName(d)} ${d.model} ${productForDevice(d)?.name || ''}`).includes(query));
     if (!devs.length) {
-      return h('div', { class: 'empty' }, icon('devices', 28), h('p', null, query ? 'No devices match.' : 'No devices yet.'),
-        h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Add a device'));
+      return h('div', { class: 'empty' }, icon('devices', 28), h('p', null, query ? 'Eşleşen cihaz yok.' : 'Henüz cihaz yok.'),
+        h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Cihaz ekle'));
     }
     const groups = sortedAreas().map((a) => ({ name: a.name, list: devs.filter((d) => d.area_id === a.area_id) })).filter((g) => g.list.length);
     const loose = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id));
-    if (loose.length) groups.push({ name: 'Not in a room', list: loose });
+    if (loose.length) groups.push({ name: 'Odası olmayanlar', list: loose });
     return h('div', { class: 'list-groups' }, groups.map((g) => h('section', { class: 'list-group' },
       h('h3', { class: 'group-title' }, g.name, h('span', { class: 'muted' }, ` · ${g.list.length}`)),
       h('div', { class: 'list' }, g.list.map(deviceRow)))));
   }
 
   function roomsPanel() {
-    const input = h('input', { class: 'input', placeholder: 'Living room, Kitchen, Bedroom…', 'aria-label': 'New room name' });
-    const add = h('button', { class: 'btn primary', type: 'submit' }, icon('plus', 16), 'Add room');
+    const input = h('input', { class: 'input', placeholder: 'Salon, Mutfak, Yatak odası…', 'aria-label': 'Yeni oda adı' });
+    const add = h('button', { class: 'btn primary', type: 'submit' }, icon('plus', 16), 'Oda ekle');
     const form = h('form', { class: 'inline-form' }, input, add);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = input.value.trim();
-      if (!name) { toast('Type a name for the room first', 'error'); return; }
-      if ([...store.areas.values()].some((a) => a.name.toLowerCase() === name.toLowerCase())) { toast('There is already a room with that name', 'error'); return; }
+      if (!name) { toast('Önce odanın adını yazın', 'error'); return; }
+      if ([...store.areas.values()].some((a) => fold(a.name) === fold(name))) { toast('Bu adda bir oda zaten var', 'error'); return; }
       add.disabled = true;
-      try { await store.backend.createArea(name); toast(`${name} added`); } catch (err) { toast(`Couldn't add the room: ${err.message}`, 'error'); }
+      try { await store.backend.createArea(name); toast(`${name} eklendi`); } catch (err) { toast(`Oda eklenemedi: ${err.message}`, 'error'); }
       add.disabled = false;
     });
     const devs = userDevices();
     const rooms = sortedAreas();
     return h('div', { class: 'rooms-panel' },
-      card({ title: 'New room', iconName: 'plus' }, form),
+      card({ title: 'Yeni oda', iconName: 'plus' }, form),
       rooms.length ? h('div', { class: 'list' }, rooms.map((a) => {
         const count = devs.filter((d) => d.area_id === a.area_id).length;
-        const rename = h('button', { class: 'icon-btn', type: 'button', 'aria-label': `Rename ${a.name}`, title: 'Rename' }, icon('edit', 16));
-        const del = h('button', { class: 'icon-btn danger', type: 'button', 'aria-label': `Delete ${a.name}`, title: 'Delete' }, icon('trash', 16));
+        const rename = h('button', { class: 'icon-btn', type: 'button', 'aria-label': `${a.name} adını değiştir`, title: 'Adını değiştir' }, icon('edit', 16));
+        const del = h('button', { class: 'icon-btn danger', type: 'button', 'aria-label': `${a.name} odasını sil`, title: 'Sil' }, icon('trash', 16));
         rename.addEventListener('click', async () => {
-          const name = prompt('Rename room', a.name);
+          const name = prompt('Odanın yeni adı', a.name);
           if (!name || !name.trim() || name.trim() === a.name) return;
-          try { await store.backend.renameArea(a.area_id, name.trim()); } catch (err) { toast(`Couldn't rename: ${err.message}`, 'error'); }
+          try { await store.backend.renameArea(a.area_id, name.trim()); } catch (err) { toast(`Adı değiştirilemedi: ${err.message}`, 'error'); }
         });
         del.addEventListener('click', async () => {
-          if (!confirm(`Delete the room "${a.name}"? Its ${count} device${count === 1 ? '' : 's'} stay connected, just without a room.`)) return;
-          try { await store.backend.deleteArea(a.area_id); toast(`${a.name} deleted`); } catch (err) { toast(`Couldn't delete: ${err.message}`, 'error'); }
+          if (!confirm(`"${a.name}" odası silinsin mi? İçindeki ${count} cihaz bağlı kalır, yalnızca odasız olur.`)) return;
+          try { await store.backend.deleteArea(a.area_id); toast(`${a.name} silindi`); } catch (err) { toast(`Silinemedi: ${err.message}`, 'error'); }
         });
         return h('div', { class: 'list-row static' },
           h('span', { class: 'row-icon' }, icon('rooms', 20)),
-          h('span', { class: 'row-text' }, h('strong', null, a.name), h('small', null, `${count} device${count === 1 ? '' : 's'}`)),
+          h('span', { class: 'row-text' }, h('strong', null, a.name), h('small', null, `${count} cihaz`)),
           rename, del);
-      })) : h('p', { class: 'muted pad' }, 'No rooms yet.'));
+      })) : h('p', { class: 'muted pad' }, 'Henüz oda yok.'));
   }
 
   let sig = '';
@@ -157,7 +157,7 @@ function renderList(root, cleanup, initialTab) {
     if (next !== sig) { sig = next; draw(); }
   }));
   drawTabs();
-  root.append(h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Add device')), search, body);
+  root.append(h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Cihaz ekle')), search, body);
 }
 
 // ---- device details -----------------------------------------------------------------------
@@ -169,33 +169,33 @@ function renderDetail(root, cleanup, deviceId) {
     local.splice(0).forEach((fn) => fn());
     const d = store.devices.get(deviceId);
     if (!d) {
-      root.replaceChildren(backLink('#/devices', 'Devices'),
-        h('div', { class: 'empty' }, icon('devices', 28), h('p', null, store.status.state === 'connected' ? 'This device no longer exists.' : 'Loading…')));
+      root.replaceChildren(backLink('#/devices', 'Cihazlar'),
+        h('div', { class: 'empty' }, icon('devices', 28), h('p', null, store.status.state === 'connected' ? 'Bu cihaz artık yok.' : 'Yükleniyor…')));
       return;
     }
     const p = productForDevice(d);
-    const nameInput = h('input', { class: 'input', value: deviceName(d), 'aria-label': 'Device name' });
-    const saveName = h('button', { class: 'btn', type: 'submit' }, 'Save');
+    const nameInput = h('input', { class: 'input', value: deviceName(d), 'aria-label': 'Cihaz adı' });
+    const saveName = h('button', { class: 'btn', type: 'submit' }, 'Kaydet');
     const nameForm = h('form', { class: 'inline-form' }, nameInput, saveName);
     nameForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = nameInput.value.trim();
-      if (!name) { toast('The name can\'t be empty', 'error'); return; }
-      try { await store.backend.updateDevice(d.id, { name_by_user: name }); toast('Name saved'); } catch (err) { toast(`Couldn't rename: ${err.message}`, 'error'); }
+      if (!name) { toast('Ad boş olamaz', 'error'); return; }
+      try { await store.backend.updateDevice(d.id, { name_by_user: name }); toast('Ad kaydedildi'); } catch (err) { toast(`Adı değiştirilemedi: ${err.message}`, 'error'); }
     });
     const room = roomSelect(d.area_id, async (areaId) => {
-      try { await store.backend.updateDevice(d.id, { area_id: areaId }); toast(areaId ? `Moved to ${areaName(areaId)}` : 'Removed from its room'); } catch (err) { toast(`Couldn't move it: ${err.message}`, 'error'); }
+      try { await store.backend.updateDevice(d.id, { area_id: areaId }); toast(areaId ? `${areaName(areaId)} odasına taşındı` : 'Odasından çıkarıldı'); } catch (err) { toast(`Taşınamadı: ${err.message}`, 'error'); }
     });
-    const remove = h('button', { class: 'btn danger', type: 'button' }, icon('trash', 16), 'Remove device');
+    const remove = h('button', { class: 'btn danger', type: 'button' }, icon('trash', 16), 'Cihazı kaldır');
     remove.addEventListener('click', async () => {
-      if (!confirm(`Remove ${deviceName(d)} from the network? To use it again you'll need to pair it again.`)) return;
+      if (!confirm(`${deviceName(d)} ağdan kaldırılsın mı? Yeniden kullanmak için tekrar eşleştirmeniz gerekir.`)) return;
       remove.disabled = true;
       try {
         const r = await store.backend.removeDevice(d.id, d);
-        toast(r?.hidden ? `${deviceName(d)} removed. It couldn't be reached, so pair it again to use it.` : `${deviceName(d)} removed`);
+        toast(r?.hidden ? `${deviceName(d)} kaldırıldı. Ulaşılamadığı için yeniden kullanmak üzere tekrar eşleştirin.` : `${deviceName(d)} kaldırıldı`);
         location.hash = '#/devices';
       } catch (err) {
-        toast(`Couldn't remove it: ${err.message}`, 'error');
+        toast(`Kaldırılamadı: ${err.message}`, 'error');
         remove.disabled = false;
       }
     });
@@ -210,24 +210,25 @@ function renderDetail(root, cleanup, deviceId) {
       }));
     }));
     root.replaceChildren(
-      backLink('#/devices', 'Devices'),
+      backLink('#/devices', 'Cihazlar'),
       h('header', { class: 'detail-head' },
         h('span', { class: 'detail-icon' }, icon(kindIcon(d), 26)),
         h('div', null, h('h2', null, deviceName(d)), h('p', { class: 'muted' }, productLine(p, d, true)))),
       h('div', { class: 'detail-grid' },
         h('div', { class: 'detail-main' }, deviceCardFor(d, local)),
         h('div', { class: 'detail-side' },
-          card({ title: 'Settings', iconName: 'gear' },
-            h('label', { class: 'field' }, h('span', null, 'Name'), nameForm),
-            h('label', { class: 'field' }, h('span', null, 'Room'), room)),
-          p ? card({ title: 'About this product', iconName: p.icon },
+          card({ title: 'Ayarlar', iconName: 'gear' },
+            h('label', { class: 'field' }, h('span', null, 'Ad'), nameForm),
+            h('label', { class: 'field' }, h('span', null, 'Oda'), room)),
+          p ? card({ title: 'Bu ürün hakkında', iconName: p.icon },
             h('p', null, p.summary),
             p.emergency ? h('p', { class: 'alarm-note static' }, icon('alert', 16), p.emergency) : null,
             p.note ? h('p', { class: 'muted small' }, p.note) : null,
-            h('p', { class: 'muted small' }, p.protocol, h('span', { class: 'dev-only' }, ` · ${PAIRING_LABEL[p.pairing]}${d.sw_version ? ' · firmware ' + d.sw_version : ''}`))) : null,
-          card({ title: 'Entities', iconName: 'devices', className: 'dev-only' }, entityRows),
-          card({ title: 'Remove', iconName: 'trash', className: 'danger-zone' },
-            h('p', { class: 'muted small' }, 'Disconnects the device from the hub and deletes it from the app.'), remove))),
+            p.troubleshooting?.length ? h('a', { class: 'link', href: `#/devices/add/${p.id}` }, 'Sorunlar ve çözümleri', icon('right', 14)) : null,
+            h('p', { class: 'muted small' }, p.protocol, h('span', { class: 'dev-only' }, ` · ${PAIRING_LABEL[p.pairing]}${d.sw_version ? ' · yazılım ' + d.sw_version : ''}`))) : null,
+          card({ title: 'Varlıklar', iconName: 'devices', className: 'dev-only' }, entityRows),
+          card({ title: 'Kaldır', iconName: 'trash', className: 'danger-zone' },
+            h('p', { class: 'muted small' }, 'Cihazın merkezle bağlantısını keser ve uygulamadan siler.'), remove))),
     );
   };
   let sig = '';
@@ -242,10 +243,10 @@ function renderDetail(root, cleanup, deviceId) {
 
 function renderCatalog(root, cleanup) {
   let query = '';
-  const search = h('input', { class: 'input search', type: 'search', placeholder: 'Search the Evra range', 'aria-label': 'Search products' });
+  const search = h('input', { class: 'input search', type: 'search', placeholder: 'Evra ürünlerinde ara', 'aria-label': 'Ürün ara' });
   const body = h('div', { class: 'catalog' });
   const draw = () => {
-    const matches = PRODUCTS.filter((p) => !query || `${p.name} ${p.nameTr} ${p.model} ${p.protocol}`.toLowerCase().includes(query));
+    const matches = PRODUCTS.filter((p) => !query || fold(`${p.name} ${p.nameEn || ''} ${p.model} ${p.protocol}`).includes(query));
     body.replaceChildren(...CATEGORIES.map((c) => {
       const list = matches.filter((p) => p.category === c.id);
       if (!list.length) return null;
@@ -256,18 +257,41 @@ function renderCatalog(root, cleanup) {
           h('span', { class: 'row-text' }, h('strong', null, p.name), h('small', null, p.model)),
           h('span', { class: `pill pairing-${p.pairing}` }, PAIRING_LABEL[p.pairing])))));
     }).filter(Boolean));
-    if (!body.children.length) body.append(h('p', { class: 'muted pad' }, 'No products match.'));
+    if (!body.children.length) body.append(h('p', { class: 'muted pad' }, 'Eşleşen ürün yok.'));
   };
-  search.addEventListener('input', () => { query = search.value.trim().toLowerCase(); draw(); });
+  search.addEventListener('input', () => { query = fold(search.value.trim()); draw(); });
   draw();
-  root.append(backLink('#/devices', 'Devices'), h('p', { class: 'muted intro' }, `Pick the product you're adding. ${PRODUCTS.length} products in the Evra range.`), search, body);
+  root.append(backLink('#/devices', 'Cihazlar'), h('p', { class: 'muted intro' }, `Eklediğiniz ürünü seçin. Evra kataloğunda ${PRODUCTS.length} ürün var.`), search, body);
 }
 
 // ---- add a device: one product ---------------------------------------------------------------
 
+// What the catalogue says about a product: introduction, features, how it works with Evra,
+// what Evra might say, and requests to try (a tap asks Evra).
+function productAbout(p) {
+  const ask = (q) => `#/chat?ask=${encodeURIComponent(q)}`;
+  return card({ title: 'Ürün tanıtımı', iconName: p.icon },
+    h('p', null, p.summary),
+    p.features?.length ? h('ul', { class: 'feature-list' }, p.features.map((f) => h('li', null, icon('check', 14), f))) : null,
+    p.emergency ? h('p', { class: 'alarm-note static' }, icon('alert', 16), p.emergency) : null,
+    p.howItWorks ? h('div', { class: 'product-works' }, h('h4', null, 'Çalışma şekli'), h('p', null, p.howItWorks)) : null,
+    p.evraSays ? h('p', { class: 'evra-says' }, h('span', { class: 'evra-says-who' }, icon('devil', 14), 'Evra'), p.evraSays) : null,
+    p.examples?.length ? h('div', { class: 'product-asks' }, h('h4', null, 'Evra\'ya sorun'),
+      h('div', { class: 'chips' }, p.examples.map((q) => h('a', { class: 'room-chip small', href: ask(q) }, q)))) : null);
+}
+
+// The catalogue's problems and solutions, each opening on tap.
+function productTrouble(p) {
+  if (!p.troubleshooting?.length) return null;
+  return card({ title: 'Sorunlar ve çözümleri', iconName: 'alert' },
+    h('div', { class: 'trouble-list' }, p.troubleshooting.map((t) => h('details', { class: 'trouble' },
+      h('summary', null, t.problem), h('p', null, t.solution)))),
+    h('p', { class: 'muted small' }, 'Çözemezseniz Evra destek ekibine WhatsApp\'tan yazın; birçok ayarı uzaktan yapabiliyoruz.'));
+}
+
 function renderProduct(root, cleanup, p) {
   if (!p) {
-    root.append(backLink('#/devices/add', 'All products'), h('div', { class: 'empty' }, h('p', null, 'Unknown product.')));
+    root.append(backLink('#/devices/add', 'Tüm ürünler'), h('div', { class: 'empty' }, h('p', null, 'Bilinmeyen ürün.')));
     return;
   }
   const panel = h('div', { class: 'pair-panel' });
@@ -276,17 +300,17 @@ function renderProduct(root, cleanup, p) {
   cleanup.push(() => { alive = false; if (stopJoin) stopJoin(); });
 
   root.append(
-    backLink('#/devices/add', 'All products'),
+    backLink('#/devices/add', 'Tüm ürünler'),
     h('header', { class: 'detail-head' },
       h('span', { class: 'detail-icon' }, icon(p.icon, 26)),
       h('div', null, h('h2', null, p.name), h('p', { class: 'muted' }, `${p.model} · ${p.protocol}`))),
     h('div', { class: 'detail-grid' },
       h('div', { class: 'detail-main' },
-        card({ title: 'Connect it', iconName: 'link' }, panel)),
+        card({ title: 'Bağlayın', iconName: 'link' }, panel)),
       h('div', { class: 'detail-side' },
-        card({ title: 'About', iconName: p.icon }, h('p', null, p.summary),
-          p.emergency ? h('p', { class: 'alarm-note static' }, icon('alert', 16), p.emergency) : null),
-        card({ title: 'Installation', iconName: 'check' }, h('ol', { class: 'steps' }, p.setup.map((s) => h('li', null, s)))))),
+        productAbout(p),
+        p.setup?.length ? card({ title: 'Kurulum (Evra teknisyeni)', iconName: 'check' }, h('ol', { class: 'steps' }, p.setup.map((s) => h('li', null, s)))) : null,
+        productTrouble(p))),
   );
 
   // A device of this product that was removed while it couldn't be reached is only
@@ -303,23 +327,23 @@ function renderProduct(root, cleanup, p) {
   // Final step: name it and pick a room.
   function finish(deviceId) {
     const d = store.devices.get(deviceId);
-    const nameInput = h('input', { class: 'input', value: d ? deviceName(d) : p.name, 'aria-label': 'Name' });
+    const nameInput = h('input', { class: 'input', value: d ? deviceName(d) : p.name, 'aria-label': 'Ad' });
     let areaId = null;
     const room = roomSelect(null, (id) => { areaId = id; });
-    const save = h('button', { class: 'btn primary', type: 'submit' }, icon('check', 16), 'Save');
+    const save = h('button', { class: 'btn primary', type: 'submit' }, icon('check', 16), 'Kaydet');
     const form = h('form', { class: 'stack' },
-      h('p', { class: 'success-line' }, icon('check', 18), `${p.name} is connected.`),
-      h('label', { class: 'field' }, h('span', null, 'Name'), nameInput),
-      h('label', { class: 'field' }, h('span', null, 'Room'), room),
+      h('p', { class: 'success-line' }, icon('check', 18), `${p.name} bağlandı.`),
+      h('label', { class: 'field' }, h('span', null, 'Ad'), nameInput),
+      h('label', { class: 'field' }, h('span', null, 'Oda'), room),
       save);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       save.disabled = true;
       try {
         await store.backend.updateDevice(deviceId, { name_by_user: nameInput.value.trim() || null, area_id: areaId });
-        toast(`${nameInput.value.trim() || p.name} added`);
+        toast(`${nameInput.value.trim() || p.name} eklendi`);
         location.hash = `#/devices/${encodeURIComponent(deviceId)}`;
-      } catch (err) { toast(`Couldn't save: ${err.message}`, 'error'); save.disabled = false; }
+      } catch (err) { toast(`Kaydedilemedi: ${err.message}`, 'error'); save.disabled = false; }
     });
     show(form);
   }
@@ -329,38 +353,38 @@ function renderProduct(root, cleanup, p) {
     const ok = await waitFor(() => !!newDeviceId(), timeout);
     if (!alive) return;
     if (ok) finish(newDeviceId());
-    else show(h('p', null, 'Home Assistant accepted it, but no new device has appeared yet. It may take a minute; it will show up in the device list.'),
-      h('a', { class: 'btn', href: '#/devices' }, 'Back to devices'));
+    else show(h('p', null, 'Merkez kabul etti ama yeni cihaz henüz görünmedi. Bir dakika sürebilir; cihaz listesinde görünecek.'),
+      h('a', { class: 'btn', href: '#/devices' }, 'Cihazlara dön'));
   }
 
   const notConnected = () => {
     if (store.status.state === 'connected') return false;
-    toast('Connect to Home Assistant first (Settings)', 'error');
+    toast('Önce merkeze bağlanın (Ayarlar)', 'error');
     return true;
   };
 
   // ---- each pairing method ----
   if (p.pairing === 'none') {
-    show(h('p', null, p.note || 'This product doesn\'t need pairing.'), h('a', { class: 'btn', href: '#/devices/add' }, 'Back to products'));
+    show(h('p', null, p.note || 'Bu ürünün eşleştirilmesi gerekmez.'), h('a', { class: 'btn', href: '#/devices/add' }, 'Ürünlere dön'));
     return;
   }
 
   if (p.pairing === 'zigbee') {
-    const start = h('button', { class: 'btn primary', type: 'button' }, icon('link', 16), 'Start pairing');
-    show(h('p', null, 'Pairing opens the hub to new Zigbee devices for about 4 minutes.'),
+    const start = h('button', { class: 'btn primary', type: 'button' }, icon('link', 16), 'Eşleştirmeyi başlat');
+    show(h('p', null, 'Eşleştirme, merkezi yaklaşık 4 dakika yeni Zigbee cihazlarına açar.'),
       p.pairHint ? h('p', { class: 'hint' }, icon('sparkle', 16), p.pairHint) : null, start);
     start.addEventListener('click', async () => {
       if (notConnected()) return;
-      try { await store.backend.permitJoin(254, p); } catch (err) { toast(`Couldn't start pairing: ${err.message}`, 'error'); return; }
+      try { await store.backend.permitJoin(254, p); } catch (err) { toast(`Eşleştirme başlatılamadı: ${err.message}`, 'error'); return; }
       bringBack();
       stopJoin = () => store.backend.stopJoin();
       const ends = Date.now() + 254000;
       const count = h('strong', null, '4:14');
-      const stop = h('button', { class: 'btn ghost', type: 'button' }, 'Stop');
+      const stop = h('button', { class: 'btn ghost', type: 'button' }, 'Durdur');
       stop.addEventListener('click', () => { stopJoin?.(); stopJoin = null; alive && renderAgain(); });
-      show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Waiting for the device… ', count),
+      show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Cihaz bekleniyor… ', count),
         p.pairHint ? h('p', { class: 'hint' }, icon('sparkle', 16), p.pairHint) : null,
-        h('p', { class: 'muted small' }, 'Keep the device close to the hub while it pairs. Battery devices: press the button every few seconds to keep them awake.'),
+        h('p', { class: 'muted small' }, 'Eşleşirken cihazı merkeze yakın tutun. Pilli cihazlarda uyanık kalması için birkaç saniyede bir düğmeye basın.'),
         stop);
       while (alive && Date.now() < ends && stopJoin) {
         const id = newDeviceId();
@@ -371,39 +395,39 @@ function renderProduct(root, cleanup, p) {
       }
       if (alive && stopJoin) {
         stopJoin = null;
-        show(h('p', null, 'Nothing joined. Check the device is in pairing mode and close to the hub, then try again.'), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Try again'));
+        show(h('p', null, 'Bağlanan olmadı. Cihazın eşleştirme modunda ve merkeze yakın olduğunu kontrol edip tekrar deneyin.'), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Tekrar dene'));
       }
     });
     return;
   }
 
   if (p.pairing === 'matter') {
-    const code = h('input', { class: 'input', inputmode: 'numeric', placeholder: '1234-567-8901', 'aria-label': 'Matter code' });
-    const go = h('button', { class: 'btn primary', type: 'submit' }, icon('link', 16), 'Connect');
+    const code = h('input', { class: 'input', inputmode: 'numeric', placeholder: '1234-567-8901', 'aria-label': 'Matter kodu' });
+    const go = h('button', { class: 'btn primary', type: 'submit' }, icon('link', 16), 'Bağlan');
     const form = h('form', { class: 'stack' }, p.pairHint ? h('p', { class: 'hint' }, icon('sparkle', 16), p.pairHint) : null,
-      h('label', { class: 'field' }, h('span', null, 'Matter pairing code'), code), go);
+      h('label', { class: 'field' }, h('span', null, 'Matter eşleştirme kodu'), code), go);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (notConnected()) return;
-      if (!code.value.trim()) { toast('Enter the Matter code first', 'error'); return; }
+      if (!code.value.trim()) { toast('Önce Matter kodunu girin', 'error'); return; }
       go.disabled = true;
-      show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Connecting… this can take a minute.'));
-      try { await store.backend.matterCommission(code.value.trim(), p); bringBack(); await awaitDevice('Connected. Waiting for it to appear…'); }
-      catch (err) { show(h('p', { class: 'error-line' }, `Couldn't connect: ${err.message}`), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Try again')); }
+      show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Bağlanıyor… bu bir dakika sürebilir.'));
+      try { await store.backend.matterCommission(code.value.trim(), p); bringBack(); await awaitDevice('Bağlandı. Görünmesi bekleniyor…'); }
+      catch (err) { show(h('p', { class: 'error-line' }, `Bağlanılamadı: ${err.message}`), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Tekrar dene')); }
     });
     show(form);
     return;
   }
 
   if (p.pairing === 'cloud') {
-    const kids = [h('p', null, p.note || 'This product connects through its maker\'s cloud.'),
-      h('p', { class: 'muted small' }, 'Link the maker\'s account (Tuya / Smart Life) in Home Assistant once; its devices then appear here by themselves.')];
+    const kids = [h('p', null, p.note || 'Bu ürün üreticisinin bulutu üzerinden bağlanır.'),
+      h('p', { class: 'muted small' }, 'Üreticinin hesabını (Xiaomi, Petkit, Tuya / Smart Life) merkeze bir kez bağlayın; cihazları buraya kendiliğinden gelir.')];
     if (store.backend?.mode === 'demo') {
-      const add = h('button', { class: 'btn primary', type: 'button' }, icon('plus', 16), 'Add it (demo)');
+      const add = h('button', { class: 'btn primary', type: 'button' }, icon('plus', 16), 'Ekle (örnek ev)');
       add.addEventListener('click', async () => { add.disabled = true; const id = await store.backend.cloudAdd(p); finish(id); });
       kids.push(add);
     } else if (store.backend?.integrationUrl) {
-      kids.push(h('a', { class: 'btn primary', href: store.backend.integrationUrl(p.integration), target: '_blank', rel: 'noopener' }, icon('external', 16), 'Link the account in Home Assistant'));
+      kids.push(h('a', { class: 'btn primary', href: store.backend.integrationUrl(p.integration), target: '_blank', rel: 'noopener' }, icon('external', 16), 'Hesabı merkeze bağla'));
     }
     show(...kids);
     return;
@@ -414,12 +438,12 @@ function renderProduct(root, cleanup, p) {
   const domain = p.integration;
   let tr = {};
   const T = (key, fallback, ph) => fillIn(tr[`component.${domain}.config.${key}`] ?? fallback, ph);
-  const start = h('button', { class: 'btn primary', type: 'button' }, icon('link', 16), 'Start setup');
+  const start = h('button', { class: 'btn primary', type: 'button' }, icon('link', 16), 'Kurulumu başlat');
   show(p.pairHint ? h('p', { class: 'hint' }, icon('sparkle', 16), p.pairHint) : null, start);
   start.addEventListener('click', async () => {
     if (notConnected()) return;
     start.disabled = true;
-    show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Looking for it…'));
+    show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Aranıyor…'));
     tr = await flowTexts(domain);
     if (!(await offerFound())) begin();
   });
@@ -427,7 +451,7 @@ function renderProduct(root, cleanup, p) {
   async function begin() {
     bringBack();
     try { renderStep(await store.backend.flowStart(domain, p)); }
-    catch (err) { show(h('p', { class: 'error-line' }, `Couldn't start the setup: ${err.message}`), fallbackLink()); }
+    catch (err) { show(h('p', { class: 'error-line' }, `Kurulum başlatılamadı: ${err.message}`), fallbackLink()); }
   }
 
   // Home Assistant finds many Wi-Fi devices by itself (Tapo, Shelly, ESPHome) and
@@ -441,22 +465,22 @@ function renderProduct(root, cleanup, p) {
     const nameOf = (f) => { const tp = f.context?.title_placeholders || {}; return tp.name || Object.values(tp)[0] || p.name; };
     show(
       note ? h('p', { class: 'hint' }, icon('sparkle', 16), note) : null,
-      h('p', null, found.length === 1 ? 'Home Assistant found this one on your network:' : 'Home Assistant found these on your network:'),
+      h('p', null, found.length === 1 ? 'Home Assistant ağınızda bunu buldu:' : 'Home Assistant ağınızda bunları buldu:'),
       h('div', { class: 'found-list' }, found.map((f) => h('div', { class: 'found-row' },
         icon(p.icon, 18), h('span', { class: 'found-name' }, nameOf(f)),
-        h('button', { class: 'btn small primary', type: 'button', onclick: () => openFlow(f.flow_id) }, 'Set up')))),
-      h('button', { class: 'btn ghost', type: 'button', onclick: begin }, 'Set up a different one by its address'));
+        h('button', { class: 'btn small primary', type: 'button', onclick: () => openFlow(f.flow_id) }, 'Kur')))),
+      h('button', { class: 'btn ghost', type: 'button', onclick: begin }, 'Başka birini adresiyle kur'));
     return true;
   }
 
   async function openFlow(flowId) {
     try { renderStep(await store.backend.flowGet(flowId)); }
-    catch (err) { show(h('p', { class: 'error-line' }, `Couldn't open that setup: ${err.message}`), fallbackLink()); }
+    catch (err) { show(h('p', { class: 'error-line' }, `Bu kurulum açılamadı: ${err.message}`), fallbackLink()); }
   }
 
   function fallbackLink() {
     return store.backend?.integrationUrl
-      ? h('a', { class: 'btn', href: store.backend.integrationUrl(domain), target: '_blank', rel: 'noopener' }, icon('external', 16), 'Set it up in Home Assistant')
+      ? h('a', { class: 'btn', href: store.backend.integrationUrl(domain), target: '_blank', rel: 'noopener' }, icon('external', 16), 'Merkezde kur')
       : null;
   }
 
@@ -471,11 +495,11 @@ function renderProduct(root, cleanup, p) {
   async function renderStep(step) {
     if (!alive || !step) return;
     const ph = step.description_placeholders || {};
-    if (step.type === 'create_entry') { awaitDevice(`${step.title || p.name} added. Waiting for its device…`); return; }
+    if (step.type === 'create_entry') { awaitDevice(`${step.title || p.name} eklendi. Cihazı bekleniyor…`); return; }
     if (step.type === 'abort') {
-      if (step.reason === 'already_in_progress' && await offerFound('Home Assistant is already setting this device up. Continue it here:')) return;
-      const reason = T(`abort.${step.reason}`, ABORTS[step.reason] || `Setup stopped: ${String(step.reason).replace(/_/g, ' ')}`, ph);
-      show(h('p', { class: 'error-line' }, reason), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Start again'));
+      if (step.reason === 'already_in_progress' && await offerFound('Home Assistant bu cihazı zaten kuruyor. Buradan devam edin:')) return;
+      const reason = T(`abort.${step.reason}`, ABORTS[step.reason] || `Kurulum durdu: ${String(step.reason).replace(/_/g, ' ')}`, ph);
+      show(h('p', { class: 'error-line' }, reason), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Baştan başla'));
       return;
     }
     if (step.type === 'menu') {
@@ -487,7 +511,7 @@ function renderProduct(root, cleanup, p) {
     }
     // Home Assistant is busy (waiting for the device, downloading, ...): look again shortly.
     if (step.type === 'progress') {
-      show(...heading(step), h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), T(`progress.${step.progress_action}`, 'Working on it…', ph)));
+      show(...heading(step), h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), T(`progress.${step.progress_action}`, 'İşlem sürüyor…', ph)));
       await sleep(2000);
       if (alive) openFlow(step.flow_id);
       return;
@@ -496,14 +520,14 @@ function renderProduct(root, cleanup, p) {
     // A sign-in on the maker's website, in another tab.
     if (step.type === 'external') {
       show(...heading(step),
-        h('p', null, 'This step opens the maker\'s website. Sign in there, then come back.'),
+        h('p', null, 'Bu adım üreticinin web sitesini açar. Orada giriş yapın, sonra buraya dönün.'),
         h('div', { class: 'btn-row' },
-          step.url ? h('a', { class: 'btn primary', href: step.url, target: '_blank', rel: 'noopener' }, icon('external', 16), 'Open the sign-in page') : null,
-          h('button', { class: 'btn', type: 'button', onclick: () => openFlow(step.flow_id) }, 'I\'ve signed in, continue')));
+          step.url ? h('a', { class: 'btn primary', href: step.url, target: '_blank', rel: 'noopener' }, icon('external', 16), 'Giriş sayfasını aç') : null,
+          h('button', { class: 'btn', type: 'button', onclick: () => openFlow(step.flow_id) }, 'Giriş yaptım, devam et')));
       return;
     }
     if (step.type !== 'form') {
-      show(h('p', null, 'This step has to be finished in Home Assistant.'), fallbackLink());
+      show(h('p', null, 'Bu adım merkezin kendi ekranında tamamlanmalı.'), fallbackLink());
       return;
     }
 
@@ -532,8 +556,8 @@ function renderProduct(root, cleanup, p) {
         value: () => { const o = {}; for (const k of kids) { const v = k.value(); if (v !== undefined) o[k.name] = v; } return o; },
       };
     });
-    const submit = h('button', { class: 'btn primary', type: 'submit' }, fields.length ? 'Continue' : 'Set it up');
-    const cancel = h('button', { class: 'btn ghost', type: 'button', onclick: () => { store.backend.flowAbort(step.flow_id); renderAgain(); } }, 'Cancel');
+    const submit = h('button', { class: 'btn primary', type: 'submit' }, fields.length ? 'Devam' : 'Kur');
+    const cancel = h('button', { class: 'btn ghost', type: 'button', onclick: () => { store.backend.flowAbort(step.flow_id); renderAgain(); } }, 'İptal');
     const form = h('form', { class: 'stack' },
       ...heading(step),
       errors.base ? h('p', { class: 'error-line' }, errorText(errors.base)) : null,
@@ -544,7 +568,7 @@ function renderProduct(root, cleanup, p) {
       for (const f of fields) { const v = f.value(); if (v !== undefined) data[f.name] = v; }
       submit.disabled = true;
       try { renderStep(await store.backend.flowSubmit(step.flow_id, data)); }
-      catch (err) { toast(`Setup failed: ${err.message}`, 'error'); submit.disabled = false; }
+      catch (err) { toast(`Kurulum başarısız: ${err.message}`, 'error'); submit.disabled = false; }
     });
     show(form);
   }
@@ -555,20 +579,20 @@ function renderProduct(root, cleanup, p) {
   }
 }
 
-const FIELD_LABELS = { host: 'IP address', port: 'Port', username: 'Username', password: 'Password', name: 'Name' };
+const FIELD_LABELS = { host: 'IP adresi', port: 'Port', username: 'Kullanıcı adı', password: 'Şifre', name: 'Ad' };
 const ABORTS = {
-  already_configured: 'This device is already set up.',
-  already_in_progress: 'Home Assistant is already setting this device up. Finish it in Home Assistant.',
-  no_devices_found: 'No device was found on the network.',
-  cannot_connect: 'Couldn\'t reach the device.',
+  already_configured: 'Bu cihaz zaten kurulu.',
+  already_in_progress: 'Home Assistant bu cihazı zaten kuruyor. Kurulumu Home Assistant\'ta bitirin.',
+  no_devices_found: 'Ağda cihaz bulunamadı.',
+  cannot_connect: 'Cihaza ulaşılamadı.',
 };
 
-const pretty = (s) => { const t = String(s).replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
+const pretty = (s) => { const t = String(s).replace(/_/g, ' '); return t.charAt(0).toLocaleUpperCase('tr-TR') + t.slice(1); };
 
 // Home Assistant texts have {placeholders} for names and addresses.
 const fillIn = (text, ph) => (text == null ? text : String(text).replace(/\{(\w+)\}/g, (m, k) => (ph && ph[k] != null ? String(ph[k]) : m)));
 
-// The integration's texts once per visit (Home Assistant sends them in English).
+// The integration's texts once per visit (asked for in Turkish; Home Assistant fills gaps with English).
 const textCache = new Map();
 async function flowTexts(domain) {
   if (textCache.has(domain)) return textCache.get(domain);
@@ -599,7 +623,7 @@ function richText(text) {
 }
 
 function readableError(code) {
-  return { cannot_connect: 'Couldn\'t reach the device. Check the address.', invalid_auth: 'Wrong username or password.', unknown: 'Something went wrong.' }[code] || String(code);
+  return { cannot_connect: 'Cihaza ulaşılamadı. Adresi kontrol edin.', invalid_auth: 'Kullanıcı adı ya da şifre hatalı.', unknown: 'Bir sorun oluştu.' }[code] || String(code);
 }
 
 // Turns one field of a Home Assistant form into an input.
@@ -631,7 +655,7 @@ function formField(f, { label, help, error }, errorText) {
   return {
     name: f.name,
     hasError: !!error,
-    el: h('label', { class: 'field' }, h('span', null, label, required ? '' : ' (optional)'), input, helpEl, errEl),
+    el: h('label', { class: 'field' }, h('span', null, label, required ? '' : ' (isteğe bağlı)'), input, helpEl, errEl),
     value: () => {
       if (input.value === '' && !required) return undefined;
       if (type === 'integer') return parseInt(input.value, 10);

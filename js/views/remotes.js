@@ -8,19 +8,19 @@ import { card, toggle, irButton } from '../components.js';
 export function renderRemotes(root, cleanup) {
   const remotes = [
     { id: 'tv', name: 'TV', iconName: 'tv', el: tvRemote(cleanup) },
-    { id: 'heater', name: 'Heater', iconName: 'heater', el: heaterRemote(cleanup) },
+    { id: 'heater', name: 'Isıtıcı', iconName: 'heater', el: heaterRemote(cleanup) },
   ];
   const last = remotes.length - 1;
   let index = Math.max(0, remotes.findIndex((r) => r.id === loadSettings().remote));
 
-  const slides = remotes.map((r) => h('div', { class: 'remote-slide', id: `remote-${r.id}`, role: 'tabpanel', 'aria-label': `${r.name} remote` }, r.el));
+  const slides = remotes.map((r) => h('div', { class: 'remote-slide', id: `remote-${r.id}`, role: 'tabpanel', 'aria-label': `${r.name} kumandası` }, r.el));
   const track = h('div', { class: 'remote-track' }, slides);
   const tabs = remotes.map((r, i) => h('button', {
     type: 'button', role: 'tab', 'aria-controls': `remote-${r.id}`, onclick: () => go(i),
   }, icon(r.iconName, 16), r.name));
-  const tabBar = h('div', { class: 'segmented remote-tabs', role: 'tablist', 'aria-label': 'Remotes' }, tabs);
-  const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Previous remote', title: 'Previous remote', onclick: () => go(index - 1) }, icon('left', 20));
-  const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Next remote', title: 'Next remote', onclick: () => go(index + 1) }, icon('right', 20));
+  const tabBar = h('div', { class: 'segmented remote-tabs', role: 'tablist', 'aria-label': 'Kumandalar' }, tabs);
+  const prev = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Önceki kumanda', title: 'Önceki kumanda', onclick: () => go(index - 1) }, icon('left', 20));
+  const next = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Sonraki kumanda', title: 'Sonraki kumanda', onclick: () => go(index + 1) }, icon('right', 20));
   tabBar.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
@@ -82,14 +82,14 @@ export function renderRemotes(root, cleanup) {
 
 function powerHeader(device, cleanup) {
   const cfg = HOME[device];
-  const sw = toggle(`${cfg.name} on or off`, (on) => ensurePower(device, on));
+  const sw = toggle(`${cfg.name} aç ya da kapat`, (on) => ensurePower(device, on));
   const label = h('span', { class: 'remote-state' }, '–');
-  const fix = h('button', { class: 'link small', type: 'button' }, 'Correct');
+  const fix = h('button', { class: 'link small', type: 'button' }, 'Düzelt');
   fix.addEventListener('click', () => setTracker(device, store.get(cfg.tracker)?.state !== 'on'));
   cleanup.push(store.watch(cfg.tracker, (t) => {
     sw.set(isOn(t), !isAvailable(t));
-    label.textContent = !isAvailable(t) ? 'Unknown' : isOn(t) ? 'On' : 'Off';
-    fix.title = isOn(t) ? 'Mark as off without sending anything' : 'Mark as on without sending anything';
+    label.textContent = !isAvailable(t) ? 'Bilinmiyor' : isOn(t) ? 'Açık' : 'Kapalı';
+    fix.title = isOn(t) ? 'Bir şey göndermeden kapalı olarak işaretle' : 'Bir şey göndermeden açık olarak işaretle';
   }));
   return h('div', { class: 'remote-head' }, label, fix, sw);
 }
@@ -97,43 +97,43 @@ function powerHeader(device, cleanup) {
 function tvRemote(cleanup) {
   const b = HOME.tv.buttons;
   const ir = (id, opts) => irButton(id, opts, cleanup);
-  return card({ title: 'TV remote', iconName: 'tv', extra: powerHeader('tv', cleanup), className: 'remote tv-remote' },
+  return card({ title: 'TV kumandası', iconName: 'tv', extra: powerHeader('tv', cleanup), className: 'remote tv-remote' },
     h('div', { class: 'remote-row three' },
-      ir(b.power, { label: 'Power', iconName: 'power', className: 'key danger' }),
-      ir(b.input, { label: 'Input', iconName: 'input', className: 'key' }),
+      ir(b.power, { label: 'Güç', iconName: 'power', className: 'key danger' }),
+      ir(b.input, { label: 'Kaynak', iconName: 'input', className: 'key' }),
       ir(b.netflix, { label: 'Netflix', iconName: 'netflix', className: 'key netflix' })),
     h('div', { class: 'remote-row three' },
       ir(b.hdmi1, { label: 'HDMI 1', text: 'HDMI 1', className: 'key small-text' }),
       ir(b.hdmi2, { label: 'HDMI 2', text: 'HDMI 2', className: 'key small-text' }),
       ir(b.hdmi3, { label: 'HDMI 3', text: 'HDMI 3', className: 'key small-text' })),
     h('div', { class: 'remote-row two' },
-      ir(b.back, { label: 'Back', iconName: 'back', className: 'key' }),
-      ir(b.home, { label: 'Home', iconName: 'home', className: 'key' })),
+      ir(b.back, { label: 'Geri', iconName: 'back', className: 'key' }),
+      ir(b.home, { label: 'Ana menü', iconName: 'home', className: 'key' })),
     h('div', { class: 'dpad' },
-      ir(b.up, { label: 'Up', iconName: 'up', className: 'dp up', size: 28 }),
-      ir(b.left, { label: 'Left', iconName: 'left', className: 'dp left', size: 28 }),
+      ir(b.up, { label: 'Yukarı', iconName: 'up', className: 'dp up', size: 28 }),
+      ir(b.left, { label: 'Sol', iconName: 'left', className: 'dp left', size: 28 }),
       ir(b.ok, { label: 'OK', text: 'OK', className: 'dp ok' }),
-      ir(b.right, { label: 'Right', iconName: 'right', className: 'dp right', size: 28 }),
-      ir(b.down, { label: 'Down', iconName: 'down', className: 'dp down', size: 28 })),
+      ir(b.right, { label: 'Sağ', iconName: 'right', className: 'dp right', size: 28 }),
+      ir(b.down, { label: 'Aşağı', iconName: 'down', className: 'dp down', size: 28 })),
     h('div', { class: 'remote-row two' },
-      ir(b.settings, { label: 'Settings', iconName: 'gear', className: 'key' }),
-      ir(b.exit, { label: 'Exit', iconName: 'close', className: 'key' })),
+      ir(b.settings, { label: 'Ayarlar', iconName: 'gear', className: 'key' }),
+      ir(b.exit, { label: 'Çıkış', iconName: 'close', className: 'key' })),
     h('div', { class: 'rockers' },
       h('div', { class: 'rocker' },
-        ir(b.volumeUp, { label: 'Volume up', iconName: 'plus', className: 'rk' }),
-        h('span', { class: 'rocker-label' }, 'VOL'),
-        ir(b.volumeDown, { label: 'Volume down', iconName: 'minus', className: 'rk' })),
+        ir(b.volumeUp, { label: 'Sesi aç', iconName: 'plus', className: 'rk' }),
+        h('span', { class: 'rocker-label' }, 'SES'),
+        ir(b.volumeDown, { label: 'Sesi kıs', iconName: 'minus', className: 'rk' })),
       ir(b.mute, { label: 'Mute', iconName: 'mute', className: 'key mute' }),
       h('div', { class: 'rocker' },
-        ir(b.channelUp, { label: 'Channel up', iconName: 'up', className: 'rk' }),
-        h('span', { class: 'rocker-label' }, 'CH'),
-        ir(b.channelDown, { label: 'Channel down', iconName: 'down', className: 'rk' }))),
+        ir(b.channelUp, { label: 'Sonraki kanal', iconName: 'up', className: 'rk' }),
+        h('span', { class: 'rocker-label' }, 'KNL'),
+        ir(b.channelDown, { label: 'Önceki kanal', iconName: 'down', className: 'rk' }))),
     h('div', { class: 'remote-row five' },
-      ir(b.rewind, { label: 'Rewind', iconName: 'rewind', className: 'key' }),
-      ir(b.play, { label: 'Play', iconName: 'play', className: 'key' }),
-      ir(b.pause, { label: 'Pause', iconName: 'pause', className: 'key' }),
-      ir(b.stop, { label: 'Stop', iconName: 'stop', className: 'key' }),
-      ir(b.forward, { label: 'Fast forward', iconName: 'forward', className: 'key' })),
+      ir(b.rewind, { label: 'Geri sar', iconName: 'rewind', className: 'key' }),
+      ir(b.play, { label: 'Oynat', iconName: 'play', className: 'key' }),
+      ir(b.pause, { label: 'Duraklat', iconName: 'pause', className: 'key' }),
+      ir(b.stop, { label: 'Durdur', iconName: 'stop', className: 'key' }),
+      ir(b.forward, { label: 'İleri sar', iconName: 'forward', className: 'key' })),
     h('div', { class: 'numpad' },
       [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ir(b.digits[n], { label: String(n), text: String(n), className: 'key digit' })),
       ir(b.digits[0], { label: '0', text: '0', className: 'key digit zero' })));
@@ -142,18 +142,18 @@ function tvRemote(cleanup) {
 function heaterRemote(cleanup) {
   const b = HOME.heater.buttons;
   const ir = (id, opts) => irButton(id, opts, cleanup);
-  return card({ title: 'Heater remote', iconName: 'heater', extra: powerHeader('heater', cleanup), className: 'remote heater-remote' },
+  return card({ title: 'Isıtıcı kumandası', iconName: 'heater', extra: powerHeader('heater', cleanup), className: 'remote heater-remote' },
     h('div', { class: 'remote-row three' },
-      ir(b.power, { label: 'Power', iconName: 'power', className: 'key danger' }),
-      ir(b.lock, { label: 'Lock', iconName: 'lock', className: 'key' }),
-      ir(b.toggle, { label: 'Toggle', iconName: 'toggle', className: 'key' })),
+      ir(b.power, { label: 'Güç', iconName: 'power', className: 'key danger' }),
+      ir(b.lock, { label: 'Kilit', iconName: 'lock', className: 'key' }),
+      ir(b.toggle, { label: 'Aç/kapat', iconName: 'toggle', className: 'key' })),
     h('div', { class: 'temp-keys' },
-      ir(b.tempDown, { label: 'Temperature down', iconName: 'minus', className: 'key big cool', size: 30 }),
-      h('span', { class: 'temp-keys-label' }, 'Temperature'),
-      ir(b.tempUp, { label: 'Temperature up', iconName: 'plus', className: 'key big warm', size: 30 })),
+      ir(b.tempDown, { label: 'Sıcaklığı düşür', iconName: 'minus', className: 'key big cool', size: 30 }),
+      h('span', { class: 'temp-keys-label' }, 'Sıcaklık'),
+      ir(b.tempUp, { label: 'Sıcaklığı artır', iconName: 'plus', className: 'key big warm', size: 30 })),
     h('div', { class: 'remote-row three' },
-      ir(b.eco, { label: 'ECO mode', iconName: 'leaf', text: 'ECO', className: 'key labelled' }),
-      ir(b.performance, { label: 'Performance mode', iconName: 'flame', text: 'Boost', className: 'key labelled' }),
-      ir(b.sleep, { label: 'Sleep mode', iconName: 'moon', text: 'Sleep', className: 'key labelled' })),
-    h('p', { class: 'card-foot muted dev-only' }, 'Power is sent only through the switch above when the tracker says the heater is in the other state. The red key always sends the code.'));
+      ir(b.eco, { label: 'ECO modu', iconName: 'leaf', text: 'ECO', className: 'key labelled' }),
+      ir(b.performance, { label: 'Performans modu', iconName: 'flame', text: 'Boost', className: 'key labelled' }),
+      ir(b.sleep, { label: 'Uyku modu', iconName: 'moon', text: 'Uyku', className: 'key labelled' })),
+    h('p', { class: 'card-foot muted dev-only' }, 'Güç kodu, yukarıdaki anahtarla yalnızca takip edilen durum ısıtıcının diğer konumda olduğunu söylediğinde gönderilir. Kırmızı tuş kodu her zaman gönderir.'));
 }

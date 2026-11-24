@@ -25,12 +25,12 @@ export function renderScenes(root, cleanup) {
   cleanup.push(() => clearInterval(tick));
 
   root.append(
-    h('p', { class: 'muted intro' }, 'One tap sets the mood. Choose which rooms each scene applies to; only the devices in those rooms change.'),
+    h('p', { class: 'muted intro' }, 'Tek dokunuşla ortamı ayarlayın. Her sahnenin hangi odalarda çalışacağını seçin; yalnızca o odalardaki cihazlar değişir.'),
     grid);
   draw();
 }
 
-const lastText = (at) => `Last used ${relTime(new Date(Number(at)).toISOString())}`;
+const lastText = (at) => `Son kullanım ${relTime(new Date(Number(at)).toISOString())}`;
 
 // The rooms a scene uses, ignoring rooms that have since been deleted.
 function currentRooms(sceneId) {
@@ -49,8 +49,8 @@ function sceneCard(scene) {
   // "All rooms" (which also covers devices not in a room), or any mix of
   // rooms. Turning the last room off goes back to all.
   const chip = (label, on, onclick) => h('button', { class: `room-chip small${on ? ' active' : ''}`, type: 'button', 'aria-pressed': String(on), onclick }, label);
-  const chips = h('div', { class: 'scene-rooms', role: 'group', 'aria-label': `Rooms for ${scene.name}` },
-    chip('All rooms', rooms === 'all', () => choose('all')),
+  const chips = h('div', { class: 'scene-rooms', role: 'group', 'aria-label': `${scene.name} için odalar` },
+    chip('Tüm odalar', rooms === 'all', () => choose('all')),
     areas.map((a) => {
       const on = rooms !== 'all' && rooms.includes(a.area_id);
       return chip(a.name, on, () => {
@@ -61,14 +61,14 @@ function sceneCard(scene) {
     }));
 
   const steps = planScene(scene, rooms);
-  const where = rooms === 'all' ? 'the home' : rooms.map(areaName).join(', ');
-  const start = h('button', { class: 'btn primary scene-start', type: 'button', disabled: !steps.length }, icon('play', 14), 'Start');
+  const where = rooms === 'all' ? 'bütün ev' : rooms.map(areaName).join(', ');
+  const start = h('button', { class: 'btn primary scene-start', type: 'button', disabled: !steps.length }, icon('play', 14), 'Başlat');
   start.addEventListener('click', async () => {
     start.disabled = true;
     el.classList.add('busy');
     try {
       const r = await runScene(scene, rooms);
-      toast(r.failed ? `${scene.name}: ${r.failed} of ${r.steps} changes didn't work` : `${scene.name} started${rooms === 'all' ? '' : ` in ${where}`}`, r.failed ? 'error' : 'info');
+      toast(r.failed ? `${scene.name}: ${r.steps} değişiklikten ${r.failed} tanesi olmadı` : `${scene.name} başladı${rooms === 'all' ? '' : ` (${where})`}`, r.failed ? 'error' : 'info');
     } finally {
       el.classList.remove('busy');
       redraw();
@@ -87,8 +87,8 @@ function sceneCard(scene) {
     areas.length ? chips : null,
     steps.length
       ? h('details', { class: 'scene-steps' },
-        h('summary', null, `What it does in ${where}`, h('span', { class: 'muted' }, ` · ${steps.length} change${steps.length === 1 ? '' : 's'}`)),
+        h('summary', null, `Ne yapar (${where})`, h('span', { class: 'muted' }, ` · ${steps.length} değişiklik`)),
         h('ul', null, steps.map((s) => h('li', null, icon(s.icon, 16), h('span', null, s.device), h('strong', null, s.text)))))
-      : h('p', { class: 'muted small scene-empty' }, `Nothing in ${where} for this scene to change.`));
+      : h('p', { class: 'muted small scene-empty' }, `Bu sahnenin ${where} içinde değiştireceği bir şey yok.`));
   return el;
 }

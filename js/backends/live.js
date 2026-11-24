@@ -25,7 +25,7 @@ async function tokenRequest(hassUrl, params) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
   });
-  if (!res.ok) throw new Error(`sign-in was refused (${res.status})`);
+  if (!res.ok) throw new Error(`giriş reddedildi (${res.status})`);
   return res.json();
 }
 
@@ -90,17 +90,17 @@ export async function getAccessToken(hassUrl, { interactive = true } = {}) {
     }
   }
 
-  if (!interactive) throw new Error('not signed in');
+  if (!interactive) throw new Error('giriş yapılmadı');
   // Only leave the app for the login page if Home Assistant answers. Otherwise the
   // browser lands on a "can't reach this page" error and every reload does it again.
   // Evra keeps trying (open() schedules another attempt), so it connects by itself
   // once the house answers.
   const there = await reachable(hassUrl);
   if (there === 'unreachable') {
-    throw new Error(`can't reach ${hassUrl}. Check the internet connection and the address in Settings → Connection.`);
+    throw new Error(`${hassUrl} adresine ulaşılamıyor. İnternet bağlantısını ve Ayarlar → Bağlantı'daki adresi kontrol edin.`);
   }
   if (there === 'not-ready') {
-    throw new Error(`your home's hub isn't answering yet (${new URL(hassUrl).host}). Its Pi may be off or still being set up, or Home Assistant doesn't allow this app yet (cors_allowed_origins). Evra keeps trying.`);
+    throw new Error(`evinizin merkezi henüz yanıt vermiyor (${new URL(hassUrl).host}). Pi kapalı ya da hâlâ kuruluyor olabilir, ya da Home Assistant bu uygulamaya henüz izin vermiyor (cors_allowed_origins). Evra denemeye devam ediyor.`);
   }
   const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
   try { sessionStorage.setItem(OAUTH_STATE_KEY, state); } catch { /* storage blocked */ }
@@ -152,12 +152,12 @@ export function createLiveBackend(hassUrl) {
 
   function send(msg, timeoutMs = 15000) {
     return new Promise((resolve, reject) => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) { reject(new Error('not connected')); return; }
+      if (!ws || ws.readyState !== WebSocket.OPEN) { reject(new Error('bağlı değil')); return; }
       const id = nextId++;
       pending.set(id, { resolve, reject });
       ws.send(JSON.stringify({ ...msg, id }));
       setTimeout(() => {
-        if (pending.has(id)) { pending.delete(id); reject(new Error('Home Assistant did not answer')); }
+        if (pending.has(id)) { pending.delete(id); reject(new Error('Home Assistant yanıt vermedi')); }
       }, timeoutMs);
     });
   }
@@ -181,14 +181,14 @@ export function createLiveBackend(hassUrl) {
     try {
       token = await getAccessToken(hassUrl);
     } catch (e) {
-      setStatus({ mode: 'live', state: 'error', message: `Couldn't sign in: ${e.message}` });
+      setStatus({ mode: 'live', state: 'error', message: `Giriş yapılamadı: ${e.message}` });
       schedule();
       return;
     }
     try {
       ws = new WebSocket(hassUrl.replace(/^http/, 'ws') + '/api/websocket');
     } catch (e) {
-      setStatus({ mode: 'live', state: 'error', message: `Bad address: ${e.message}` });
+      setStatus({ mode: 'live', state: 'error', message: `Geçersiz adres: ${e.message}` });
       return;
     }
 
@@ -199,12 +199,12 @@ export function createLiveBackend(hassUrl) {
         ws.send(JSON.stringify({ type: 'auth', access_token: token }));
       } else if (m.type === 'auth_invalid') {
         signOut();
-        setStatus({ mode: 'live', state: 'error', message: 'Home Assistant rejected the sign-in. Connect again to log in.' });
+        setStatus({ mode: 'live', state: 'error', message: 'Home Assistant girişi reddetti. Giriş yapmak için yeniden bağlanın.' });
         closedByUs = true;
         ws.close();
       } else if (m.type === 'auth_ok') {
         retry = 0;
-        setStatus({ mode: 'live', state: 'connecting', message: 'Loading states' });
+        setStatus({ mode: 'live', state: 'connecting', message: 'Durumlar yükleniyor' });
         try {
           const all = await send({ type: 'get_states' });
           emit({ type: 'all', states: all });
@@ -230,16 +230,16 @@ export function createLiveBackend(hassUrl) {
         if (!p) return;
         pending.delete(m.id);
         if (m.type === 'pong' || m.success) p.resolve(m.result);
-        else p.reject(new Error((m.error && m.error.message) || 'request failed'));
+        else p.reject(new Error((m.error && m.error.message) || 'istek başarısız'));
       }
     };
 
     ws.onclose = () => {
       clearInterval(pingTimer);
-      for (const p of pending.values()) p.reject(new Error('connection lost'));
+      for (const p of pending.values()) p.reject(new Error('bağlantı koptu'));
       pending.clear();
       if (closedByUs) return;
-      setStatus({ mode: 'live', state: 'reconnecting', message: 'Connection lost, retrying' });
+      setStatus({ mode: 'live', state: 'reconnecting', message: 'Bağlantı koptu, yeniden deneniyor' });
       schedule();
     };
   }
@@ -310,6 +310,8 @@ export function createLiveBackend(hassUrl) {
 
     // ---- devices ----
     updateDevice(deviceId, patch) { return send({ type: 'config/device_registry/update', device_id: deviceId, ...patch }); },
+    // The hub's home location, which its own weather and sunrise/sunset follow (needs an admin login).
+    setHomeLocation(latitude, longitude) { return send({ type: 'config/core/update', latitude: Number(latitude), longitude: Number(longitude) }); },
     // Removing always succeeds while Home Assistant is connected, also for a device that
     // is offline, never finished pairing or can't be reached ("Failed to fetch"):
     //   1. Zigbee: the hub forgets it (it asks the device to leave; an unreachable device
@@ -362,7 +364,7 @@ export function createLiveBackend(hassUrl) {
         return await send({ type: 'notify/html5/appkey' });
       } catch (e) {
         if (/unknown command/i.test(e.message)) {
-          throw new Error('Home Assistant needs the "HTML5 Push Notifications" integration first (Settings › Devices & services › Add integration)');
+          throw new Error('Önce Home Assistant\'a "HTML5 Push Notifications" entegrasyonunu ekleyin (Ayarlar › Cihazlar ve Servisler › Entegrasyon Ekle)');
         }
         throw e;
       }
@@ -402,7 +404,7 @@ export function createLiveBackend(hassUrl) {
     // The integration's own texts for its setup: step titles and descriptions, field
     // names and help, errors and stop reasons (keys like component.<domain>.config.…).
     async flowTranslations(domain) {
-      const r = await send({ type: 'frontend/get_translations', language: 'en', category: 'config', integration: [domain] });
+      const r = await send({ type: 'frontend/get_translations', language: 'tr', category: 'config', integration: [domain] });
       return r?.resources || {};
     },
     matterCommission(code) {

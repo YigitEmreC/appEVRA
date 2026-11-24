@@ -35,7 +35,7 @@ export function pushState() {
 async function worker() {
   const reg = await Promise.race([
     navigator.serviceWorker.ready,
-    new Promise((_, no) => setTimeout(() => no(new Error('the app\'s background worker didn\'t start; reload and try again')), 8000)),
+    new Promise((_, no) => setTimeout(() => no(new Error('uygulamanın arka plan çalışanı başlamadı; sayfayı yenileyip tekrar deneyin')), 8000)),
   ]);
   return reg;
 }
@@ -55,16 +55,16 @@ const sameKey = (sub, key) => {
 // A name Home Assistant shows for this device (it becomes the notify entity's name).
 export function deviceLabel() {
   const ua = navigator.userAgent;
-  const what = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) || isIos() ? 'iPad' : /Android/.test(ua) ? 'Android phone' : /Windows/.test(ua) ? 'Windows PC' : /Mac/.test(ua) ? 'Mac' : 'Device';
+  const what = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) || isIos() ? 'iPad' : /Android/.test(ua) ? 'Android telefon' : /Windows/.test(ua) ? 'Windows bilgisayar' : /Mac/.test(ua) ? 'Mac' : 'Cihaz';
   return `Evra ${what}`;
 }
 
 // Switches notifications on: permission, subscription, registration with Home Assistant.
 export async function enablePush(name = deviceLabel()) {
   const backend = store.backend;
-  if (!backend) throw new Error('Not connected yet');
+  if (!backend) throw new Error('henüz bağlı değil');
   const permission = await Notification.requestPermission();
-  if (permission !== 'granted') throw new Error(permission === 'denied' ? 'Notifications are blocked for this app in the browser\'s settings' : 'Notifications weren\'t allowed');
+  if (permission !== 'granted') throw new Error(permission === 'denied' ? 'bu uygulamanın bildirimleri tarayıcı ayarlarında engellenmiş' : 'bildirimlere izin verilmedi');
   const reg = await worker();
   const key = await backend.pushKey();
   if (key) {

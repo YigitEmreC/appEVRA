@@ -1,6 +1,8 @@
 @echo off
-rem Starts the Evra app: runs the local server (unless it is already running)
-rem and opens the app in its own window. Close the "Evra server" window to stop it.
+rem Starts the Evra app: runs the local server (unless it is already running),
+rem the accounts stand-in, the test hub (a pretend Home Assistant on port 8123)
+rem and the assistant, then opens the app in its own window.
+rem Close the "Evra server" window to stop it.
 rem Double-click it, or run  "Start Evra.bat" 8020  to use another port.
 rem "Start Evra on phone.bat" runs this in phone mode (EVRA_PHONE=1): phones on the
 rem same Wi-Fi can open the app too.
@@ -70,6 +72,11 @@ if errorlevel 1 (
   )
 )
 
+rem ---- the test hub: a stand-in for Home Assistant, to use live mode without the Pi.
+rem In Evra: Settings > Connection > Live, address http://localhost:8123 (its control
+rem panel and test login are at that address too). Set EVRA_NO_HUB=1 to skip it.
+if not "%EVRA_NO_HUB%"=="1" call :start_hub
+
 rem ---- the Evra assistant, when it's set up next to the app (EvrAI folder) -------
 set "ASSISTANT_DIR=%APP_DIR%..\EvrAI\gemini_home_starter\"
 if "%EVRA_PHONE%"=="1" set "ASSISTANT_LAN=1"
@@ -107,6 +114,22 @@ echo   The phone only gets the app and the demo data. Close the
 echo   "Evra server" window to stop it.
 echo.
 pause
+exit /b 0
+
+rem Starts the test hub (port 8123), unless it's already running.
+:start_hub
+curl -sf -o nul --max-time 2 "http://127.0.0.1:8123/panel/api/state"
+if not errorlevel 1 (
+  echo The Evra test hub is already running: http://localhost:8123
+  exit /b 0
+)
+"%PY%" -c "import aiohttp" >nul 2>&1
+if errorlevel 1 (
+  echo The test hub needs the aiohttp package:  "%PY%" -m pip install aiohttp
+  exit /b 0
+)
+echo Starting the Evra test hub on port 8123 - control panel: http://localhost:8123
+start "Evra test hub - close this window to stop it" /min "%PY%" "%APP_DIR%tools\test_hub\hub.py" --port 8123 --origin http://localhost:%PORT% --origin http://127.0.0.1:%PORT%
 exit /b 0
 
 rem Succeeds when the server answers with the app's start page.
