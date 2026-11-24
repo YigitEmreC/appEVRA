@@ -158,6 +158,24 @@ function createEngine(lang) {
     return t;
   }
   const keep = (orig, t) => orig.replace(/^(\s*)[\s\S]*?(\s*)$/, (_, a, b) => a + t + b);
+  // The whole text, or else its parts between " · " ("Isıtılıyor · 21°", "07:00 · Uyanış").
+  // null while any part is still being fetched, or when nothing is known.
+  function translateText(v) {
+    const hit = lookup(v);
+    if (hit) return render(hit);
+    if (!v.includes('·')) return null;
+    let changed = false, pending = false;
+    const out = v.split(/(\s*·\s*)/).map((part, i) => {
+      if (i % 2 || !LETTERS.test(part)) return part;
+      const h2 = lookup(part);
+      if (!h2) return part;
+      const t = render(h2);
+      if (t == null) { pending = true; return part; }
+      changed = true;
+      return keep(part, t);
+    });
+    return changed && !pending ? out.join('') : null;
+  }
 
   function doText(node) {
     if (stopped) return;
@@ -167,9 +185,7 @@ function createEngine(lang) {
     if (!p || p.closest(SKIP)) return;
     // Already ours: the English we put there.
     if (origText.has(node) && origText.get(node).en === v) return;
-    const hit = lookup(v);
-    if (!hit) return;
-    const t = render(hit);
+    const t = translateText(v);
     if (t == null || norm(t) === norm(v)) return;
     const next = keep(v, t);
     if (origText.size > 4000) for (const n of origText.keys()) if (!n.isConnected) origText.delete(n); // screens come and go
@@ -217,25 +233,38 @@ function createEngine(lang) {
     const res = await fetch(config.api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang, ids }) });
     return (await res.json()).texts || {};
   }
-  function scheduleFetch() {
+  // Missing texts are asked for in small pieces, six at a time, top of the page first, so
+  // the first translations show up quickly. Ones that don't come back (the server was
+  // still translating, a hiccup) are asked for again a little later, up to three times.
+  const tries = new Map();
+  let fetching = false;
+  function scheduleFetch(delay = 50) {
     if (fetchTimer || stopped) return;
     fetchTimer = setTimeout(async () => {
       fetchTimer = null;
-      const ids = [...wanted].filter((id) => cache[id] == null);
+      if (fetching) { scheduleFetch(300); return; }
+      const ids = [...wanted].filter((id) => cache[id] == null && (tries.get(id) || 0) < 3);
       wanted.clear();
       if (!ids.length) return;
-      // Small pieces in parallel, so the first English shows up quickly.
+      fetching = true;
       const parts = [];
-      for (let i = 0; i < ids.length && i < 240; i += 40) parts.push(ids.slice(i, i + 40));
-      await Promise.all(parts.map(async (part) => {
-        try {
-          const texts = await post(part);
+      for (let i = 0; i < ids.length; i += 40) parts.push(ids.slice(i, i + 40));
+      const again = [];
+      for (let i = 0; i < parts.length && !stopped; i += 6) {
+        await Promise.all(parts.slice(i, i + 6).map(async (part) => {
+          let texts = {};
+          try { texts = await post(part); } catch { /* offline or slow: try again below */ }
           let got = 0;
           for (const [id, t] of Object.entries(texts)) { cache[id] = t; got++; }
+          for (const id of part) if (cache[id] == null) { tries.set(id, (tries.get(id) || 0) + 1); again.push(id); }
           if (got && !stopped) { persist(); walk(document.body); doTitle(); }
-        } catch { /* offline: Turkish until next time */ }
-      }));
-    }, 50);
+        }));
+      }
+      fetching = false;
+      if (stopped) return;
+      for (const id of again) wanted.add(id);
+      if (wanted.size) scheduleFetch(again.length ? 4000 : 50);
+    }, delay);
   }
   /** Every translation the server already has, in one request (then kept on this device). */
   async function loadAll() {
