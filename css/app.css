@@ -2326,3 +2326,14 @@ button, a, .nav-item, .room-chip { touch-action: manipulation; }
 .lang-switch b.off { font-weight: 500; opacity: 0.45; }
 .lang-switch:hover b.off { opacity: 0.8; }
 .gate-lang { position: fixed; top: calc(env(safe-area-inset-top) + 12px); right: 12px; z-index: 5; }
+
+/* Floors on the Rooms screen, and "Gelişmiş ayarlar" boxes that stay closed until needed. */
+.floor-group + .floor-group { margin-top: 18px; }
+.floor-head { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; }
+.advanced-settings { margin-top: 18px; padding: 10px 14px; border: 1px dashed var(--line-strong); border-radius: 14px; background: color-mix(in srgb, var(--card) 70%, transparent); }
+.advanced-settings > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 650; color: var(--muted); list-style: none; }
+.advanced-settings > summary::-webkit-details-marker { display: none; }
+.advanced-settings[open] > summary { margin-bottom: 8px; color: var(--text); }
+.advanced-settings .field { display: grid; gap: 6px; margin: 8px 0; }
+.floor-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.floor-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--card); }

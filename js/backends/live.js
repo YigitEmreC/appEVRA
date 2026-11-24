@@ -171,12 +171,14 @@ export function createLiveBackend(hassUrl) {
   }
 
   async function loadRegistries() {
-    const [devices, areas, entities] = await Promise.all([
+    const [devices, areas, entities, floors] = await Promise.all([
       send({ type: 'config/device_registry/list' }),
       send({ type: 'config/area_registry/list' }),
       send({ type: 'config/entity_registry/list' }),
+      // Floors (Home Assistant 2024.4+); older ones have none, which means one floor.
+      send({ type: 'config/floor_registry/list' }).catch(() => []),
     ]);
-    emit({ type: 'registry', devices, areas, entities });
+    emit({ type: 'registry', devices, areas, entities, floors });
   }
 
   async function rest(method, path, body) {
@@ -266,7 +268,7 @@ export function createLiveBackend(hassUrl) {
             await send({ type: 'subscribe_events', event_type: 'state_changed' });
           }
           await loadRegistries();
-          for (const ev of ['device_registry_updated', 'area_registry_updated', 'entity_registry_updated']) {
+          for (const ev of ['device_registry_updated', 'area_registry_updated', 'entity_registry_updated', 'floor_registry_updated']) {
             await send({ type: 'subscribe_events', event_type: ev });
           }
           setStatus({ mode: 'live', state: 'connected', message: `Home Assistant ${m.ha_version}` });
@@ -365,6 +367,10 @@ export function createLiveBackend(hassUrl) {
     createArea(name) { return send({ type: 'config/area_registry/create', name }); },
     renameArea(areaId, name) { return send({ type: 'config/area_registry/update', area_id: areaId, name }); },
     deleteArea(areaId) { return send({ type: 'config/area_registry/delete', area_id: areaId }); },
+    // ---- floors (a room's floor_id; rooms without one are on the ground floor) ----
+    createFloor(name, level) { return send({ type: 'config/floor_registry/create', name, level }); },
+    deleteFloor(floorId) { return send({ type: 'config/floor_registry/delete', floor_id: floorId }); },
+    setAreaFloor(areaId, floorId) { return send({ type: 'config/area_registry/update', area_id: areaId, floor_id: floorId || null }); },
 
     // ---- backups (Home Assistant 2025.1+: Settings > System > Backups) ----
     backupInfo() { return send({ type: 'backup/info' }); },

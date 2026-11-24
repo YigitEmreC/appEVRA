@@ -5,7 +5,7 @@ import { icon } from '../icons.js';
 import { mascot } from '../mascot.js';
 import { card } from '../components.js';
 import { deviceCardFor, kindIcon } from '../devices/cards.js';
-import { roomBadges, roomEntities, roomIcon, roomDevices } from '../rooms.js';
+import { roomBadges, roomEntities, roomIcon, roomDevices, floorList, roomsByFloor, addFloor } from '../rooms.js';
 
 export function renderDevices(root, cleanup, ctx) {
   const [first, second] = ctx.params;
@@ -135,14 +135,41 @@ function renderList(root, cleanup, initialTab) {
       requestAnimationFrame(() => { queued = false; squares.forEach((q) => q.paint()); });
     }));
     const loose = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id));
+    const squareOf = new Map(rooms.map((a, i) => [a.area_id, squares[i]]));
+    // One floor: the rooms as before. More floors: a heading per floor.
+    const grids = store.floors.size
+      ? roomsByFloor(rooms).map(({ floor, rooms: list }, i) => h('section', { class: 'floor-group' },
+        h('h3', { class: 'floor-head' }, icon(floor.level < 0 ? 'down' : 'rooms', 16), floor.name, h('span', { class: 'muted small' }, ` · ${list.length} oda`)),
+        h('div', { class: 'room-grid' }, list.map((a) => squareOf.get(a.area_id)), i === 0 ? addRoomSquare() : null),
+        list.length ? null : h('p', { class: 'muted small' }, 'Bu katta henüz oda yok. Bir odayı açıp Gelişmiş ayarlar\'dan bu kata alın.')))
+      : [h('div', { class: 'room-grid' }, squares, addRoomSquare())];
     return h('div', { class: 'rooms-panel' },
-      h('div', { class: 'room-grid' }, squares, addRoomSquare()),
-      loose.length ? h('p', { class: 'muted small' }, `${loose.length} cihaz henüz bir odada değil. Bir odaya taşımak için odayı açın.`) : null);
+      ...grids,
+      loose.length ? h('p', { class: 'muted small' }, `${loose.length} cihaz henüz bir odada değil. Bir odaya taşımak için odayı açın.`) : null,
+      floorsAdvanced());
+  }
+
+  // Floors are an advanced setting: most homes have one, and it stays out of the way.
+  function floorsAdvanced() {
+    const extra = floorList().filter((f) => f.floor_id);
+    const act = async (fn, ok) => { try { await fn(); toast(ok); } catch (err) { toast(`Olmadı: ${err.message}`, 'error'); } };
+    const hasBasement = extra.some((f) => f.level < 0);
+    return h('details', { class: 'advanced-settings' },
+      h('summary', null, icon('gear', 14), 'Gelişmiş ayarlar: katlar'),
+      h('p', { class: 'muted small' }, 'Eviniz birden fazla katlıysa ya da bodrumu varsa katları buradan ekleyin; sonra her odayı açıp Gelişmiş ayarlar\'dan katını seçin. Kat eklemezseniz bütün odalar tek katta görünür.'),
+      extra.length ? h('ul', { class: 'floor-list' }, extra.map((f) => h('li', null, h('span', null, f.name),
+        h('button', { class: 'btn small ghost', type: 'button', onclick: () => {
+          if (!confirm(`"${f.name}" silinsin mi? Bu kattaki odalar silinmez, zemin kata geçer.`)) return;
+          act(() => store.backend.deleteFloor(f.floor_id), `${f.name} silindi`);
+        } }, icon('trash', 14), 'Sil')))) : null,
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn small', type: 'button', onclick: () => act(() => addFloor('upper'), 'Kat eklendi') }, icon('plus', 14), 'Üst kat ekle'),
+        hasBasement ? null : h('button', { class: 'btn small', type: 'button', onclick: () => act(() => addFloor('basement'), 'Bodrum eklendi') }, icon('plus', 14), 'Bodrum ekle')));
   }
 
   let sig = '';
   cleanup.push(store.onRegistry(() => {
-    const next = [...store.devices.values()].map((d) => `${d.id}:${d.area_id}:${d.name_by_user}`).join('|') + '#' + [...store.areas.values()].map((a) => a.area_id + a.name).join('|');
+    const next = [...store.devices.values()].map((d) => `${d.id}:${d.area_id}:${d.name_by_user}`).join('|') + '#' + [...store.areas.values()].map((a) => a.area_id + a.name + (a.floor_id || '')).join('|') + '#' + [...store.floors.values()].map((f) => f.floor_id + f.name).join('|');
     if (next !== sig) { sig = next; draw(); }
   }));
   drawTabs();
@@ -245,12 +272,31 @@ function renderRoom(root, cleanup, areaId) {
       card({ title: 'Bu odadaki cihazlar', iconName: 'devices' },
         devs.length ? h('div', { class: 'list' }, devs.map(deviceRow)) : h('p', { class: 'muted' }, 'Bu odada henüz cihaz yok.'),
         h('div', { class: 'room-move' }, others.length ? move : null,
-          h('a', { class: 'btn small ghost', href: '#/devices/add' }, icon('plus', 14), 'Yeni cihaz ekle'))));
+          h('a', { class: 'btn small ghost', href: '#/devices/add' }, icon('plus', 14), 'Yeni cihaz ekle'))),
+      roomAdvanced(a));
   };
+  // The room's floor: an advanced setting (most homes have one floor).
+  function roomAdvanced(a) {
+    const floors = floorList();
+    const box = h('details', { class: 'advanced-settings' }, h('summary', null, icon('gear', 14), 'Gelişmiş ayarlar'));
+    if (floors.length < 2) {
+      box.append(h('p', { class: 'muted small' }, 'Eviniz tek katlı görünüyor. Birden fazla katınız ya da bodrumunuz varsa önce Odalar\'daki "Gelişmiş ayarlar: katlar"dan kat ekleyin.'),
+        h('a', { class: 'btn small ghost', href: '#/devices?tab=rooms' }, icon('rooms', 14), 'Odalar\'a git'));
+      return box;
+    }
+    const current = a.floor_id && store.floors.has(a.floor_id) ? a.floor_id : '';
+    const select = h('select', { class: 'select', 'aria-label': 'Odanın katı' },
+      floors.map((f) => h('option', { value: f.floor_id || '', selected: (f.floor_id || '') === current }, f.name)));
+    select.addEventListener('change', async () => {
+      try { await store.backend.setAreaFloor(a.area_id, select.value || null); toast(`${a.name}: ${select.selectedOptions[0].textContent}`); } catch (err) { toast(`Kat değiştirilemedi: ${err.message}`, 'error'); }
+    });
+    box.append(h('label', { class: 'field' }, h('span', null, 'Bu oda hangi katta?'), select));
+    return box;
+  }
   let sig = '';
   cleanup.push(store.onRegistry(() => {
     const a = store.areas.get(areaId);
-    const next = `${a?.name}|` + [...store.devices.values()].map((d) => `${d.id}:${d.area_id}:${d.name_by_user}`).join('|');
+    const next = `${a?.name}|${a?.floor_id}|${store.floors.size}|` + [...store.devices.values()].map((d) => `${d.id}:${d.area_id}:${d.name_by_user}`).join('|');
     if (next !== sig) { sig = next; draw(); }
   }));
 }

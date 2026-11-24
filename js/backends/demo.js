@@ -91,6 +91,7 @@ export function createDemoBackend() {
   const states = new Map();
   const devices = new Map();
   const areas = new Map();
+  const floors = new Map(); // floor_id -> { floor_id, name, level }
   const entities = new Map();
   const automations = new Map();   // config id -> config
   const scenes = new Map();
@@ -115,7 +116,7 @@ export function createDemoBackend() {
       try {
         localStorage.setItem(WORLD_KEY, JSON.stringify({
           v: 2,
-          states: [...states.values()], devices: [...devices.values()], areas: [...areas.values()],
+          states: [...states.values()], devices: [...devices.values()], areas: [...areas.values()], floors: [...floors.values()],
           entities: [...entities.values()], automations: [...automations.values()],
         }));
       } catch { /* storage full or blocked: the demo just won't persist */ }
@@ -129,6 +130,7 @@ export function createDemoBackend() {
       for (const s of w.states) states.set(s.entity_id, s);
       for (const d of w.devices) devices.set(d.id, d);
       for (const a of w.areas) areas.set(a.area_id, a);
+      for (const f of w.floors || []) floors.set(f.floor_id, f);
       for (const e of w.entities) entities.set(e.entity_id, e);
       for (const c of w.automations) automations.set(c.id, c);
       return true;
@@ -136,7 +138,7 @@ export function createDemoBackend() {
   }
 
   function emitRegistry() {
-    emit({ type: 'registry', devices: [...devices.values()], areas: [...areas.values()], entities: [...entities.values()] });
+    emit({ type: 'registry', devices: [...devices.values()], areas: [...areas.values()], entities: [...entities.values()], floors: [...floors.values()] });
   }
 
   // ---- states ------------------------------------------------------------------
@@ -657,6 +659,17 @@ export function createDemoBackend() {
       return area;
     },
     async renameArea(areaId, name) { const a = areas.get(areaId); if (a) { a.name = name; emitRegistry(); save(); } },
+    async createFloor(name, level) {
+      const floor = { floor_id: `floor_${Date.now().toString(36)}`, name, level };
+      floors.set(floor.floor_id, floor); emitRegistry(); save();
+      return floor;
+    },
+    async deleteFloor(floorId) {
+      floors.delete(floorId);
+      for (const a of areas.values()) if (a.floor_id === floorId) a.floor_id = null;
+      emitRegistry(); save();
+    },
+    async setAreaFloor(areaId, floorId) { const a = areas.get(areaId); if (a) { a.floor_id = floorId || null; emitRegistry(); save(); } },
     async deleteArea(areaId) {
       areas.delete(areaId);
       for (const d of devices.values()) if (d.area_id === areaId) d.area_id = null;

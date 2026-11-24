@@ -113,3 +113,40 @@ export function roomBadges(areaId) {
   if (cams.length) out.push({ key: 'camera', icon: 'camera', value: `${cams.length}`, label: 'Kamera' });
   return out;
 }
+
+// ---- floors -----------------------------------------------------------------------------
+// Home Assistant's floors (store.floors). A room without a floor is on the ground floor,
+// so a one-floor home needs nothing. Upper floors are "1. kat", "2. kat" (level 1, 2 …),
+// the basement "Bodrum" (level -1). Shown in this order: ground, upper floors, basement.
+
+export const GROUND = { floor_id: null, name: 'Zemin kat', level: 0 };
+
+/** The floors in display order, ground floor first (it always exists). */
+export function floorList() {
+  const list = [...store.floors.values()];
+  const up = list.filter((f) => (f.level ?? 1) >= 0 && f.level !== 0).sort((a, b) => (a.level ?? 1) - (b.level ?? 1));
+  const zero = list.filter((f) => f.level === 0);
+  const down = list.filter((f) => (f.level ?? 1) < 0).sort((a, b) => b.level - a.level);
+  return [...(zero.length ? zero : [GROUND]), ...up, ...down];
+}
+
+/** Rooms grouped by floor: [{ floor, rooms }]; rooms whose floor is gone go to the ground floor. */
+export function roomsByFloor(rooms) {
+  const floors = floorList();
+  const ground = floors[0];
+  return floors.map((f) => ({
+    floor: f,
+    rooms: rooms.filter((a) => (f === ground ? !a.floor_id || !store.floors.has(a.floor_id) || a.floor_id === f.floor_id : a.floor_id === f.floor_id)),
+  }));
+}
+
+/** Adds the next upper floor ("1. kat", "2. kat" …) or the basement. */
+export async function addFloor(kind) {
+  const list = [...store.floors.values()];
+  if (kind === 'basement') {
+    if (list.some((f) => f.level < 0)) return null;
+    return store.backend.createFloor('Bodrum', -1);
+  }
+  const next = Math.max(0, ...list.filter((f) => f.level > 0).map((f) => f.level)) + 1;
+  return store.backend.createFloor(`${next}. kat`, next);
+}

@@ -12,7 +12,8 @@ const registrySubs = new Set();
 export const store = {
   states: new Map(),
   devices: new Map(),        // device_id -> device registry entry
-  areas: new Map(),          // area_id -> { area_id, name }
+  areas: new Map(),          // area_id -> { area_id, name, floor_id? }
+  floors: new Map(),         // floor_id -> { floor_id, name, level } (Home Assistant's floors; none = one floor)
   entities: new Map(),       // entity_id -> entity registry entry
   backend: null,
   status: { mode: null, state: 'idle', message: '' },
@@ -68,6 +69,7 @@ export const store = {
     } else if (msg.type === 'registry') {
       this.devices = new Map(msg.devices.map((d) => [d.id, d]));
       this.areas = new Map(msg.areas.map((a) => [a.area_id, a]));
+      this.floors = new Map((msg.floors || []).map((f) => [f.floor_id, f]));
       this.entities = new Map(msg.entities.map((e) => [e.entity_id, e]));
       for (const fn of registrySubs) fn();
     }
