@@ -1,90 +1,114 @@
-// The TR/EN switch. Turkish is the default and needs nothing; in English, every Turkish
-// interface text on the page is swapped for its English one as it appears. Switching
-// happens in place, without reloading; going back to Turkish puts the original texts back.
+// The language switch: TR (default), EN and AR. Turkish needs nothing; in another
+// language every Turkish interface text on the page is swapped for its translation as it
+// appears. Switching happens in place, without reloading; going back to Turkish puts the
+// original texts back. In Arabic the page layout stays as it is; only the Arabic texts
+// themselves read right-to-left (style: html.i18n-rtl), so nothing jumps around.
 //
 // How: i18n-index.js (built by webEVRA tools/i18n_build.py) knows every interface text
-// by id, plus patterns for texts with values in them ("{0} kaldırıldı"). The English
-// comes from /api/i18n: first all known translations in one request (kept on this
-// device), then any missing ones by id. Only ids are sent, so names, chats and anything
-// else people type never go anywhere for translation; text that isn't in the index (a
-// device's name, a room) stays as it is.
+// by id, plus patterns for texts with values in them ("{0} kaldırıldı"). The translations
+// come from /api/i18n: first all known ones in one request (kept on this device), then
+// any missing ones by id. Only ids are sent, so names, chats and anything else people
+// type never go anywhere for translation; text that isn't in the index (a device's name,
+// a room) stays as it is.
 // The same file is used by the website (webEVRA public/assets/js/i18n.js) and the app.
 
 const KEY = 'evra.lang';
-const CACHE = 'evra.i18n.en';
-const CACHE_AT = 'evra.i18n.en.at';
+const LANGS = ['tr', 'en', 'ar'];
+const NAMES = { tr: 'Türkçe', en: 'English', ar: 'العربية' };
+const RTL = new Set(['ar']);
 const REFRESH = 6 * 3600 * 1000; // ask for the full list again after this long
 const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
 const LETTERS = /[A-Za-zÇĞİÖŞÜçğıöşü]{2}/;
 const SKIP = 'script,style,textarea,code,pre,[contenteditable],[data-no-i18n],.msg:not(.intro) .msg-body';
 
 let config = null;   // { api, loadIndex }
-let engine = null;   // the running English engine
+let engine = null;   // the running engine (one language at a time)
 
 export function getLang() {
-  try { return localStorage.getItem(KEY) === 'en' ? 'en' : 'tr'; } catch { return 'tr'; }
+  try { const l = localStorage.getItem(KEY); return LANGS.includes(l) ? l : 'tr'; } catch { return 'tr'; }
 }
+
+function applyDir(lang) {
+  const root = document.documentElement;
+  root.lang = lang;
+  root.dir = 'ltr';
+  root.classList.toggle('i18n-rtl', RTL.has(lang));
+}
+
+// While a page opens in another language it stays hidden until its texts are swapped,
+// so Turkish doesn't flash first (the style shows it after 1.5 s whatever happens).
+function reveal() { document.documentElement.classList.remove('i18n-wait'); }
 
 /** Changes the language in place (no reload). */
 export function setLang(lang) {
-  const en = lang === 'en';
-  try { localStorage.setItem(KEY, en ? 'en' : 'tr'); } catch { /* only this visit */ }
-  document.documentElement.lang = en ? 'en' : 'tr';
+  const l = LANGS.includes(lang) ? lang : 'tr';
+  try { localStorage.setItem(KEY, l); } catch { /* only this visit */ }
+  applyDir(l);
   paintSwitches();
-  window.dispatchEvent(new CustomEvent('evra-lang', { detail: en ? 'en' : 'tr' }));
-  if (en) enable(); else disable();
+  window.dispatchEvent(new CustomEvent('evra-lang', { detail: l }));
+  disable();
+  if (l !== 'tr') enable(l);
 }
 
 function paintSwitches() {
-  const en = getLang() === 'en';
-  for (const btn of document.querySelectorAll('.lang-switch')) {
-    const [tr, eng] = btn.querySelectorAll('b');
-    if (tr) tr.className = en ? 'off' : '';
-    if (eng) eng.className = en ? '' : 'off';
-    btn.title = en ? 'Türkçe' : 'English';
-    btn.setAttribute('aria-label', en ? 'Türkçeye geç' : 'Switch to English');
+  const cur = getLang();
+  for (const box of document.querySelectorAll('.lang-switch')) {
+    for (const b of box.querySelectorAll('[data-lang]')) {
+      const on = b.dataset.lang === cur;
+      b.className = on ? '' : 'off';
+      b.setAttribute('aria-pressed', String(on));
+    }
   }
 }
 
-/** A small "TR · EN" switch; the active one is bold. */
+/** A small "TR · EN · AR" switch; the active one is bold. */
 export function langSwitch() {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'lang-switch';
-  btn.setAttribute('data-no-i18n', '');
-  const tr = document.createElement('b'); tr.textContent = 'TR';
-  const en = document.createElement('b'); en.textContent = 'EN';
-  btn.append(tr, document.createTextNode(' · '), en);
-  btn.addEventListener('click', () => setLang(getLang() === 'en' ? 'tr' : 'en'));
+  const box = document.createElement('span');
+  box.className = 'lang-switch';
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'Dil / Language / اللغة');
+  box.setAttribute('data-no-i18n', '');
+  LANGS.forEach((l, i) => {
+    if (i) box.append(document.createTextNode(' · '));
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.lang = l;
+    b.textContent = l.toUpperCase();
+    b.title = NAMES[l];
+    b.setAttribute('lang', l);
+    b.addEventListener('click', () => { if (getLang() !== l) setLang(l); });
+    box.append(b);
+  });
   queueMicrotask(paintSwitches);
-  const en0 = getLang() === 'en';
-  (en0 ? tr : en).className = 'off';
-  return btn;
+  return box;
 }
 
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 
-/** Remembers where /api/i18n is and how to load the index; starts at once if English is chosen. */
+/** Remembers where /api/i18n is and how to load the index; starts at once if a translation is chosen. */
 export function startI18n(cfg) {
   config = cfg;
-  document.documentElement.lang = getLang();
-  if (getLang() === 'en') enable();
+  applyDir(getLang());
+  if (getLang() !== 'tr' && !engine) { document.documentElement.classList.add('i18n-wait'); enable(getLang()); }
 }
 
 function disable() {
+  reveal();
   if (!engine) return;
   engine.stop();
   engine = null;
 }
 
-async function enable() {
+async function enable(lang) {
   if (engine || !config) return;
-  const e = createEngine();
+  const e = createEngine(lang);
   engine = e;
   await e.start();
 }
 
-function createEngine() {
+function createEngine(lang) {
+  const CACHE = `evra.i18n.${lang}`;
+  const CACHE_AT = `evra.i18n.${lang}.at`;
   let index = null, exact = null, patterns = null;
   let cache = {};
   try { cache = JSON.parse(localStorage.getItem(CACHE) || '{}') || {}; } catch { cache = {}; }
@@ -179,7 +203,7 @@ function createEngine() {
   }
 
   async function post(ids) {
-    const res = await fetch(config.api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: 'en', ids }) });
+    const res = await fetch(config.api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang, ids }) });
     return (await res.json()).texts || {};
   }
   function scheduleFetch() {
@@ -210,7 +234,7 @@ function createEngine() {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 5000);
-      const res = await fetch(`${config.api}?lang=en`, { signal: ctrl.signal });
+      const res = await fetch(`${config.api}?lang=${lang}`, { signal: ctrl.signal });
       clearTimeout(timer);
       const j = await res.json();
       Object.assign(cache, j.texts || {});
@@ -221,13 +245,14 @@ function createEngine() {
 
   return {
     async start() {
-      try { index = (await config.loadIndex()).default; } catch { return; }
+      try { index = (await config.loadIndex()).default; } catch { reveal(); return; }
       if (stopped) return;
       exact = new Map(Object.entries(index.exact || {}));
       patterns = (index.patterns || []).map(([re, id]) => [new RegExp(re), id]);
       // What's on this device shows at once; the full list comes next.
       doTitle();
       walk(document.body);
+      if (Object.keys(cache).length) reveal();
       const queue = new Set();
       let queued = false;
       const flush = () => { queued = false; for (const n of queue) walk(n); queue.clear(); };
@@ -243,6 +268,7 @@ function createEngine() {
       if (titleEl) { titleObserver = new MutationObserver(doTitle); titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true }); }
       await loadAll();
       if (!stopped) { walk(document.body); doTitle(); }
+      reveal();
     },
     stop() {
       stopped = true;

@@ -2337,3 +2337,13 @@ button, a, .nav-item, .room-chip { touch-action: manipulation; }
 .advanced-settings .field { display: grid; gap: 6px; margin: 8px 0; }
 .floor-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
 .floor-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--card); }
+
+/* Language switch: three small buttons (TR · EN · AR). */
+.lang-switch button { background: none; border: 0; padding: 0 2px; color: inherit; font: inherit; font-weight: 800; cursor: pointer; }
+.lang-switch button.off { font-weight: 500; opacity: 0.45; }
+.lang-switch button.off:hover { opacity: 0.85; }
+/* Arabic: right-to-left; a few things that must stay left-to-right (numbers, the top bar's order is mirrored by flex). */
+html.i18n-wait body { opacity: 0; animation: i18n-show 0s 1.5s forwards; }
+@keyframes i18n-show { to { opacity: 1; } }
+/* Arabic: the layout stays put; each text box reads right-to-left only when its text is Arabic. */
+html.i18n-rtl body :is(h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, button, a, span, small, strong, em, b, td, th, figcaption, summary, legend, blockquote, div, input, textarea) { unicode-bidi: plaintext; }
