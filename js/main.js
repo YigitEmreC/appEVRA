@@ -4,7 +4,7 @@ import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, t
 import { icon } from './icons.js';
 import { mascot } from './mascot.js';
 import { syncWake } from './wake.js';
-import { startI18n, langSwitch } from './i18n.js';
+import { startI18n } from './i18n.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
 import { startWeather } from './weather.js';
@@ -114,7 +114,7 @@ function layoutHeader() {
   for (const [id, el] of Object.entries(parts)) { el.dataset.id = id; el.hidden = !editing && isHidden(header, id); }
   const order = ordered(HEADER_ITEMS, header).map((i) => i.id);
   topLeft.replaceChildren(...order.filter((id) => id === 'title' || id === 'clock').map((id) => parts[id]));
-  topRight.replaceChildren(...order.filter((id) => id === 'mode' || id === 'status').map((id) => parts[id]), backBtn, langSwitch(), customBtn);
+  topRight.replaceChildren(...order.filter((id) => id === 'mode' || id === 'status').map((id) => parts[id]), backBtn, customBtn);
   const names = Object.fromEntries(HEADER_ITEMS.map((i) => [i.id, i.label]));
   arrangeable(topLeft, 'header', { whole: true, all: order, names });
   arrangeable(topRight, 'header', { whole: true, all: order, names });

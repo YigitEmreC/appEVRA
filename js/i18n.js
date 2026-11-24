@@ -86,9 +86,20 @@ export function langSwitch() {
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 
 /** Remembers where /api/i18n is and how to load the index; starts at once if a translation is chosen. */
+let clicksBound = false;
+
 export function startI18n(cfg) {
   config = cfg;
   applyDir(getLang());
+  paintSwitches();
+  // Switches written into the page (website headers) as well as made by langSwitch().
+  if (!clicksBound) {
+    clicksBound = true;
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest?.('.lang-switch [data-lang]');
+      if (b && getLang() !== b.dataset.lang) setLang(b.dataset.lang);
+    });
+  }
   if (getLang() !== 'tr' && !engine) { document.documentElement.classList.add('i18n-wait'); enable(getLang()); }
 }
 

@@ -12,6 +12,7 @@ import { pushState, enablePush, disablePush, showHere, pushEntities } from '../p
 import { locationCard } from './location-ui.js';
 import { alertsCard, backupCard } from '../home-care.js';
 import { wakeAvailable } from '../wake.js';
+import { getLang, setLang } from '../i18n.js';
 import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome, canUseAssistant } from '../account.js';
 
 export function renderSettings(root, cleanup, { reconnect }) {
@@ -80,6 +81,19 @@ export function renderSettings(root, cleanup, { reconnect }) {
 
   // ---- preferences -------------------------------------------------------
   const themeTabs = h('div', { class: 'segmented theme-tabs', role: 'radiogroup', 'aria-label': 'Görünüm' });
+  // Language: set once here, kept on this device (i18n.js). Turkish is the default.
+  // The names stay in their own language, whatever language is chosen.
+  const langTabs = h('div', { class: 'segmented lang-tabs', role: 'radiogroup', 'aria-label': 'Dil / Language / اللغة', 'data-no-i18n': '' });
+  const drawLang = () => {
+    const cur = getLang();
+    langTabs.replaceChildren(...[['tr', 'Türkçe'], ['en', 'English'], ['ar', 'العربية']].map(([id, label]) => h('button', {
+      type: 'button', role: 'radio', lang: id, 'aria-checked': String(cur === id), class: cur === id ? 'active' : '',
+      onclick: () => { if (getLang() !== id) setLang(id); },
+    }, label)));
+  };
+  drawLang();
+  window.addEventListener('evra-lang', drawLang);
+  cleanup.push(() => window.removeEventListener('evra-lang', drawLang));
   const devSwitch = toggle('Geliştirici modu', (on) => { setPrefs({ devMode: on }); toast(on ? 'Geliştirici modu açık' : 'Geliştirici modu kapalı'); });
   // Light mode for slow devices (util.js applyLite) and the "Hey EvrAI" wake word (js/wake.js).
   const liteTabs = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Hafif mod' });
@@ -135,6 +149,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
     backupCard(),
     lookCard(),
     card({ title: 'Tercihler', iconName: 'gear' },
+      settingRow('Dil', 'Uygulamanın dili. Bu cihazda saklanır; varsayılan Türkçe.', langTabs),
       settingRow('Görünüm', 'Otomatik, bu cihazın açık/koyu ayarını izler.', themeTabs),
       settingRow('Geliştirici modu', 'Teknik ayrıntıları gösterir: varlık listeleri, model ve yazılım numaraları, JSON düzenleme ve örnek ev araçları.', devSwitch),
       settingRow('Hafif mod', `Bulanıklık ve hareketli arka planı kapatır; duvar paneli gibi yavaş cihazlar akıcı kalır. Otomatik: bu cihazda şu an ${liteWanted() ? 'açık' : 'kapalı'}.`, liteTabs),

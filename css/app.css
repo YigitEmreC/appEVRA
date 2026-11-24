@@ -2347,3 +2347,6 @@ html.i18n-wait body { opacity: 0; animation: i18n-show 0s 1.5s forwards; }
 @keyframes i18n-show { to { opacity: 1; } }
 /* Arabic: the layout stays put; each text box reads right-to-left only when its text is Arabic. */
 html.i18n-rtl body :is(h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, button, a, span, small, strong, em, b, td, th, figcaption, summary, legend, blockquote, div, input, textarea) { unicode-bidi: plaintext; }
+
+/* The language buttons keep one width whether bold or not (no jump when switching). */
+.lang-switch button { width: 2em; padding: 0; text-align: center; }
