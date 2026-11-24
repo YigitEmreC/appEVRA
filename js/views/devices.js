@@ -4,11 +4,13 @@ import { h, num, numVal, isAvailable, toast, sleep, fold } from '../util.js';
 import { icon } from '../icons.js';
 import { card } from '../components.js';
 import { deviceCardFor, kindIcon } from '../devices/cards.js';
+import { roomBadges, roomEntities, roomIcon, roomDevices } from '../rooms.js';
 
 export function renderDevices(root, cleanup, ctx) {
   const [first, second] = ctx.params;
   if (first === 'add' && second) return renderProduct(root, cleanup, productById(second));
   if (first === 'add') return renderCatalog(root, cleanup);
+  if (first === 'room' && second) return renderRoom(root, cleanup, decodeURIComponent(second));
   if (first) return renderDetail(root, cleanup, decodeURIComponent(first));
   return renderList(root, cleanup, ctx.query.get('tab') === 'rooms' ? 'rooms' : 'devices');
 }
@@ -95,7 +97,10 @@ function renderList(root, cleanup, initialTab) {
     onclick: () => { tab = id; history.replaceState(null, '', id === 'rooms' ? '#/devices?tab=rooms' : '#/devices'); drawTabs(); draw(); },
   }, label)));
 
+  let panelOff = [];
+  cleanup.push(() => panelOff.forEach((fn) => fn()));
   function draw() {
+    panelOff.splice(0).forEach((fn) => fn());
     search.hidden = tab !== 'devices';
     body.replaceChildren(tab === 'rooms' ? roomsPanel() : devicesPanel());
   }
@@ -114,41 +119,24 @@ function renderList(root, cleanup, initialTab) {
       h('div', { class: 'list' }, g.list.map(deviceRow)))));
   }
 
+  // Rooms as squares, each with its sensors' icons and readings, plus a square to add one.
+  // Tapping a room opens its page (renderRoom) to rename, delete or fill it.
   function roomsPanel() {
-    const input = h('input', { class: 'input', placeholder: 'Salon, Mutfak, Yatak odası…', 'aria-label': 'Yeni oda adı' });
-    const add = h('button', { class: 'btn primary', type: 'submit' }, icon('plus', 16), 'Oda ekle');
-    const form = h('form', { class: 'inline-form' }, input, add);
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = input.value.trim();
-      if (!name) { toast('Önce odanın adını yazın', 'error'); return; }
-      if ([...store.areas.values()].some((a) => fold(a.name) === fold(name))) { toast('Bu adda bir oda zaten var', 'error'); return; }
-      add.disabled = true;
-      try { await store.backend.createArea(name); toast(`${name} eklendi`); } catch (err) { toast(`Oda eklenemedi: ${err.message}`, 'error'); }
-      add.disabled = false;
-    });
     const devs = userDevices();
     const rooms = sortedAreas();
+    const squares = rooms.map((a) => roomSquare(a, devs.filter((d) => d.area_id === a.area_id).length));
+    const ids = rooms.flatMap((a) => roomEntities(a.area_id).map((s) => s.entity_id));
+    let queued = false;
+    // Readings change all the time: repaint the badges, at most once a frame.
+    if (ids.length) panelOff.push(store.watch(ids, () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; squares.forEach((q) => q.paint()); });
+    }));
+    const loose = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id));
     return h('div', { class: 'rooms-panel' },
-      card({ title: 'Yeni oda', iconName: 'plus' }, form),
-      rooms.length ? h('div', { class: 'list' }, rooms.map((a) => {
-        const count = devs.filter((d) => d.area_id === a.area_id).length;
-        const rename = h('button', { class: 'icon-btn', type: 'button', 'aria-label': `${a.name} adını değiştir`, title: 'Adını değiştir' }, icon('edit', 16));
-        const del = h('button', { class: 'icon-btn danger', type: 'button', 'aria-label': `${a.name} odasını sil`, title: 'Sil' }, icon('trash', 16));
-        rename.addEventListener('click', async () => {
-          const name = prompt('Odanın yeni adı', a.name);
-          if (!name || !name.trim() || name.trim() === a.name) return;
-          try { await store.backend.renameArea(a.area_id, name.trim()); } catch (err) { toast(`Adı değiştirilemedi: ${err.message}`, 'error'); }
-        });
-        del.addEventListener('click', async () => {
-          if (!confirm(`"${a.name}" odası silinsin mi? İçindeki ${count} cihaz bağlı kalır, yalnızca odasız olur.`)) return;
-          try { await store.backend.deleteArea(a.area_id); toast(`${a.name} silindi`); } catch (err) { toast(`Silinemedi: ${err.message}`, 'error'); }
-        });
-        return h('div', { class: 'list-row static' },
-          h('span', { class: 'row-icon' }, icon('rooms', 20)),
-          h('span', { class: 'row-text' }, h('strong', null, a.name), h('small', null, `${count} cihaz`)),
-          rename, del);
-      })) : h('p', { class: 'muted pad' }, 'Henüz oda yok.'));
+      h('div', { class: 'room-grid' }, squares, addRoomSquare()),
+      loose.length ? h('p', { class: 'muted small' }, `${loose.length} cihaz henüz bir odada değil. Bir odaya taşımak için odayı açın.`) : null);
   }
 
   let sig = '';
@@ -158,6 +146,112 @@ function renderList(root, cleanup, initialTab) {
   }));
   drawTabs();
   root.append(h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Cihaz ekle')), search, body);
+}
+
+// ---- rooms ---------------------------------------------------------------------------------
+
+const badge = (b, big = false) => h('span', { class: `room-badge${b.tone ? ' ' + b.tone : ''}`, title: `${b.label}: ${b.value}` },
+  icon(b.icon, big ? 18 : 14), big ? h('span', { class: 'room-badge-text' }, h('small', null, b.label), h('strong', null, b.value)) : h('span', null, b.value));
+
+function roomSquare(a, count) {
+  const badges = h('div', { class: 'room-badges' });
+  const paint = () => {
+    const list = roomBadges(a.area_id);
+    badges.replaceChildren(...(list.length ? list.map((b) => badge(b)) : [h('span', { class: 'muted small' }, count ? 'Sensör yok' : 'Boş oda')]));
+  };
+  paint();
+  const el = h('a', { class: 'room-square', href: `#/devices/room/${encodeURIComponent(a.area_id)}`, 'aria-label': `${a.name}, ${count} cihaz` },
+    h('div', { class: 'room-sq-head' },
+      h('span', { class: 'room-sq-icon' }, icon(roomIcon(a.name), 22)),
+      h('span', { class: 'room-sq-count' }, `${count} cihaz`)),
+    h('strong', { class: 'room-sq-name' }, a.name),
+    badges);
+  el.paint = paint;
+  return el;
+}
+
+function addRoomSquare() {
+  const input = h('input', { class: 'input', placeholder: 'Salon, Mutfak…', 'aria-label': 'Yeni oda adı', maxlength: 40 });
+  const add = h('button', { class: 'btn primary small', type: 'submit' }, icon('plus', 14), 'Oda ekle');
+  const form = h('form', { class: 'room-square add' },
+    h('div', { class: 'room-sq-head' }, h('span', { class: 'room-sq-icon' }, icon('plus', 22))),
+    h('strong', { class: 'room-sq-name' }, 'Yeni oda'),
+    input, add);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) { toast('Önce odanın adını yazın', 'error'); input.focus(); return; }
+    if ([...store.areas.values()].some((x) => fold(x.name) === fold(name))) { toast('Bu adda bir oda zaten var', 'error'); return; }
+    add.disabled = true;
+    try { await store.backend.createArea(name); toast(`${name} eklendi`); } catch (err) { toast(`Oda eklenemedi: ${err.message}`, 'error'); add.disabled = false; }
+  });
+  return form;
+}
+
+// One room: its readings, its devices, and moving other devices in.
+function renderRoom(root, cleanup, areaId) {
+  const local = [];
+  cleanup.push(() => local.forEach((fn) => fn()));
+  const draw = () => {
+    local.splice(0).forEach((fn) => fn());
+    const a = store.areas.get(areaId);
+    if (!a) {
+      root.replaceChildren(backLink('#/devices?tab=rooms', 'Odalar'),
+        h('div', { class: 'empty' }, icon('rooms', 28), h('p', null, store.status.state === 'connected' ? 'Bu oda artık yok.' : 'Yükleniyor…')));
+      return;
+    }
+    const devs = roomDevices(areaId);
+    const badges = h('div', { class: 'room-badges big' });
+    const paint = () => {
+      const list = roomBadges(areaId);
+      badges.replaceChildren(...(list.length ? list.map((b) => badge(b, true)) : [h('p', { class: 'muted small' }, 'Bu odada henüz sensör yok. Sıcaklık, hareket ya da kapı/pencere sensörü eklediğinizde burada görünür.')]));
+    };
+    paint();
+    const ids = roomEntities(areaId).map((s) => s.entity_id);
+    if (ids.length) local.push(store.watch(ids, paint));
+
+    const rename = h('button', { class: 'btn small ghost', type: 'button' }, icon('edit', 14), 'Adını değiştir');
+    rename.addEventListener('click', async () => {
+      const name = prompt('Odanın yeni adı', a.name);
+      if (!name || !name.trim() || name.trim() === a.name) return;
+      if ([...store.areas.values()].some((x) => x.area_id !== areaId && fold(x.name) === fold(name.trim()))) { toast('Bu adda bir oda zaten var', 'error'); return; }
+      try { await store.backend.renameArea(areaId, name.trim()); toast('Odanın adı değişti'); } catch (err) { toast(`Adı değiştirilemedi: ${err.message}`, 'error'); }
+    });
+    const del = h('button', { class: 'btn small danger', type: 'button' }, icon('trash', 14), 'Odayı sil');
+    del.addEventListener('click', async () => {
+      if (!confirm(`"${a.name}" odası silinsin mi? İçindeki ${devs.length} cihaz bağlı kalır, yalnızca odasız olur.`)) return;
+      try { await store.backend.deleteArea(areaId); toast(`${a.name} silindi`); location.hash = '#/devices?tab=rooms'; } catch (err) { toast(`Silinemedi: ${err.message}`, 'error'); }
+    });
+
+    // Devices elsewhere (another room or none) that can be moved in.
+    const others = userDevices().filter((d) => d.area_id !== areaId);
+    const move = h('select', { class: 'select', 'aria-label': 'Bu odaya cihaz taşı' },
+      h('option', { value: '' }, 'Bu odaya bir cihaz taşıyın…'),
+      others.map((d) => h('option', { value: d.id }, `${deviceName(d)}${d.area_id && store.areas.has(d.area_id) ? ` (${areaName(d.area_id)})` : ''}`)));
+    move.addEventListener('change', async () => {
+      const d = store.devices.get(move.value);
+      if (!d) return;
+      try { await store.backend.updateDevice(d.id, { area_id: areaId }); toast(`${deviceName(d)} ${a.name} odasına taşındı`); } catch (err) { toast(`Taşınamadı: ${err.message}`, 'error'); move.value = ''; }
+    });
+
+    root.replaceChildren(
+      backLink('#/devices?tab=rooms', 'Odalar'),
+      h('header', { class: 'detail-head' },
+        h('span', { class: 'detail-icon' }, icon(roomIcon(a.name), 26)),
+        h('div', null, h('h2', null, a.name), h('p', { class: 'muted' }, `${devs.length} cihaz`)),
+        h('div', { class: 'room-head-actions' }, rename, del)),
+      card({ title: 'Şu an', iconName: 'radar' }, badges),
+      card({ title: 'Bu odadaki cihazlar', iconName: 'devices' },
+        devs.length ? h('div', { class: 'list' }, devs.map(deviceRow)) : h('p', { class: 'muted' }, 'Bu odada henüz cihaz yok.'),
+        h('div', { class: 'room-move' }, others.length ? move : null,
+          h('a', { class: 'btn small ghost', href: '#/devices/add' }, icon('plus', 14), 'Yeni cihaz ekle'))));
+  };
+  let sig = '';
+  cleanup.push(store.onRegistry(() => {
+    const a = store.areas.get(areaId);
+    const next = `${a?.name}|` + [...store.devices.values()].map((d) => `${d.id}:${d.area_id}:${d.name_by_user}`).join('|');
+    if (next !== sig) { sig = next; draw(); }
+  }));
 }
 
 // ---- device details -----------------------------------------------------------------------

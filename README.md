@@ -78,12 +78,12 @@ Customization is kept in this browser (`localStorage` key `evra.custom`), so the
 | Screen | What's on it |
 |---|---|
 | Home | Alerts for smoke, gas or water; the room's climate; quick actions; room chips; every device as a tile with its own controls |
-| Devices | All devices by room, the Rooms tab (create, rename, delete), device details (rename, move, remove) and **Add device** |
-| Scenes | Sabah, Öğleden sonra, Akşam, Uyku, Eko, Parti, Film, Eğlence, Müzik, Akşam yemeği, Dışarıda (leaving home: everything off, door locked, the robot vacuum starts) and Temizlik (vacuum, blinds open, purifier at full speed). Scenes also work the home appliances: the purifier goes to sleep mode at night, the vacuum goes back to its base for a film or dinner, the kettle starts in the morning. Each has room chips (All rooms or any mix) and a "What it does" list of the exact changes; only devices in the chosen rooms change. Plugs are never touched |
+| Devices | All devices by room, the Rooms tab: a square per room with its sensors' live readings (temperature, humidity, motion, open windows, alarms, lights, power...), adding a room, and a page per room to rename or delete it and move devices in, device details (rename, move, remove) and **Add device** |
+| Scenes | Add your own scenes, edit any scene (name, icon, colour, and what lights, TV, heater, heating, curtains, lock and appliances do) and delete them; the built-in ones can be brought back. Built in: Sabah, Öğleden sonra, Akşam, Uyku, Eko, Parti, Film, Eğlence, Müzik, Akşam yemeği, Dışarıda (leaving home: everything off, door locked, the robot vacuum starts) and Temizlik (vacuum, blinds open, purifier at full speed). Scenes also work the home appliances: the purifier goes to sleep mode at night, the vacuum goes back to its base for a film or dinner, the kettle starts in the morning. Each has room chips (All rooms or any mix) and a "What it does" list of the exact changes; only devices in the chosen rooms change. Plugs are never touched |
 | Automations | **My automations**: every automation with on/off, Run now, Edit and Delete, plus **New automation**. **Ideas**: about 55 automations the Evra range can do, including the home appliances (vacuum when everyone has left, feeding at set times, purifier when the air gets dirty, fan when the room is warm, kettle in the morning, litter box full); ones your devices can already do open the editor filled in, the rest are faded with dashed chips for the missing products (tap one to see the product) |
 | Assistant | Chat with Evra, the assistant (Gemini), in Turkish first: answers about any device or room, Evra's products and plans, step-by-step help pairing new devices, and changes it prepares for you to approve (see "The assistant" below). Works in demo and live mode, for signed-in members with the assistant switched on. Needs the assistant server from `../EvrAI/gemini_home_starter`, which `Start Evra.bat` starts |
 | Settings | Evra account (who's signed in, change password, sign out), connection (demo or live), **location and weather** (search for your city or use this device's location; Home's outside reading then shows that place's real weather from Open-Meteo, the demo home's weather and sunrise/sunset follow it, and in live mode a button moves the hub's own home location there), Look and layout (opens Customize), developer mode, electricity price, batteries, demo controls and the accounts address (developer mode), shortcuts to Energy, Remotes and Rooms |
-| Energy, Remotes | Power, temperature and activity charts; the full TV and heater remotes, one at a time: swipe sideways or use the tabs and arrows. In the side bar on wide screens, and linked from Settings on phones |
+| Energy, Remotes | Power, temperature and activity charts; every remote of the home, one at a time (swipe sideways). Each remote sends through its own IR module (so the signal reaches the right room); add remotes for any TV, projector, audio system, AC or fan from the open IR code database (IRDB: pick the brand, try the power key, all its keys come along), rename them, move them to another module or remove them. A notice asks for an IR module when there is none, or for the module's firmware update when it can't send database codes yet or use the tabs and arrows. In the side bar on wide screens, and linked from Settings on phones |
 
 ## The Evra range
 
@@ -143,9 +143,13 @@ When it connects, you name it and choose its room.
 | `js/assistant-actions.js` | Carries out changes the assistant prepared, once approved, and checks they worked |
 | `js/speech.js` | Reads the assistant's replies aloud with the browser's own voices |
 | `js/weather.js`, `views/location-ui.js` | The weather for the chosen place (Open-Meteo, no key) and the Settings card to choose it |
+| `js/rooms.js` | What each room's sensors say right now (the badges on the room squares and room pages) |
+| `js/appdata.js` | Evra's own saved data (your scenes and remotes): in Home Assistant for your user, so every screen you sign in on has them |
+| `js/ir.js`, `js/remote-list.js`, `views/remote-new.js` | IR modules, the IR code database, turning its codes into infrared pulses, the remotes list and the add-a-remote steps |
+| `views/scene-editor.js` | Adding and editing scenes |
 | `js/account.js`, `views/auth-gate.js`, `views/account-ui.js` | Evra accounts: the sign-in screen the app opens with, and the account panel |
 | `tools/accounts/` | A stand-in for the website's accounts, for working without the website (members, roles, assistant access) |
-| `js/scenes.js` | The twelve scenes and how they're applied to the chosen rooms |
+| `js/scenes.js` | The scenes (built-in and your own) and how they're applied to the chosen rooms |
 | `js/custom.js` | Each person's theme and layout: saving it, applying it, and putting things in their chosen order |
 | `js/themes.js` | The colour themes (still and moving), moving backgrounds and accent colours |
 | `js/sky.js` | The moving background layer |

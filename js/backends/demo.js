@@ -4,11 +4,12 @@
 // and runs automations with a small interpreter so they behave like the real ones.
 
 import { HOME } from '../config.js';
-import { productById } from '../catalog.js';
+import { productById, productForDevice } from '../catalog.js';
 import { sleep, rgbToHs } from '../util.js';
 
 const SNAPSHOT = new URL('../../../ha-snapshot/', import.meta.url);
 const WORLD_KEY = 'smarthome.demo.v2';
+const APPDATA_KEY = 'smarthome.demo.appdata'; // Evra's own data (scenes, remotes) in the demo
 
 const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
   .replace(/ı/g, 'i').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'item';
@@ -230,6 +231,12 @@ export function createDemoBackend() {
       return;
     }
     if (domain === 'zha' && svc === 'permit') return;
+    // An IR module sending a code (esphome.<module>_send_raw): nothing to switch in the demo.
+    if (domain === 'esphome') {
+      if (!/_send_raw$/.test(svc) || !Array.isArray(data.code) || !data.code.length) throw new Error(`esphome.${svc} örnek evde yok`);
+      window.dispatchEvent(new CustomEvent('demo-ir', { detail: { service: svc, pulses: data.code.length } }));
+      return;
+    }
     for (const id of ids) {
       if (domain === 'scene' && svc === 'turn_on') {
         for (const snap of scenes.get(id) || []) set(snap.id, snap.state, snap.attributes);
@@ -786,6 +793,27 @@ export function createDemoBackend() {
     // Live mode moves the hub's home location; the demo already follows the chosen place.
     async setHomeLocation() { await sleep(200); },
 
+    // Evra's own data (scenes, remotes): Home Assistant keeps it per user; here, this browser.
+    async getAppData(key) {
+      try { return JSON.parse(localStorage.getItem(APPDATA_KEY) || '{}')[key] ?? null; } catch { return null; }
+    },
+    async setAppData(key, value) {
+      await sleep(80);
+      let all = {};
+      try { all = JSON.parse(localStorage.getItem(APPDATA_KEY) || '{}') || {}; } catch { all = {}; }
+      all[key] = value;
+      try { localStorage.setItem(APPDATA_KEY, JSON.stringify(all)); } catch { throw new Error('bu tarayıcı veriyi saklayamadı'); }
+    },
+    // The actions an app can call: every domain with entities, plus each IR module's
+    // "send any code" action, like Evra's IR firmware gives it in Home Assistant.
+    async listServices() {
+      const out = {};
+      for (const id of states.keys()) out[id.split('.')[0]] ||= {};
+      out.esphome = {};
+      for (const d of devices.values()) if (productForDevice(d)?.kind === 'ir') out.esphome[`${slug(d.name)}_send_raw`] = {};
+      return out;
+    },
+
     // demo-only controls
     simulate: {
       toggleWindow() { set(HOME.window.contact, stateOf(HOME.window.contact) === 'on' ? 'off' : 'on'); },
@@ -819,7 +847,7 @@ export function createDemoBackend() {
     resetDemo() {
       clearTimeout(saveTimer);
       blockSave = true;
-      try { localStorage.removeItem(WORLD_KEY); } catch { /* nothing saved */ }
+      try { localStorage.removeItem(WORLD_KEY); localStorage.removeItem(APPDATA_KEY); } catch { /* nothing saved */ }
     },
   };
 }

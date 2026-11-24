@@ -375,8 +375,19 @@ class World:
             add([e["entity_id"] for e in self.entities.values() if e["area_id"] == area_id or (not e["area_id"] and e["device_id"] in devs)])
         return ids
 
+    def ir_modules(self):
+        """Devices that send infrared (the Evra IR module and similar), with their send action's name."""
+        found = []
+        for d in self.devices.values():
+            model = (d.get("model") or "") + " " + (d.get("manufacturer") or "")
+            if any(k in model for k in ("rpipicow", "esp32", "RF433", "RM4", "Athom", "IR remote")):
+                found.append((d, f"{slug(d.get('name') or 'ir')}_send_raw"))
+        return found
+
     def services(self):
         out = {d: set(s) for d, s in SERVICES.items()}
+        # Evra's IR firmware gives each IR module an action that sends any raw code.
+        out["esphome"] = {svc for _, svc in self.ir_modules()}
         out["notify"] = {"send_message"}  # notify entities (Evra devices) always have it
         if self.phone_app:
             out["notify"] |= {"notify", "mobile_app_phone"}
@@ -460,6 +471,13 @@ class World:
             return None
         if domain == "notify":
             self._notify(data.get("title"), data.get("message", ""), phone=True)
+            return None
+        if domain == "esphome":
+            code = data.get("code") or []
+            if not isinstance(code, list) or not code:
+                raise HassError("code must be a list of pulse lengths")
+            module = next((d for d, svc in self.ir_modules() if svc == service), None)
+            self.note(f"IR: {(module or {}).get('name', service)} sent a code ({len(code)} pulses)")
             return None
         if domain == "zha":
             if service == "permit":

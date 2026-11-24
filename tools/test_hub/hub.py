@@ -137,6 +137,12 @@ class Hub:
         self.origins = set(origins)
         self.clients = set()
         self.flows = {}
+        # Evra's own data per user (frontend/get_user_data, set_user_data): scenes, remotes.
+        self.user_data_file = world.data_dir / "user_data.json"
+        try:
+            self.user_data = json.loads(self.user_data_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            self.user_data = {}
         # The home location and time zone (get_config; Evra can move it with config/core/update).
         self.core = {"latitude": 51.44, "longitude": 5.47, "location_name": "Home", "time_zone": "Europe/Amsterdam"}
         world.listeners.append(self.broadcast)
@@ -283,6 +289,12 @@ class Hub:
                 ok()
             elif kind == "get_states":
                 ok(list(w.states.values()))
+            elif kind == "frontend/get_user_data":
+                ok({"value": self.user_data.get(m.get("key"))} if m.get("key") else {"value": self.user_data})
+            elif kind == "frontend/set_user_data":
+                self.user_data[m["key"]] = m.get("value")
+                self.user_data_file.write_text(json.dumps(self.user_data, ensure_ascii=False, indent=1), encoding="utf-8")
+                ok()
             elif kind == "config/core/update":
                 # The home location (Evra's Settings > Konum ve hava durumu); kept while the hub runs.
                 for key in ("latitude", "longitude", "elevation", "time_zone", "location_name"):

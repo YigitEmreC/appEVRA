@@ -310,6 +310,12 @@ export function createLiveBackend(hassUrl) {
 
     // ---- devices ----
     updateDevice(deviceId, patch) { return send({ type: 'config/device_registry/update', device_id: deviceId, ...patch }); },
+    // Evra's own data (the person's scenes and remotes), kept in Home Assistant for this
+    // user, so it's the same on every screen they sign in on (js/appdata.js).
+    async getAppData(key) { const r = await send({ type: 'frontend/get_user_data', key: `evra_${key}` }); return r?.value ?? null; },
+    setAppData(key, value) { return send({ type: 'frontend/set_user_data', key: `evra_${key}`, value }); },
+    // Home Assistant's actions, to find IR modules that can send any code (esphome.<module>_send_raw).
+    listServices() { return send({ type: 'get_services' }); },
     // The hub's home location, which its own weather and sunrise/sunset follow (needs an admin login).
     setHomeLocation(latitude, longitude) { return send({ type: 'config/core/update', latitude: Number(latitude), longitude: Number(longitude) }); },
     // Removing always succeeds while Home Assistant is connected, also for a device that

@@ -5,6 +5,8 @@ import { icon } from './icons.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
 import { startWeather } from './weather.js';
+import { loadScenes } from './scenes.js';
+import { loadRemotes } from './remote-list.js';
 import { renderHome } from './views/home.js';
 import { renderRemotes } from './views/remotes.js';
 import { renderEnergy } from './views/energy.js';
@@ -40,7 +42,7 @@ const VIEWS = [
   { id: 'settings', label: 'Ayarlar', icon: 'gear', render: renderSettings, title: 'Ayarlar' },
   // Reached from Settings, not shown in the navigation.
 ];
-const SUBTITLES = { 'devices/add': 'Cihaz ekle', 'automations/new': 'Yeni otomasyon', 'automations/edit': 'Otomasyonu düzenle' };
+const SUBTITLES = { 'devices/add': 'Cihaz ekle', 'devices/room': 'Oda', 'scenes/new': 'Yeni sahne', 'scenes/edit': 'Sahneyi düzenle', 'remotes/new': 'Kumanda ekle', 'automations/new': 'Yeni otomasyon', 'automations/edit': 'Otomasyonu düzenle' };
 
 // ---- theme and developer mode ------------------------------------------------
 
@@ -125,6 +127,9 @@ function connect() {
   store.setStatus({ mode: settings.mode, state: 'connecting', message: '' });
   store.backend.connect((msg) => store.apply(msg), (patch) => store.setStatus(patch));
   startWeather();
+  // The person's own scenes and remotes (js/appdata.js), so the assistant and every screen see them.
+  loadScenes();
+  loadRemotes();
 }
 
 // ---- shell ------------------------------------------------------------------
