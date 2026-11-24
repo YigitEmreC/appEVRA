@@ -61,28 +61,28 @@ export const LAYOUT_KEYS = ['sections', 'indicators', 'quick', 'rooms', 'scenes'
 
 // What can be arranged. The labels show while editing.
 export const SECTIONS = [
-  { id: 'climate', label: 'Room climate' },
-  { id: 'quick', label: 'Quick actions' },
-  { id: 'rooms', label: 'Room chips' },
-  { id: 'devices', label: 'Device tiles' },
+  { id: 'climate', label: 'Oda iklimi' },
+  { id: 'quick', label: 'Hızlı işlemler' },
+  { id: 'rooms', label: 'Oda etiketleri' },
+  { id: 'devices', label: 'Cihaz kutuları' },
 ];
 // group: 'top' sits in the card's heading, 'stat' in the readings row, 'chip'
 // in the chips row. Things move within their own row.
 export const INDICATORS = [
-  { id: 'badge', label: 'Comfort badge', group: 'top' },
-  { id: 'range', label: 'Comfortable range', group: 'top' },
-  { id: 'humidity', label: 'Humidity', group: 'stat' },
-  { id: 'outside', label: 'Outside temperature', group: 'stat' },
-  { id: 'power', label: 'Power in use', group: 'stat' },
-  { id: 'window', label: 'Windows and doors', group: 'chip' },
-  { id: 'presence', label: 'Someone here', group: 'chip' },
-  { id: 'lights', label: 'Lights on', group: 'chip' },
+  { id: 'badge', label: 'Rahatlık rozeti', group: 'top' },
+  { id: 'range', label: 'Rahat aralık', group: 'top' },
+  { id: 'humidity', label: 'Nem', group: 'stat' },
+  { id: 'outside', label: 'Dış sıcaklık', group: 'stat' },
+  { id: 'power', label: 'Kullanılan güç', group: 'stat' },
+  { id: 'window', label: 'Pencereler ve kapılar', group: 'chip' },
+  { id: 'presence', label: 'Evde biri var', group: 'chip' },
+  { id: 'lights', label: 'Açık ışıklar', group: 'chip' },
 ];
 export const HEADER_ITEMS = [
-  { id: 'title', label: 'Greeting and page name' },
-  { id: 'clock', label: 'Date and time' },
-  { id: 'mode', label: 'Light and dark button' },
-  { id: 'status', label: 'Connection status' },
+  { id: 'title', label: 'Selam ve sayfa adı' },
+  { id: 'clock', label: 'Tarih ve saat' },
+  { id: 'mode', label: 'Açık/koyu düğmesi' },
+  { id: 'status', label: 'Bağlantı durumu' },
 ];
 // Navigation tabs that can't be hidden, so the app can always be found again.
 export const LOCKED_NAV = ['home', 'settings'];

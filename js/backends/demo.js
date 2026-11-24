@@ -16,26 +16,26 @@ const nowIso = () => new Date().toISOString();
 const randId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 // Entities each kind of product gets when added in the demo.
-const battery = { domain: 'sensor', suffix: 'battery', label: 'Battery', state: '100', attrs: { device_class: 'battery', unit_of_measurement: '%', state_class: 'measurement' }, category: 'diagnostic' };
-const temperature = (v) => ({ domain: 'sensor', suffix: 'temperature', label: 'Temperature', state: v, attrs: { device_class: 'temperature', unit_of_measurement: '°C', state_class: 'measurement' } });
-const humidity = (v) => ({ domain: 'sensor', suffix: 'humidity', label: 'Humidity', state: v, attrs: { device_class: 'humidity', unit_of_measurement: '%', state_class: 'measurement' } });
-const illuminance = { domain: 'sensor', suffix: 'illuminance', label: 'Light level', state: '140', attrs: { device_class: 'illuminance', unit_of_measurement: 'lx', state_class: 'measurement' } };
+const battery = { domain: 'sensor', suffix: 'battery', label: 'Pil', state: '100', attrs: { device_class: 'battery', unit_of_measurement: '%', state_class: 'measurement' }, category: 'diagnostic' };
+const temperature = (v) => ({ domain: 'sensor', suffix: 'temperature', label: 'Sıcaklık', state: v, attrs: { device_class: 'temperature', unit_of_measurement: '°C', state_class: 'measurement' } });
+const humidity = (v) => ({ domain: 'sensor', suffix: 'humidity', label: 'Nem', state: v, attrs: { device_class: 'humidity', unit_of_measurement: '%', state_class: 'measurement' } });
+const illuminance = { domain: 'sensor', suffix: 'illuminance', label: 'Işık seviyesi', state: '140', attrs: { device_class: 'illuminance', unit_of_measurement: 'lx', state_class: 'measurement' } };
 const EFFECTS = ['Off', 'Aurora', 'Candy Cane', 'Christmas', 'Flicker', 'Ocean', 'Rainbow', 'Raindrop', 'Spring', 'Sunrise', 'Sunset', 'Valentines'];
 
 function templatesFor(product) {
   switch (product.kind) {
-    case 'motion': return [{ domain: 'binary_sensor', suffix: 'occupancy', label: 'Occupancy', state: 'off', attrs: { device_class: 'occupancy' } }, illuminance, battery];
-    case 'presence': return [{ domain: 'binary_sensor', suffix: 'occupancy', label: 'Presence', state: 'off', attrs: { device_class: 'occupancy' } }, illuminance];
+    case 'motion': return [{ domain: 'binary_sensor', suffix: 'occupancy', label: 'Doluluk', state: 'off', attrs: { device_class: 'occupancy' } }, illuminance, battery];
+    case 'presence': return [{ domain: 'binary_sensor', suffix: 'occupancy', label: 'Varlık', state: 'off', attrs: { device_class: 'occupancy' } }, illuminance];
     case 'climate-sensor': return [temperature('21.4'), humidity('46'), battery];
     case 'contact': return [{ domain: 'binary_sensor', suffix: '', label: '', state: 'off', attrs: { device_class: 'opening' } }, battery];
-    case 'smoke': return [{ domain: 'binary_sensor', suffix: 'smoke', label: 'Smoke', state: 'off', attrs: { device_class: 'smoke' } }, battery];
-    case 'gas': return [{ domain: 'binary_sensor', suffix: 'gas', label: 'Gas', state: 'off', attrs: { device_class: 'gas' } }];
-    case 'leak': return [{ domain: 'binary_sensor', suffix: 'water', label: 'Water leak', state: 'off', attrs: { device_class: 'moisture' } }, battery];
-    case 'button': return [{ domain: 'event', suffix: 'press', label: 'Press', state: 'unknown', attrs: { device_class: 'button', event_types: ['single', 'double', 'long'], event_type: null } }, battery];
+    case 'smoke': return [{ domain: 'binary_sensor', suffix: 'smoke', label: 'Duman', state: 'off', attrs: { device_class: 'smoke' } }, battery];
+    case 'gas': return [{ domain: 'binary_sensor', suffix: 'gas', label: 'Gaz', state: 'off', attrs: { device_class: 'gas' } }];
+    case 'leak': return [{ domain: 'binary_sensor', suffix: 'water', label: 'Su kaçağı', state: 'off', attrs: { device_class: 'moisture' } }, battery];
+    case 'button': return [{ domain: 'event', suffix: 'press', label: 'Basma', state: 'unknown', attrs: { device_class: 'button', event_types: ['single', 'double', 'long'], event_type: null } }, battery];
     case 'camera': return [
       { domain: 'camera', suffix: '', label: '', state: 'idle', attrs: { motion_detection: true } },
-      { domain: 'binary_sensor', suffix: 'motion', label: 'Motion', state: 'off', attrs: { device_class: 'motion' } },
-      ...(product.id === 'camera-indoor' ? [{ domain: 'switch', suffix: 'privacy', label: 'Privacy mode', state: 'off', attrs: { icon: 'mdi:eye-off' } }] : []),
+      { domain: 'binary_sensor', suffix: 'motion', label: 'Hareket', state: 'off', attrs: { device_class: 'motion' } },
+      ...(product.id === 'camera-indoor' ? [{ domain: 'switch', suffix: 'privacy', label: 'Gizlilik modu', state: 'off', attrs: { icon: 'mdi:eye-off' } }] : []),
     ];
     case 'valve': return product.id === 'irrigation'
       ? [{ domain: 'valve', suffix: '', label: '', state: 'closed', attrs: { device_class: 'water', supported_features: 3 } }, battery]
@@ -45,13 +45,13 @@ function templatesFor(product) {
     case 'climate': return [{ domain: 'climate', suffix: '', label: '', state: 'heat', attrs: { current_temperature: 20.5, temperature: 21, min_temp: 5, max_temp: 30, target_temp_step: 0.5, hvac_modes: ['off', 'heat'], hvac_action: 'heating' } },
       ...(product.id === 'trv' ? [battery] : [])];
     case 'relay': return [{ domain: 'switch', suffix: '', label: '', state: 'off', attrs: {} }];
-    case 'ir': return [['ac_power', 'AC power'], ['ac_temp_up', 'AC temperature up'], ['ac_temp_down', 'AC temperature down'], ['tv_power', 'TV power'], ['tv_volume_up', 'TV volume up'], ['tv_volume_down', 'TV volume down']]
+    case 'ir': return [['ac_power', 'Klima gücü'], ['ac_temp_up', 'Klima sıcaklık artır'], ['ac_temp_down', 'Klima sıcaklık azalt'], ['tv_power', 'TV gücü'], ['tv_volume_up', 'TV sesi aç'], ['tv_volume_down', 'TV sesi kıs']]
       .map(([suffix, label]) => ({ domain: 'button', suffix, label, state: 'unknown', attrs: {} }));
     case 'co2': return [{ domain: 'sensor', suffix: 'co2', label: 'CO₂', state: '640', attrs: { device_class: 'carbon_dioxide', unit_of_measurement: 'ppm', state_class: 'measurement' } }, temperature('22.1'), humidity('41')];
     case 'plug': return [
       { domain: 'switch', suffix: '', label: '', state: 'on', attrs: {} },
-      { domain: 'sensor', suffix: 'power', label: 'Power', state: '12.0', attrs: { device_class: 'power', unit_of_measurement: 'W', state_class: 'measurement' } },
-      { domain: 'sensor', suffix: 'energy_today', label: 'Energy today', state: '0.050', attrs: { device_class: 'energy', unit_of_measurement: 'kWh', state_class: 'total_increasing' } },
+      { domain: 'sensor', suffix: 'power', label: 'Güç', state: '12.0', attrs: { device_class: 'power', unit_of_measurement: 'W', state_class: 'measurement' } },
+      { domain: 'sensor', suffix: 'energy_today', label: 'Bugünkü enerji', state: '0.050', attrs: { device_class: 'energy', unit_of_measurement: 'kWh', state_class: 'total_increasing' } },
     ];
     case 'light':
       if (product.id === 'wall-switch') return [{ domain: 'light', suffix: '', label: '', state: 'off', attrs: { supported_color_modes: ['onoff'], color_mode: null } }];
@@ -60,6 +60,27 @@ function templatesFor(product) {
         min_color_temp_kelvin: 2500, max_color_temp_kelvin: 6500, ...(product.id === 'led-strip' ? { effect: 'off', effect_list: EFFECTS } : {}),
       } }];
     case 'cover': return [{ domain: 'cover', suffix: '', label: '', state: 'open', attrs: { current_position: 100, device_class: product.coverClass || 'blind', supported_features: 15 } }];
+    case 'vacuum': return [{ domain: 'vacuum', suffix: '', label: '', state: 'docked', attrs: { fan_speed: 'Standard', fan_speed_list: ['Silent', 'Standard', 'Strong', 'Turbo'], supported_features: 14204 } }, battery];
+    case 'fan': return product.id === 'air-purifier'
+      ? [{ domain: 'fan', suffix: '', label: '', state: 'off', attrs: { percentage: 30, percentage_step: 1, preset_modes: ['Auto', 'Sleep', 'Favorite'], preset_mode: 'Auto', supported_features: 57 } },
+        { domain: 'sensor', suffix: 'pm25', label: 'PM2.5', state: '9', attrs: { device_class: 'pm25', unit_of_measurement: 'µg/m³', state_class: 'measurement' } },
+        { domain: 'sensor', suffix: 'filter_life', label: 'Filtre ömrü', state: '92', attrs: { unit_of_measurement: '%', state_class: 'measurement' }, category: 'diagnostic' }]
+      : [{ domain: 'fan', suffix: '', label: '', state: 'off', attrs: { percentage: 40, percentage_step: 1, preset_modes: ['Normal', 'Nature'], preset_mode: 'Normal', oscillating: false, supported_features: 59 } }];
+    case 'feeder': return [
+      { domain: 'button', suffix: 'feed', label: 'Şimdi besle', state: 'unknown', attrs: {} },
+      { domain: 'number', suffix: 'portions', label: 'Porsiyon', state: '2', attrs: { min: 1, max: 10, step: 1, mode: 'box' } },
+      { domain: 'sensor', suffix: 'food_level', label: 'Mama seviyesi', state: 'Enough', attrs: { device_class: 'enum', options: ['Enough', 'Low', 'Empty'] } },
+    ];
+    case 'litter': return [
+      { domain: 'button', suffix: 'clean', label: 'Şimdi temizle', state: 'unknown', attrs: {} },
+      { domain: 'sensor', suffix: 'waste_level', label: 'Atık haznesi', state: '20', attrs: { unit_of_measurement: '%', state_class: 'measurement' } },
+      { domain: 'sensor', suffix: 'visits_today', label: 'Bugünkü ziyaret', state: '3', attrs: { state_class: 'total_increasing' } },
+    ];
+    case 'kettle': return [
+      { domain: 'switch', suffix: '', label: '', state: 'off', attrs: {} },
+      { domain: 'sensor', suffix: 'water_temperature', label: 'Su sıcaklığı', state: '24', attrs: { device_class: 'temperature', unit_of_measurement: '°C', state_class: 'measurement' } },
+      { domain: 'number', suffix: 'target_temperature', label: 'Hedef sıcaklık', state: '85', attrs: { min: 40, max: 100, step: 5, unit_of_measurement: '°C', mode: 'slider' } },
+    ];
     default: return [];
   }
 }
@@ -214,14 +235,39 @@ export function createDemoBackend() {
         for (const snap of scenes.get(id) || []) set(snap.id, snap.state, snap.attributes);
         continue;
       }
-      if (!states.has(id)) throw new Error(`${id} doesn't exist in the demo`);
+      if (!states.has(id)) throw new Error(`${id} örnek evde yok`);
       const cur = stateOf(id);
       switch (domain) {
         case 'light':
           if (svc === 'turn_on' || (svc === 'toggle' && cur !== 'on')) lightOn(id, data); else set(id, 'off');
           break;
-        case 'switch': case 'input_boolean': case 'siren': case 'fan':
-          set(id, svc === 'turn_on' ? 'on' : svc === 'turn_off' ? 'off' : cur === 'on' ? 'off' : 'on');
+        case 'switch': case 'input_boolean': case 'siren': {
+          const on = svc === 'turn_on' ? true : svc === 'turn_off' ? false : cur !== 'on';
+          set(id, on ? 'on' : 'off');
+          // A kettle: the water reaches the target temperature a moment after switching on.
+          const base = id.slice(id.indexOf('.') + 1);
+          if (on && states.has(`number.${base}_target_temperature`)) {
+            timers.push(setTimeout(() => set(`sensor.${base}_water_temperature`, stateOf(`number.${base}_target_temperature`)), 2500));
+          }
+          break;
+        }
+        case 'fan': {
+          const a = states.get(id).attributes;
+          if (svc === 'turn_off' || (svc === 'toggle' && cur === 'on')) set(id, 'off');
+          else if (svc === 'set_percentage') set(id, data.percentage > 0 ? 'on' : 'off', data.percentage > 0 ? { percentage: Math.round(data.percentage) } : {});
+          else if (svc === 'set_preset_mode') set(id, 'on', { preset_mode: data.preset_mode });
+          else if (svc === 'oscillate') set(id, cur, { oscillating: !!data.oscillating });
+          else set(id, 'on', { percentage: data.percentage ? Math.round(data.percentage) : a.percentage || 40, ...(data.preset_mode ? { preset_mode: data.preset_mode } : {}) });
+          break;
+        }
+        case 'vacuum':
+          if (svc === 'start') set(id, 'cleaning');
+          else if (svc === 'pause') set(id, 'paused');
+          else if (svc === 'stop') set(id, 'idle');
+          else if (svc === 'return_to_base') {
+            set(id, 'returning');
+            timers.push(setTimeout(() => { if (stateOf(id) === 'returning') set(id, 'docked'); }, 3000));
+          } else if (svc === 'set_fan_speed') set(id, cur, { fan_speed: data.fan_speed });
           break;
         case 'button':
           set(id, nowIso());
@@ -254,14 +300,14 @@ export function createDemoBackend() {
         case 'update': {
           const a = states.get(id).attributes;
           if (svc === 'install') {
-            if (cur !== 'on') throw new Error(`${a.friendly_name || id} is already up to date`);
+            if (cur !== 'on') throw new Error(`${a.friendly_name || id} zaten güncel`);
             set(id, 'on', { in_progress: true });
             timers.push(setTimeout(() => set(id, 'off', { in_progress: false, installed_version: a.latest_version }), 3000));
           } else if (svc === 'skip') set(id, 'off', { skipped_version: a.latest_version });
           break;
         }
         default:
-          throw new Error(`${domain}.${svc} isn't simulated in the demo`);
+          throw new Error(`${domain}.${svc} örnek evde taklit edilmiyor`);
       }
     }
   }
@@ -480,11 +526,11 @@ export function createDemoBackend() {
 
   async function connect(onMessage, setStatus) {
     emit = onMessage;
-    setStatus({ mode: 'demo', state: 'connecting', message: 'Loading the snapshot' });
+    setStatus({ mode: 'demo', state: 'connecting', message: 'Örnek ev yükleniyor' });
     try {
       const [home, autos, hist] = await Promise.all(
         ['home.json', 'automations.json', 'history.json'].map((f) => fetch(new URL(f, SNAPSHOT)).then((r) => {
-          if (!r.ok) throw new Error(`${f} not found`);
+          if (!r.ok) throw new Error(`${f} bulunamadı`);
           return r.json();
         })),
       );
@@ -495,10 +541,10 @@ export function createDemoBackend() {
       // States first, so screens built when the registry arrives already have them.
       emit({ type: 'all', states: [...states.values()] });
       emitRegistry();
-      setStatus({ mode: 'demo', state: 'connected', message: restored ? 'Demo home (your changes are kept on this device)' : `Snapshot from ${new Date(home.generated).toLocaleDateString()}` });
+      setStatus({ mode: 'demo', state: 'connected', message: restored ? 'Örnek ev (değişiklikleriniz bu cihazda saklanır)' : `${new Date(home.generated).toLocaleDateString('tr-TR')} tarihli örnek ev` });
       startTicking();
     } catch (e) {
-      setStatus({ mode: 'demo', state: 'error', message: `Demo data missing (${e.message}). Run the app from the SMART folder.` });
+      setStatus({ mode: 'demo', state: 'error', message: `Örnek ev verisi eksik (${e.message}). Uygulamayı SMART klasöründen çalıştırın.` });
     }
   }
 
@@ -581,7 +627,7 @@ export function createDemoBackend() {
       if (ent) set(ent, undefined, { friendly_name: cfg.alias, mode: cfg.mode || 'single' });
       else {
         ent = uniqueEntityId('automation.' + slug(cfg.alias || 'automation'));
-        addEntity(null, ent, cfg.alias || 'Automation', 'on', { id: configId, mode: cfg.mode || 'single', last_triggered: null, current: 0 });
+        addEntity(null, ent, cfg.alias || 'Otomasyon', 'on', { id: configId, mode: cfg.mode || 'single', last_triggered: null, current: 0 });
         emitRegistry();
       }
       save();
@@ -659,7 +705,7 @@ export function createDemoBackend() {
         tplink: [host, user, pass],
         shelly: [host],
         esphome: [host, { name: 'port', type: 'integer', default: 6053 }],
-        onvif: [{ name: 'name', type: 'string', default: product?.name || 'Camera' }, host, { name: 'port', type: 'integer', default: 2020 }, user, pass],
+        onvif: [{ name: 'name', type: 'string', default: product?.name || 'Kamera' }, host, { name: 'port', type: 'integer', default: 2020 }, user, pass],
       }[handler] || [host];
       return { type: 'form', flow_id: flowId, handler, step_id: 'user', data_schema: schema, errors: {} };
     },
@@ -667,12 +713,12 @@ export function createDemoBackend() {
       const f = flows.get(flowId);
       if (!f) return { type: 'abort', reason: 'unknown_flow' };
       if (!data.host || !/^[\w.-]+$/.test(String(data.host).trim())) {
-        return { type: 'form', flow_id: flowId, step_id: 'user', data_schema: (await this.flowStart(f.handler, f.product)).data_schema, errors: { host: 'Enter an IP address like 192.168.88.50' } };
+        return { type: 'form', flow_id: flowId, step_id: 'user', data_schema: (await this.flowStart(f.handler, f.product)).data_schema, errors: { host: '192.168.88.50 gibi bir IP adresi girin' } };
       }
       await sleep(1400);
       flows.delete(flowId);
       if (f.product) createDevice(f.product);
-      return { type: 'create_entry', title: f.product?.name || 'Device' };
+      return { type: 'create_entry', title: f.product?.name || 'Cihaz' };
     },
     async flowAbort(flowId) { flows.delete(flowId); },
     async flowGet(flowId) {
@@ -685,26 +731,26 @@ export function createDemoBackend() {
     async flowTranslations(domain) {
       const base = `component.${domain}.config`;
       const t = {
-        [`${base}.step.user.data.host`]: 'Host',
-        [`${base}.step.user.data_description.host`]: 'The device\'s IP address on your Wi-Fi, for example 192.168.1.40.',
+        [`${base}.step.user.data.host`]: 'Adres',
+        [`${base}.step.user.data_description.host`]: 'Cihazın Wi-Fi ağınızdaki IP adresi, örneğin 192.168.1.40.',
         [`${base}.step.user.data.port`]: 'Port',
-        [`${base}.step.user.data.username`]: domain === 'tplink' ? 'Email' : 'Username',
-        [`${base}.step.user.data.password`]: 'Password',
-        [`${base}.step.user.data.name`]: 'Name',
-        [`${base}.error.cannot_connect`]: 'Failed to connect',
+        [`${base}.step.user.data.username`]: domain === 'tplink' ? 'E-posta' : 'Kullanıcı adı',
+        [`${base}.step.user.data.password`]: 'Şifre',
+        [`${base}.step.user.data.name`]: 'Ad',
+        [`${base}.error.cannot_connect`]: 'Bağlanılamadı',
       };
       const intro = {
-        tplink: ['Set up a TP-Link device', 'Tapo devices need the email and password of your TP-Link account.'],
-        shelly: ['Set up a Shelly device', 'Battery-powered devices must be woken up first, by pressing their button.'],
-        esphome: ['Set up an ESPHome device', 'Please enter connection settings of your [ESPHome](https://esphome.io/) node.'],
-        onvif: ['Configure ONVIF device', 'Tapo cameras need a camera account, made in the Tapo app under Advanced settings.'],
+        tplink: ['TP-Link cihazı kur', 'Tapo cihazları için TP-Link hesabınızın e-posta adresi ve şifresi gerekir.'],
+        shelly: ['Shelly cihazı kur', 'Pille çalışan cihazlar önce düğmelerine basılarak uyandırılmalıdır.'],
+        esphome: ['ESPHome cihazı kur', 'Lütfen [ESPHome](https://esphome.io/) cihazınızın bağlantı ayarlarını girin.'],
+        onvif: ['ONVIF cihazını yapılandır', 'Tapo kameralar için Tapo uygulamasında Gelişmiş ayarlar altında açılan bir kamera hesabı gerekir.'],
       }[domain];
       if (intro) { t[`${base}.step.user.title`] = intro[0]; t[`${base}.step.user.description`] = intro[1]; }
       return t;
     },
     async matterCommission(code, product) {
       const digits = String(code).replace(/\D/g, '');
-      if (!/^MT:/.test(code) && digits.length !== 11 && digits.length !== 21) throw new Error('A Matter code has 11 digits, or starts with MT: when taken from a QR code');
+      if (!/^MT:/.test(code) && digits.length !== 11 && digits.length !== 21) throw new Error('Matter kodu 11 hanelidir; QR koddan alındıysa MT: ile başlar');
       await sleep(2500);
       if (product) createDevice(product);
     },
@@ -715,6 +761,30 @@ export function createDemoBackend() {
     async pushKey() { return null; },
     async pushRegister() {},
     async pushUnregister() {},
+    // The weather at the place chosen in Settings (js/weather.js): the demo home's
+    // weather and sun follow it, so weather and darkness automations behave as there.
+    applyWeather(r) {
+      const w = states.get(HOME.weather);
+      if (w && r.temperature != null) {
+        const attrs = { temperature: Math.round(r.temperature * 10) / 10, apparent_temperature: r.apparent, humidity: Math.round(r.humidity ?? 0),
+          wind_speed: r.wind, wind_speed_unit: 'km/h', temperature_unit: '°C', attribution: 'Open-Meteo' };
+        const a = w.attributes;
+        if (w.state !== r.condition || a.temperature !== attrs.temperature || a.humidity !== attrs.humidity || a.wind_speed !== attrs.wind_speed) set(HOME.weather, r.condition, attrs);
+      }
+      // The sun is up when the next thing it does is set.
+      const now = Date.now();
+      const next = (key) => (r.days || []).map((d) => Date.parse(d[key])).filter((t) => Number.isFinite(t) && t > now)[0];
+      const rise = next('sunrise');
+      const fall = next('sunset');
+      const sun = states.get('sun.sun');
+      if (sun && rise && fall) {
+        const state = fall < rise ? 'above_horizon' : 'below_horizon';
+        const attrs = { next_rising: new Date(rise).toISOString(), next_setting: new Date(fall).toISOString() };
+        if (sun.state !== state || sun.attributes.next_rising !== attrs.next_rising || sun.attributes.next_setting !== attrs.next_setting) set('sun.sun', state, attrs);
+      }
+    },
+    // Live mode moves the hub's home location; the demo already follows the chosen place.
+    async setHomeLocation() { await sleep(200); },
 
     // demo-only controls
     simulate: {
@@ -743,7 +813,7 @@ export function createDemoBackend() {
         const a = states.get(id)?.attributes;
         if (!a) return;
         const [y, m, p] = String(a.installed_version || '2026.11.1').split('.').map(Number);
-        set(id, 'on', { latest_version: `${y}.${m}.${(p || 0) + 1}`, release_summary: 'Bug fixes and small improvements.', in_progress: false });
+        set(id, 'on', { latest_version: `${y}.${m}.${(p || 0) + 1}`, release_summary: 'Hata düzeltmeleri ve küçük iyileştirmeler.', in_progress: false });
       },
     },
     resetDemo() {

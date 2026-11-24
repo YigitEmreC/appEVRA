@@ -2,6 +2,7 @@ import { HOME } from '../config.js';
 import { store, runQuickAction, userDevices, sortedAreas, entityArea, deviceName, areaName } from '../store.js';
 import { h, num, numVal, relTime, isOn, isAvailable, toast, loadSettings, saveSettings } from '../util.js';
 import { icon } from '../icons.js';
+import { outsideNow, onWeather } from '../weather.js';
 import { chip, sortable } from '../components.js';
 import { deviceCardFor } from '../devices/cards.js';
 import { getCustom, setCustom, ordered, isHidden, withFlag, mergeOrder, isEditing, SECTIONS, INDICATORS } from '../custom.js';
@@ -23,15 +24,15 @@ export function renderHome(root, cleanup) {
   let room = shows('rooms') && !isHidden(custom.sections, 'rooms') ? loadSettings().room || 'all' : 'all';
   const alerts = h('div', { class: 'alerts' });
   const heroSlot = h('div', { class: 'hero-slot' });
-  const chips = h('div', { class: 'room-chips', role: 'tablist', 'aria-label': 'Rooms' });
+  const chips = h('div', { class: 'room-chips', role: 'tablist', 'aria-label': 'Odalar' });
   const devicesSlot = h('div', { class: 'devices-slot' });
   let local = [];
 
   const parts = {
     climate: heroSlot,
     quick: quickActions(custom, editing),
-    rooms: [h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, 'Rooms'),
-      h('a', { class: 'link', href: '#/devices/add' }, icon('plus', 14), 'Add device')), chips],
+    rooms: [h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, 'Odalar'),
+      h('a', { class: 'link', href: '#/devices/add' }, icon('plus', 14), 'Cihaz ekle')), chips],
     devices: devicesSlot,
   };
   // Each section is a block. On wide screens a "half" block sits next to
@@ -44,7 +45,7 @@ export function renderHome(root, cleanup) {
   arrangeable(blocks, 'sections', {
     all: ordered(SECTIONS, custom.sections).map((s) => s.id),
     big: true,
-    flag: { field: 'half', cls: 'half', icon: 'widen', label: 'Half width (side by side on big screens)' },
+    flag: { field: 'half', cls: 'half', icon: 'widen', label: 'Yarım genişlik (büyük ekranlarda yan yana)' },
   });
   root.append(alerts, blocks);
 
@@ -62,9 +63,9 @@ export function renderHome(root, cleanup) {
     const count = (areaId) => devs.filter((d) => (d.area_id || null) === areaId).length;
     const pickRoom = (id) => { room = id; saveSettings({ room: id }); draw(); };
     chips.replaceChildren(
-      roomChip(null, 'All rooms', devs.length, room === 'all', () => pickRoom('all')),
+      roomChip(null, 'Tüm odalar', devs.length, room === 'all', () => pickRoom('all')),
       ...rooms().map((a) => roomChip(a.area_id, a.name, count(a.area_id), room === a.area_id, () => pickRoom(a.area_id))),
-      h('a', { class: 'room-chip add', href: '#/devices?tab=rooms' }, icon('plus', 14), 'Room'),
+      h('a', { class: 'room-chip add', href: '#/devices?tab=rooms' }, icon('plus', 14), 'Oda'),
     );
     arrangeable(chips, 'rooms', { whole: true, all: ordered(sortedAreas(), getCustom().rooms, (a) => a.area_id).map((a) => a.area_id) });
   }
@@ -94,9 +95,9 @@ export function renderHome(root, cleanup) {
     const groups = rooms().map((a) => ({ title: a.name, id: a.area_id, list: visible(devs.filter((d) => d.area_id === a.area_id)) }))
       .filter((s) => s.list.length);
     const loose = visible(devs.filter((d) => !d.area_id || !store.areas.has(d.area_id)));
-    if (loose.length) groups.push({ title: 'Not in a room', id: null, list: loose });
+    if (loose.length) groups.push({ title: 'Odası olmayanlar', id: null, list: loose });
     devicesSlot.replaceChildren(...(groups.length ? groups.map((s) => h('section', { class: 'room-section' },
-      h('div', { class: 'section-row' }, h('h3', { class: 'room-title' }, s.title), h('span', { class: 'muted small' }, `${s.list.length} device${s.list.length === 1 ? '' : 's'}`)),
+      h('div', { class: 'section-row' }, h('h3', { class: 'room-title' }, s.title), h('span', { class: 'muted small' }, `${s.list.length} cihaz`)),
       grid(s.list))) : [emptyRoom()]));
   }
 
@@ -149,22 +150,22 @@ export function renderHome(root, cleanup) {
       btn.setAttribute('aria-pressed', String(el.classList.contains(cls)));
       return btn;
     };
-    const wideBtn = flagTool('widen', 'Wide tile', 'tile-wide', 'wide');
-    const smallBtn = flagTool('minus', 'Small tile', 'tile-small', 'small');
-    const hideBtn = flagTool('eye', 'Hide from Home', 'tile-hidden', 'hidden', (hidden) => hideBtn.replaceChildren(icon(hidden ? 'eyeOff' : 'eye', 16)));
+    const wideBtn = flagTool('widen', 'Geniş kutu', 'tile-wide', 'wide');
+    const smallBtn = flagTool('minus', 'Küçük kutu', 'tile-small', 'small');
+    const hideBtn = flagTool('eye', 'Ana sayfadan gizle', 'tile-hidden', 'hidden', (hidden) => hideBtn.replaceChildren(icon(hidden ? 'eyeOff' : 'eye', 16)));
     if (getCustom().tiles.hidden.includes(device.id)) { el.classList.add('tile-hidden'); hideBtn.setAttribute('aria-pressed', 'true'); hideBtn.replaceChildren(icon('eyeOff', 16)); }
     el.prepend(h('div', { class: 'tile-tools' },
-      h('span', { class: 'tile-grip', title: 'Drag to move', 'aria-hidden': 'true' }, icon('grip', 18), h('small', null, 'Drag')),
+      h('span', { class: 'tile-grip', title: 'Taşımak için sürükleyin', 'aria-hidden': 'true' }, icon('grip', 18), h('small', null, 'Drag')),
       h('span', { class: 'sep' }),
-      tool('left', 'Move earlier', () => move(-1)),
-      tool('right', 'Move later', () => move(1)),
+      tool('left', 'Öne al', () => move(-1)),
+      tool('right', 'Arkaya al', () => move(1)),
       wideBtn, smallBtn, hideBtn));
   }
 
   function emptyRoom() {
     return h('div', { class: 'empty' }, icon('devices', 28),
-      h('p', null, store.status.state === 'connected' ? 'No devices here yet.' : 'Devices appear once the app is connected.'),
-      h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Add a device'));
+      h('p', null, store.status.state === 'connected' ? 'Burada henüz cihaz yok.' : 'Uygulama bağlanınca cihazlar görünür.'),
+      h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Cihaz ekle'));
   }
 
   // Re-draw when devices or rooms change (not on every state change).
@@ -182,9 +183,9 @@ export function renderHome(root, cleanup) {
     const active = [...store.states.values()].filter((s) => s.entity_id.startsWith('binary_sensor.') && s.state === 'on'
       && ['smoke', 'gas', 'moisture'].includes(s.attributes.device_class));
     alerts.replaceChildren(...active.map((s) => {
-      const what = { smoke: 'Smoke detected', gas: 'Gas detected', moisture: 'Water leak detected' }[s.attributes.device_class];
+      const what = { smoke: 'Duman algılandı', gas: 'Gaz algılandı', moisture: 'Su kaçağı algılandı' }[s.attributes.device_class];
       const where = areaName(entityArea(s.entity_id));
-      const tip = { smoke: 'If there is a fire, call 112.', gas: 'No flames, don\'t touch switches, open windows and call 187.', moisture: 'Close the main water valve if you have one.' }[s.attributes.device_class];
+      const tip = { smoke: 'Yangın varsa 112\'yi arayın.', gas: 'Ateş yakmayın, elektrik düğmelerine dokunmayın, pencereleri açın ve 187\'yi arayın.', moisture: 'Ana su vananız varsa kapatın.' }[s.attributes.device_class];
       const dev = store.devices.get(store.entities.get(s.entity_id)?.device_id);
       return h('div', { class: 'alert-banner', role: 'alert' }, icon('alert', 22),
         h('div', null, h('strong', null, `${what}${where ? ' · ' + where : ''}`), h('p', null, `${dev ? deviceName(dev) : s.attributes.friendly_name}. ${tip}`)));
@@ -224,7 +225,7 @@ function hero(roomId, cleanup, ind, editing) {
   const tempId = roomId === 'all' && store.get(c.temperature) ? c.temperature : (temps.find((s) => s.entity_id === c.temperature) || temps[0])?.entity_id;
   const humId = tempId === c.temperature ? c.humidity : entitiesIn(roomId, isHum)[0]?.entity_id;
   const useComfort = tempId === c.temperature;
-  const label = roomId === 'all' ? (tempId ? areaName(entityArea(tempId)) || 'Home' : 'Home') : areaName(roomId);
+  const label = roomId === 'all' ? (tempId ? areaName(entityArea(tempId)) || 'Ev' : 'Ev') : areaName(roomId);
 
   const temp = h('span', { class: 'hero-num' }, '–');
   const badge = named(h('span', { class: 'badge' }, '–'), 'badge');
@@ -234,9 +235,9 @@ function hero(roomId, cleanup, ind, editing) {
   // Text lives in a first text node, so edit handles added after it survive updates.
   const range = named(h('span', { class: 'hero-range' }, ''), 'range');
   const stats = {
-    humidity: named(h('span', { class: 'stat' }, icon('droplet', 16), humidity, h('small', null, 'humidity')), 'humidity'),
-    outside: named(h('span', { class: 'stat' }, icon('cloud', 16), outside, h('small', null, 'outside')), 'outside'),
-    power: named(h('span', { class: 'stat' }, icon('bolt', 16), power, h('small', null, 'in use')), 'power'),
+    humidity: named(h('span', { class: 'stat' }, icon('droplet', 16), humidity, h('small', null, 'nem')), 'humidity'),
+    outside: named(h('span', { class: 'stat' }, icon('cloud', 16), outside, h('small', null, 'dışarıda')), 'outside'),
+    power: named(h('span', { class: 'stat' }, icon('bolt', 16), power, h('small', null, 'kullanımda')), 'power'),
   };
   // The badge and the range line each sit alone in a small holder, so they
   // get the same eye as everything else while editing.
@@ -245,12 +246,21 @@ function hero(roomId, cleanup, ind, editing) {
   const statRow = inRow('stat');
   const statsEl = statRow.length ? h('div', { class: 'hero-stats' }, statRow.map((id) => stats[id])) : null;
   const el = h('section', { class: 'hero tone-muted' },
-    h('div', { class: 'hero-top' }, h('span', { class: 'hero-label' }, icon('thermometer', 16), label ? `Inside · ${label}` : 'Inside'), badgeBox),
+    h('div', { class: 'hero-top' }, h('span', { class: 'hero-label' }, icon('thermometer', 16), label ? `İçeride · ${label}` : 'İçeride'), badgeBox),
     h('div', { class: 'hero-temp' }, temp, h('span', { class: 'hero-deg' }, '°')),
     rangeBox,
     statsEl);
   for (const box of [badgeBox, rangeBox, statsEl]) if (box) arrangeable(box, 'indicators', { whole: true, all: allIds });
 
+  // Outside: the place chosen in Settings (js/weather.js), else the hub's weather entity.
+  const drawOutside = () => {
+    const o = outsideNow();
+    outside.textContent = o?.temperature != null ? `${Math.round(o.temperature)}°` : '–';
+    const old = stats.outside.querySelector('svg.icon');
+    if (o && old && old.dataset.name !== o.icon) { const n = icon(o.icon, 16); n.dataset.name = o.icon; old.replaceWith(n); }
+    stats.outside.title = o ? [o.text, o.apparent != null ? `hissedilen ${Math.round(o.apparent)}°` : '', o.place].filter(Boolean).join(' · ') : '';
+  };
+  cleanup.push(onWeather(drawOutside));
   const ids = [tempId, humId, c.comfortTempMin, c.comfortTempMax, c.comfortHumMin, HOME.weather].filter(Boolean);
   cleanup.push(store.watch(ids, () => {
     const t = tempId ? store.get(tempId) : null, hu = humId ? store.get(humId) : null, w = store.get(HOME.weather);
@@ -259,13 +269,12 @@ function hero(roomId, cleanup, ind, editing) {
     const tv = numVal(t), hv = numVal(hu);
     temp.textContent = tempId ? (isAvailable(t) ? num(t) : '–') : '–';
     humidity.textContent = hu && isAvailable(hu) ? `${num(hu, 0)}%` : '–';
-    const wt = w?.attributes?.temperature;
-    outside.textContent = wt != null ? `${Math.round(wt)}°` : '–';
-    range.firstChild.textContent = tempId ? `Comfortable between ${lo}° and ${hi}°` : 'Add a temperature sensor to this room to see its climate';
-    let tone = 'muted', text = tempId ? 'No reading' : 'No sensor';
+    if (w !== undefined) drawOutside();
+    range.firstChild.textContent = tempId ? `${lo}° ile ${hi}° arası rahat` : 'Bu odanın iklimini görmek için bir sıcaklık sensörü ekleyin';
+    let tone = 'muted', text = tempId ? 'Ölçüm yok' : 'Sensör yok';
     if (tv != null) {
-      if (tv < lo) { tone = 'cool'; text = 'Chilly'; } else if (tv > hi) { tone = 'warm'; text = 'Warm'; } else { tone = 'ok'; text = 'Comfortable'; }
-      if (hv != null && hv < (useComfort ? numVal(store.get(c.comfortHumMin)) ?? 40 : 35)) text += ' · dry air';
+      if (tv < lo) { tone = 'cool'; text = 'Serin'; } else if (tv > hi) { tone = 'warm'; text = 'Sıcak'; } else { tone = 'ok'; text = 'Rahat'; }
+      if (hv != null && hv < (useComfort ? numVal(store.get(c.comfortHumMin)) ?? 40 : 35)) text += ' · kuru hava';
     }
     badge.firstChild.textContent = text;
     el.className = `hero tone-${tone}`;
@@ -286,24 +295,24 @@ function hero(roomId, cleanup, ind, editing) {
     const lit = lights.filter(isOn).length;
     lightsChip.hidden = !lights.length;
     tone(lightsChip, lit ? 'accent' : '');
-    lightsChip.setText(lit ? `${lit} light${lit === 1 ? '' : 's'} on` : 'Lights off');
+    lightsChip.setText(lit ? `${lit} ışık açık` : 'Işıklar kapalı');
     const contacts = entitiesIn(roomId, (s) => s.entity_id.startsWith('binary_sensor.') && ['opening', 'door', 'window', 'garage_door'].includes(s.attributes.device_class));
     const open = contacts.filter((s) => s.state === 'on');
     if (!contacts.length) { openChip.hidden = true; } else {
       openChip.hidden = false;
-      if (open.length === 1) { tone(openChip, 'warn'); openChip.setText(`${open[0].attributes.friendly_name} open`); }
-      else if (open.length > 1) { tone(openChip, 'warn'); openChip.setText(`${open.length} open`); }
-      else { tone(openChip, 'ok'); openChip.setText(contacts.length === 1 ? `${contacts[0].attributes.friendly_name} closed` : 'All closed'); }
+      if (open.length === 1) { tone(openChip, 'warn'); openChip.setText(`${open[0].attributes.friendly_name} açık`); }
+      else if (open.length > 1) { tone(openChip, 'warn'); openChip.setText(`${open.length} açık`); }
+      else { tone(openChip, 'ok'); openChip.setText(contacts.length === 1 ? `${contacts[0].attributes.friendly_name} kapalı` : 'Hepsi kapalı'); }
     }
     const occ = entitiesIn(roomId, (s) => s.entity_id.startsWith('binary_sensor.') && ['occupancy', 'presence', 'motion'].includes(s.attributes.device_class)
       && !store.entities.get(s.entity_id)?.hidden_by);
     if (!occ.length) { presenceChip.hidden = true; } else {
       presenceChip.hidden = false;
       const here = occ.filter((s) => s.state === 'on');
-      if (here.length) { tone(presenceChip, 'accent live'); presenceChip.setText('Someone is here'); }
+      if (here.length) { tone(presenceChip, 'accent live'); presenceChip.setText('Evde biri var'); }
       else {
         const last = occ.map((s) => s.last_changed).sort().pop();
-        tone(presenceChip, ''); presenceChip.setText(`Empty · seen ${relTime(last)}`);
+        tone(presenceChip, ''); presenceChip.setText(`Boş · son görülme ${relTime(last)}`);
       }
     }
   };
@@ -335,11 +344,11 @@ function quickActions(custom, editing) {
     btn.addEventListener('click', async () => {
       if (btn.classList.contains('busy')) return;
       btn.classList.add('busy');
-      try { await runQuickAction(a); toast(`${name} done`); } catch { /* toast shown */ }
+      try { await runQuickAction(a); toast(`${name} tamam`); } catch { /* toast shown */ }
       btn.classList.remove('busy');
     });
     return btn;
   }));
   arrangeable(row, 'quick', { whole: true, all: ordered(HOME.quickActions, custom.quick).map((a) => a.id) });
-  return h('section', { class: 'quick' }, h('h2', { class: 'section-title' }, 'Quick actions'), row);
+  return h('section', { class: 'quick' }, h('h2', { class: 'section-title' }, 'Hızlı işlemler'), row);
 }

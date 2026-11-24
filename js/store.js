@@ -74,12 +74,12 @@ export const store = {
   },
 
   async call(domain, service, target, data = {}) {
-    if (!this.backend) throw new Error('Not connected');
+    if (!this.backend) throw new Error('Bağlı değil');
     const t = typeof target === 'string' ? { entity_id: target } : target;
     try {
       return await this.backend.callService(domain, service, data, t);
     } catch (e) {
-      toast(`Couldn't ${service.replace(/_/g, ' ')}: ${e.message}`, 'error');
+      toast(`Olmadı (${service.replace(/_/g, ' ')}): ${e.message}`, 'error');
       throw e;
     }
   },
@@ -91,7 +91,7 @@ export const store = {
 
 const SYSTEM_MAKERS = ['Home Assistant', 'Official apps', 'Met.no', 'mdeweerd', 'Home Assistant Community Apps'];
 
-export function deviceName(d) { return d?.name_by_user || d?.name || 'Device'; }
+export function deviceName(d) { return d?.name_by_user || d?.name || 'Cihaz'; }
 export function areaName(id) { return store.areas.get(id)?.name || null; }
 
 export function deviceEntities(deviceId) {

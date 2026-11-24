@@ -172,7 +172,10 @@ function lockedView(root, cleanup) {
         accountPanel(cleanup))));
 }
 
-export function renderChat(root, cleanup) {
+// #/chat?ask=… (from a product page's questions) puts that question in the box, ready to send.
+export function renderChat(root, cleanup, ctx) {
+  let ask = ctx?.query?.get('ask') || '';
+  if (ask) history.replaceState(null, '', '#/chat');
   const local = [];
   cleanup.push(() => local.splice(0).forEach((fn) => { try { fn(); } catch { /* ignore */ } }));
   let shown = null;
@@ -185,7 +188,7 @@ export function renderChat(root, cleanup) {
     root.replaceChildren();
     if (!canUseAssistant()) lockedView(root, local);
     else if (!consented()) consentView(root, draw);
-    else chatView(root, local);
+    else { chatView(root, local, ask); ask = ''; }
   };
   cleanup.push(onAccount(draw));
   draw();
@@ -214,7 +217,7 @@ function consentView(root, redraw) {
         h('button', { class: 'btn ghost', type: 'button', onclick: () => openLegal('yapayzeka') }, 'Metnin tamamını oku')))));
 }
 
-function chatView(root, cleanup) {
+function chatView(root, cleanup, prefill = '') {
   const base = loadSettings().assistantUrl.replace(/\/+$/, '');
   const chat = loadChat();
   let busy = false;
@@ -461,4 +464,9 @@ function chatView(root, cleanup) {
   drawAll();
   checkHealth();
   if (chat.messages.length) reveal(log.lastElementChild);
+  if (prefill) {
+    input.value = prefill.slice(0, 1500);
+    grow();
+    requestAnimationFrame(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); });
+  }
 }

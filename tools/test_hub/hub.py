@@ -137,6 +137,8 @@ class Hub:
         self.origins = set(origins)
         self.clients = set()
         self.flows = {}
+        # The home location and time zone (get_config; Evra can move it with config/core/update).
+        self.core = {"latitude": 51.44, "longitude": 5.47, "location_name": "Home", "time_zone": "Europe/Amsterdam"}
         world.listeners.append(self.broadcast)
 
     # ---- CORS: only the app's address may call the API from a browser ----
@@ -281,9 +283,16 @@ class Hub:
                 ok()
             elif kind == "get_states":
                 ok(list(w.states.values()))
+            elif kind == "config/core/update":
+                # The home location (Evra's Settings > Konum ve hava durumu); kept while the hub runs.
+                for key in ("latitude", "longitude", "elevation", "time_zone", "location_name"):
+                    if key in m:
+                        self.core[key] = m[key]
+                w.note(f"Home location set to {self.core['latitude']}, {self.core['longitude']}")
+                ok()
             elif kind == "get_config":
-                ok({"latitude": 51.44, "longitude": 5.47, "elevation": 17, "unit_system": {"length": "km", "mass": "g", "temperature": "°C", "volume": "L",
-                    "pressure": "Pa", "wind_speed": "m/s", "accumulated_precipitation": "mm"}, "location_name": "Home", "time_zone": "Europe/Amsterdam",
+                ok({**self.core, "elevation": 17, "unit_system": {"length": "km", "mass": "g", "temperature": "°C", "volume": "L",
+                    "pressure": "Pa", "wind_speed": "m/s", "accumulated_precipitation": "mm"},
                     "components": sorted({e["platform"] for e in w.entities.values()} | {"automation", "zha", "history"}), "version": HA_VERSION,
                     "state": "RUNNING", "currency": "EUR", "country": "NL", "language": "en", "safe_mode": False, "recovery_mode": False,
                     "external_url": None, "internal_url": None, "config_dir": "/config", "allowlist_external_dirs": [], "allowlist_external_urls": [], "radius": 100})
@@ -458,6 +467,8 @@ class Hub:
         "tplink": [{"name": "host", "required": True, "type": "string"}],
         "shelly": [{"name": "host", "required": True, "type": "string"}, {"name": "port", "optional": True, "type": "integer", "default": 80}],
         "esphome": [{"name": "host", "required": True, "type": "string"}, {"name": "port", "optional": True, "type": "integer", "default": 6053}],
+        # In Home Assistant a Bluetooth kettle is discovered by itself; here it's found by its bridge's address.
+        "xiaomi_ble": [{"name": "host", "required": True, "type": "string"}],
         "onvif": [{"name": "name", "required": True, "type": "string", "default": "Camera"}, {"name": "host", "required": True, "type": "string"},
                   {"name": "username", "required": True, "type": "string"}, PASSWORD,
                   {"name": "advanced", "type": "expandable", "required": True, "expanded": False,
@@ -647,12 +658,13 @@ class Hub:
 
     async def add_integration_page(self, request):
         domain = request.query.get("domain", "")
-        if domain != "tuya":
+        accounts = {"tuya": "Smart Life", "xiaomi_miio": "Xiaomi", "petkit": "Petkit"}  # pretend cloud accounts
+        if domain not in accounts:
             return page("Add integration", f'<div class="card"><span class="tag">Evra test hub</span><h1>Add {esc(domain)}</h1>'
-                                           '<p>Only the Tuya cloud account is pretend-linked here. Wi-Fi devices are added from the app with their IP address.</p></div>')
+                                           f'<p>Only the {", ".join(accounts.values())} accounts are pretend-linked here. Wi-Fi devices are added from the app with their IP address.</p></div>')
         rows = "".join(f'<form method="post" action="/panel/cloud-add"><input type="hidden" name="product" value="{x["product"]}"><button>Add {esc(BY_ID[x["product"]][1])}</button></form>'
-                       for x in self.world.cloud) or "<p>Every device in the account has been added.</p>"
-        return page("Tuya · Evra test hub", f'<div class="card"><span class="tag">Evra test hub · Smart Life account</span><h1>Devices in the account</h1>'
+                       for x in self.world.cloud if _handler_for(x["product"]) == domain) or "<p>Every device in the account has been added.</p>"
+        return page(f"{accounts[domain]} · Evra test hub", f'<div class="card"><span class="tag">Evra test hub · {esc(accounts[domain])} account</span><h1>Devices in the account</h1>'
                                            f'<p>In Home Assistant, linking the account adds these by themselves. Add one to see it appear in the app.</p>{rows}</div>')
 
     async def automation_edit_page(self, request):
@@ -753,10 +765,11 @@ class Hub:
     async def cloud_add(self, request):
         f = await request.post()
         item = next((x for x in self.world.cloud if x["product"] == f.get("product")), None)
+        handler = _handler_for(item["product"]) if item else "tuya"
         if item:
             self.world.cloud.remove(item)
-            self.world.create_device(item["product"], "tuya")
-        raise web.HTTPFound("/config/integrations/dashboard/add?domain=tuya")
+            self.world.create_device(item["product"], handler)
+        raise web.HTTPFound(f"/config/integrations/dashboard/add?domain={handler}")
 
     def app(self):
         app = web.Application(middlewares=[self.cors])

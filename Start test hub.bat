@@ -1,6 +1,8 @@
 @echo off
 rem Starts the Evra test hub (a stand-in for Home Assistant, for trying live
 rem mode without the Raspberry Pi), opens its control panel, then starts Evra.
+rem ("Start Evra.bat" starts the hub too; this one also opens the control panel
+rem and shows the hub's log in a window you can see.)
 rem In Evra: Settings > Connection > Live, address http://localhost:8123.
 rem Close the "Evra test hub" window to stop the hub.
 setlocal EnableExtensions
