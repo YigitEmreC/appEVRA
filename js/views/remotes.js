@@ -1,21 +1,105 @@
 import { HOME } from '../config.js';
 import { store, ensurePower, setTracker } from '../store.js';
-import { h, isOn, isAvailable, clamp, loadSettings, saveSettings } from '../util.js';
+import { h, isOn, isAvailable, clamp, loadSettings, saveSettings, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { card, toggle, irButton } from '../components.js';
+import { irModules, sendCode, buttonCode, remoteType, keyInfo, forgetServices } from '../ir.js';
+import { whenConnected } from '../appdata.js';
+import {
+  remotes, loadRemotes, onRemotes, saveRemote, deleteRemote, builtinAvailable, builtinModule, remoteName,
+  missingBuiltins, restoreBuiltins,
+} from '../remote-list.js';
+import { renderRemoteNew } from './remote-new.js';
+
+// The Remotes screen: every remote of the home (each sending through its own IR module),
+// notices when there's no IR module or its firmware can't send database codes yet,
+// adding remotes from the IR code database (#/remotes/new) and removing them.
+export function renderRemotes(root, cleanup, ctx = {}) {
+  if (ctx.params?.[0] === 'new') return renderRemoteNew(root, cleanup);
+  const local = [];
+  cleanup.push(() => local.splice(0).forEach((fn) => fn()));
+  let modules = null;
+  let sig = '';
+  const draw = () => {
+    if (!modules) return;
+    local.splice(0).forEach((fn) => fn());
+    root.replaceChildren(...screen(modules, local));
+  };
+  const refresh = async () => {
+    forgetServices();
+    modules = await irModules();
+    draw();
+  };
+  root.append(h('p', { class: 'muted pad' }, 'Kumandalar yükleniyor…'));
+  whenConnected().then(() => Promise.all([loadRemotes(), irModules()])).then(([, m]) => { modules = m; draw(); });
+  cleanup.push(onRemotes(() => draw()));
+  // A module added, removed or renamed changes what can be sent where.
+  cleanup.push(store.onRegistry(() => {
+    const next = [...store.devices.values()].map((d) => `${d.id}:${d.name_by_user}:${d.area_id}`).join('|');
+    if (next !== sig) { const first = !sig; sig = next; if (!first && modules) refresh(); }
+  }));
+}
+
+function notice(iconName, title, text, action) {
+  return h('div', { class: 'notice-card' },
+    h('span', { class: 'notice-icon' }, icon(iconName, 22)),
+    h('div', null, h('strong', null, title), h('p', { class: 'muted small' }, text), action || null));
+}
+
+function screen(modules, cleanup) {
+  const list = remotes().filter(builtinAvailable);
+  const out = [];
+  if (!modules.length) {
+    out.push(notice('remote', 'IR modülü ekleyin',
+      'Kumandalar sinyali bir IR modülünden (Klima ve TV Kumandası) gönderir. Her odaya bir modül koyabilirsiniz; her kumanda kendi modülünü kullanır, böylece sinyal doğru cihaza gider.',
+      h('a', { class: 'btn primary small', href: '#/devices/add/ir-remote' }, icon('plus', 14), 'IR modülü ekle')));
+  } else if (!modules.some((m) => m.service)) {
+    out.push(notice('alert', 'IR modülünün yazılımı güncellenmeli',
+      'Kod veritabanından kumanda eklemek için IR modülünde Evra\'nın "her kodu gönder" eylemi (send_raw) olmalı. ESPHome\'da modülün ayarlarına ekleyip yeniden yükleyin (ayrıntılar ir-module-esphome.yaml dosyasında). Mevcut TV ve ısıtıcı kumandaları çalışmaya devam eder.'));
+  }
+  out.push(h('div', { class: 'toolbar' },
+    h('p', { class: 'muted intro' }, 'Her kumanda kendi IR modülünden gönderir. Yeni bir cihaz için kod veritabanından kumanda ekleyin; markasının bütün tuşları gelir.'),
+    h('a', { class: 'btn primary', href: '#/remotes/new' }, icon('plus', 16), 'Kumanda ekle')));
+
+  if (list.length) out.push(slider(list, modules, cleanup));
+  else {
+    const missing = missingBuiltins();
+    out.push(h('div', { class: 'empty' }, icon('remote', 28), h('p', null, 'Henüz kumanda yok.'),
+      h('div', { class: 'btn-row' },
+        h('a', { class: 'btn primary', href: '#/remotes/new' }, icon('plus', 16), 'Kumanda ekle'),
+        missing.length ? h('button', { class: 'btn ghost', type: 'button', onclick: () => restoreBuiltins().catch((e) => toast(`Olmadı: ${e.message}`, 'error')) }, icon('refresh', 16), 'TV ve ısıtıcı kumandalarını geri getir') : null)));
+  }
+  if (modules.length) out.push(modulesCard(modules, list));
+  return out;
+}
+
+function modulesCard(modules, list) {
+  const uses = (m) => list.filter((r) => (r.kind === 'builtin' ? builtinModule(r) : r.module) === m.id).length;
+  return card({ title: 'IR modülleri', iconName: 'remote' },
+    h('p', { class: 'muted small' }, 'Her modül yalnızca kendi kumandalarının sinyalini gönderir. Adını ve odasını Cihazlar ekranından değiştirebilirsiniz.'),
+    h('div', { class: 'list' }, modules.map((m) => h('a', { class: 'list-row', href: `#/devices/${encodeURIComponent(m.id)}` },
+      h('span', { class: 'row-icon' }, icon('remote', 20)),
+      h('span', { class: 'row-text' }, h('strong', null, m.name), h('small', null, [m.room || 'Odasız', `${uses(m)} kumanda`].join(' · '))),
+      h('span', { class: `pill ${m.service ? 'ok' : 'warn'}` }, m.service ? 'Her kodu gönderir' : 'Yazılım güncellenmeli'),
+      icon('right', 16)))));
+}
 
 // One remote at a time: swipe sideways, or use the tabs and arrows above.
-export function renderRemotes(root, cleanup) {
-  const remotes = [
-    { id: 'tv', name: 'TV', iconName: 'tv', el: tvRemote(cleanup) },
-    { id: 'heater', name: 'Isıtıcı', iconName: 'heater', el: heaterRemote(cleanup) },
-  ];
-  const last = remotes.length - 1;
-  let index = Math.max(0, remotes.findIndex((r) => r.id === loadSettings().remote));
+function slider(list, modules, cleanup) {
+  const items = list.map((r) => ({
+    id: r.id,
+    name: remoteName(r),
+    iconName: r.kind === 'builtin' ? (r.builtin === 'tv' ? 'tv' : 'heater') : remoteType(r.type).icon,
+    el: h('div', { class: 'remote-stack' },
+      r.kind === 'builtin' ? (r.builtin === 'tv' ? tvRemote(cleanup) : heaterRemote(cleanup)) : codeRemote(r, modules),
+      manage(r, modules)),
+  }));
+  const last = items.length - 1;
+  let index = Math.max(0, items.findIndex((r) => r.id === loadSettings().remote));
 
-  const slides = remotes.map((r) => h('div', { class: 'remote-slide', id: `remote-${r.id}`, role: 'tabpanel', 'aria-label': `${r.name} kumandası` }, r.el));
+  const slides = items.map((r) => h('div', { class: 'remote-slide', id: `remote-${r.id}`, role: 'tabpanel', 'aria-label': `${r.name} kumandası` }, r.el));
   const track = h('div', { class: 'remote-track' }, slides);
-  const tabs = remotes.map((r, i) => h('button', {
+  const tabs = items.map((r, i) => h('button', {
     type: 'button', role: 'tab', 'aria-controls': `remote-${r.id}`, onclick: () => go(i),
   }, icon(r.iconName, 16), r.name));
   const tabBar = h('div', { class: 'segmented remote-tabs', role: 'tablist', 'aria-label': 'Kumandalar' }, tabs);
@@ -28,9 +112,9 @@ export function renderRemotes(root, cleanup) {
     tabs[index].focus();
   });
 
-  // The track takes the height of the remote on show, so the short heater
-  // remote doesn't leave the TV remote's height of empty space below it.
-  const fitHeight = () => { track.style.height = `${slides[index].offsetHeight}px`; };
+  // The track takes the height of the remote on show, so a short remote doesn't
+  // leave a tall one's height of empty space below it.
+  const fitHeight = () => { if (slides[index]) track.style.height = `${slides[index].offsetHeight}px`; };
 
   function mark(i) {
     index = i;
@@ -44,7 +128,7 @@ export function renderRemotes(root, cleanup) {
     prev.disabled = i === 0;
     next.disabled = i === last;
     fitHeight();
-    saveSettings({ remote: remotes[i].id });
+    saveSettings({ remote: items[i].id });
   }
 
   function go(i, smooth = true) {
@@ -73,11 +157,96 @@ export function renderRemotes(root, cleanup) {
   ro.observe(track);
   cleanup.push(() => { ro.disconnect(); clearTimeout(settle); });
 
-  root.append(h('div', { class: 'remote-slider' },
-    h('div', { class: 'remote-nav' }, prev, tabBar, next),
-    track));
-  mark(index);
-  requestAnimationFrame(() => go(index, false));
+  const el = h('div', { class: 'remote-slider' },
+    h('div', { class: 'remote-nav' }, items.length > 1 ? prev : null, tabBar, items.length > 1 ? next : null),
+    track);
+  requestAnimationFrame(() => { mark(index); go(index, false); });
+  return el;
+}
+
+// Renaming a remote, moving it to another IR module, or removing it.
+function manage(r, modules) {
+  const box = h('details', { class: 'remote-manage' }, h('summary', null, icon('edit', 14), 'Kumandayı düzenle'));
+  const remove = h('button', { class: 'btn small danger', type: 'button' }, icon('trash', 14), 'Kumandayı kaldır');
+  remove.addEventListener('click', async () => {
+    if (!confirm(`${remoteName(r)} kumandası kaldırılsın mı?${r.kind === 'builtin' ? ' Tuşları IR modülünde kalır; bu ekrandan geri getirebilirsiniz.' : ''}`)) return;
+    try { await deleteRemote(r.id); toast(`${remoteName(r)} kaldırıldı`); } catch (e) { toast(`Kaldırılamadı: ${e.message}`, 'error'); }
+  });
+  if (r.kind === 'builtin') {
+    const m = modules.find((x) => x.id === builtinModule(r));
+    box.append(h('p', { class: 'muted small' }, `Bu kumandanın tuşları ${m ? m.name : 'IR modülü'} modülüne öğretildi ve oradan gönderilir.`), h('div', { class: 'btn-row' }, remove));
+    return box;
+  }
+  const name = h('input', { class: 'input', value: r.name, maxlength: 30, 'aria-label': 'Kumanda adı' });
+  const mod = h('select', { class: 'select', 'aria-label': 'IR modülü' },
+    modules.map((m) => h('option', { value: m.id, selected: m.id === r.module }, `${m.name}${m.room ? ` (${m.room})` : ''}${m.service ? '' : ' · yazılım güncellenmeli'}`)),
+    modules.some((m) => m.id === r.module) ? null : h('option', { value: r.module || '', selected: true }, 'Bulunamayan modül'));
+  const save = h('button', { class: 'btn small primary', type: 'button' }, icon('check', 14), 'Kaydet');
+  save.addEventListener('click', async () => {
+    const n = name.value.trim();
+    if (!n) { toast('Kumandaya bir ad verin', 'error'); return; }
+    try { await saveRemote({ ...r, name: n, module: mod.value }); toast('Kumanda kaydedildi'); } catch (e) { toast(`Kaydedilemedi: ${e.message}`, 'error'); }
+  });
+  box.append(
+    h('label', { class: 'field' }, h('span', null, 'Ad'), name),
+    h('label', { class: 'field' }, h('span', null, 'Hangi IR modülünden gönderilsin'), mod),
+    r.brand ? h('p', { class: 'muted small' }, `Kodlar: ${r.brand}, IR kod veritabanı (${r.set}).`) : null,
+    h('div', { class: 'btn-row' }, save, h('span', { class: 'sep' }), remove));
+  return box;
+}
+
+// A remote from the code database: the usual keys in their usual places, the rest below.
+function codeRemote(r, modules) {
+  const m = modules.find((x) => x.id === r.module);
+  const byKey = new Map(r.buttons.filter((b) => b.k !== 'x').map((b) => [b.k, b]));
+  const extras = r.buttons.filter((b) => b.k === 'x');
+  const why = !m ? 'Bu kumandanın IR modülü bulunamadı; "Kumandayı düzenle"den başka bir modül seçin.'
+    : !m.service ? `${m.name} modülünün yazılımı güncellenmeli; şimdilik bu kumanda gönderemez.` : null;
+  const key = (k, cls = 'key', opts = {}) => {
+    const b = typeof k === 'string' ? byKey.get(k) : k;
+    if (!b) return null;
+    const info = keyInfo(b.k);
+    const label = b.l || info?.label || b.k;
+    const el = h('button', { class: `ir-btn ${cls}`, type: 'button', 'aria-label': label, title: label, disabled: !!why },
+      opts.icon !== false && info?.icon ? icon(info.icon, opts.size || 22) : h('span', { class: 'ir-text' }, opts.text || label));
+    el.addEventListener('click', async () => {
+      el.classList.add('sending');
+      try { await sendCode(m, buttonCode(b)); el.classList.add('pulse'); setTimeout(() => el.classList.remove('pulse'), 800); } catch { /* toast already shown */ }
+      setTimeout(() => el.classList.remove('sending'), 250);
+    });
+    return el;
+  };
+  const row = (keys, cls) => {
+    const kids = keys.map((k) => key(k)).filter(Boolean);
+    return kids.length ? h('div', { class: `remote-row ${cls || (kids.length >= 5 ? 'five' : kids.length === 4 ? 'four' : kids.length === 2 ? 'two' : 'three')}` }, kids) : null;
+  };
+  const has = (...ks) => ks.some((k) => byKey.has(k));
+  const digits = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9'];
+  const t = remoteType(r.type);
+  return card({ title: remoteName(r), iconName: t.icon, className: 'remote code-remote',
+    extra: h('span', { class: 'remote-module' }, icon('remote', 14), m ? m.name : 'Modül yok') },
+  why ? h('p', { class: 'hint warn' }, icon('alert', 16), why) : null,
+  row(['power', 'input', 'mute', 'netflix', 'youtube'].filter((k) => byKey.has(k))),
+  row(['power_on', 'power_off'].filter((k) => byKey.has(k)), 'two'),
+  row(['back', 'home', 'menu', 'exit', 'info', 'guide'].filter((k) => byKey.has(k))),
+  has('up', 'down', 'left', 'right', 'ok') ? h('div', { class: 'dpad' },
+    key('up', 'dp up', { size: 28 }), key('left', 'dp left', { size: 28 }), key('ok', 'dp ok', { text: 'OK' }),
+    key('right', 'dp right', { size: 28 }), key('down', 'dp down', { size: 28 })) : null,
+  has('vol_up', 'vol_down', 'ch_up', 'ch_down') ? h('div', { class: 'rockers' },
+    has('vol_up', 'vol_down') ? h('div', { class: 'rocker' }, key('vol_up', 'rk'), h('span', { class: 'rocker-label' }, 'SES'), key('vol_down', 'rk')) : null,
+    has('ch_up', 'ch_down') ? h('div', { class: 'rocker' }, key('ch_up', 'rk'), h('span', { class: 'rocker-label' }, 'KNL'), key('ch_down', 'rk')) : null) : null,
+  has('temp_up', 'temp_down') ? h('div', { class: 'temp-keys' },
+    key('temp_down', 'key big cool', { size: 30 }), h('span', { class: 'temp-keys-label' }, 'Sıcaklık'), key('temp_up', 'key big warm', { size: 30 })) : null,
+  row(['mode', 'fan_speed', 'swing', 'timer', 'sleep'].filter((k) => byKey.has(k))),
+  row(['rewind', 'play', 'pause', 'stop', 'forward'].filter((k) => byKey.has(k)), 'five'),
+  row(['prev', 'record', 'next'].filter((k) => byKey.has(k))),
+  has('red', 'green', 'yellow', 'blue') ? h('div', { class: 'remote-row four colour-keys' },
+    ['red', 'green', 'yellow', 'blue'].map((c) => key(c, `key colour ${c}`, { icon: false, text: ' ' }))) : null,
+  digits.some((d) => byKey.has(d)) ? h('div', { class: 'numpad' },
+    digits.map((d) => key(d, 'key digit', { icon: false })), key('d0', 'key digit zero', { icon: false })) : null,
+  extras.length ? h('details', { class: 'remote-extras' },
+    h('summary', null, `Diğer tuşlar (${extras.length})`),
+    h('div', { class: 'extra-keys' }, extras.map((b) => key(b, 'key small-text', { icon: false })))) : null);
 }
 
 function powerHeader(device, cleanup) {

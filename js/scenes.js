@@ -3,21 +3,27 @@
 // the door lock and the home appliances (robot vacuum, air purifier, fan,
 // kettle) should do; only devices in the chosen rooms are touched. Plugs are
 // left alone, since anything could be plugged into them.
+//
+// The person can add, edit and delete scenes (views/scene-editor.js). Until they
+// change something, SCENES is the built-in list; after that it's their list, saved
+// with js/appdata.js (key "scenes": { v: 1, list }). SCENES is updated in place, so
+// modules that imported it see the current list.
 
 import { HOME } from './config.js';
 import { store, userDevices, deviceEntities, deviceName, ensurePower } from './store.js';
 import { productForDevice } from './catalog.js';
 import { sleep, loadSettings, saveSettings } from './util.js';
+import { loadData, saveData, cachedData, onData } from './appdata.js';
 
-const WARM = 2700;
-const NEUTRAL = 4000;
-const COOL = 5000;
+export const WARM = 2700;
+export const NEUTRAL = 4000;
+export const COOL = 5000;
 
 // light: { pct, kelvin } or { pct, hs } or { pct, effect: [...names], hs: fallback } or 'off'
 // tv / heater: true (on) or false (off); climate: target °C or 'off'; cover: 'open' | 'close'; lock: true
 // vacuum: 'clean' (start) | 'dock' (back to its base if it's out); purifier: 'auto' | 'sleep' | 'max' | 'off';
 // fan: false (off) or a speed in %; kettle: true (switch on)
-export const SCENES = [
+const DEFAULT_SCENES = [
   { id: 'morning', name: 'Sabah', icon: 'sunrise', tone: 'var(--p-splash)', text: 'Parlak, soğuk ışık, perdeler açık, oda ısınıyor ve su ısıtıcı çalışıyor.',
     light: { pct: 80, kelvin: COOL }, heater: true, climate: 21, cover: 'open', kettle: true, purifier: 'auto' },
   { id: 'afternoon', name: 'Öğleden sonra', icon: 'sun', tone: 'var(--p-stlouis-2)', text: 'Gün ışığı gibi nötr ışık, perdeler açık, ısıtma 20°.',
@@ -43,6 +49,64 @@ export const SCENES = [
   { id: 'cleaning', name: 'Temizlik', icon: 'vacuum', tone: 'var(--p-seawash)', text: 'Robot süpürge temizliğe başlar, perdeler açılır ve hava temizleyici tam hızda çalışır.',
     vacuum: 'clean', cover: 'open', purifier: 'max' },
 ];
+
+// ---- the person's scenes -------------------------------------------------------------
+
+const clone = (x) => JSON.parse(JSON.stringify(x));
+export const SCENES = DEFAULT_SCENES.map(clone);
+const useList = (value) => {
+  const list = Array.isArray(value?.list) ? value.list.filter((s) => s && s.id && s.name) : DEFAULT_SCENES;
+  SCENES.splice(0, SCENES.length, ...list.map(clone));
+};
+useList(cachedData('scenes'));
+onData('scenes', useList);
+
+export const isDefaultScene = (id) => DEFAULT_SCENES.some((s) => s.id === id);
+export const defaultScene = (id) => clone(DEFAULT_SCENES.find((s) => s.id === id) || null);
+export const scenesCustomised = () => Array.isArray(cachedData('scenes')?.list);
+
+/** The saved list from the backend (the built-in one until the person changes something). */
+export async function loadScenes() {
+  useList(await loadData('scenes'));
+  return SCENES;
+}
+async function store_(list) { await saveData('scenes', { v: 1, list: list.map(clone) }); }
+/** Adds a new scene or replaces the one with the same id. */
+export async function saveScene(scene) {
+  const list = SCENES.map(clone);
+  const i = list.findIndex((s) => s.id === scene.id);
+  if (i >= 0) list[i] = clone(scene); else list.push(clone(scene));
+  await store_(list);
+}
+export async function deleteScene(id) { await store_(SCENES.filter((s) => s.id !== id)); }
+/** Back to the built-in scenes (the person's own ones go). */
+export async function resetScenes() { await saveData('scenes', null); }
+
+// A sentence for a scene from its settings, when the person didn't write one.
+export function describeScene(s) {
+  const parts = [];
+  const pct = (l) => (l.pct != null ? `%${l.pct} ` : '');
+  if (s.light === 'off') parts.push('ışıklar kapalı');
+  else if (s.light) {
+    const l = s.light;
+    const colour = HOME.colorPresets.find((p) => p.data.hs_color && l.hs && p.data.hs_color[0] === l.hs[0])?.name.toLocaleLowerCase('tr-TR');
+    if (l.effect?.length) parts.push(`ışıklar ${pct(l)}${l.effect[0]} efektiyle`.replace('  ', ' '));
+    else if (l.hs) parts.push(`ışıklar ${pct(l)}${colour || 'renkli'}`);
+    else parts.push(`ışıklar ${pct(l)}${(l.kelvin || WARM) <= 3000 ? 'sıcak beyaz' : (l.kelvin || WARM) >= 5000 ? 'soğuk beyaz' : 'nötr beyaz'}`);
+  }
+  if (s.tv != null) parts.push(s.tv ? 'TV açık' : 'TV kapalı');
+  if (s.heater != null) parts.push(s.heater ? 'ısıtıcı açık' : 'ısıtıcı kapalı');
+  if (s.climate === 'off') parts.push('ısıtma kapalı'); else if (s.climate != null) parts.push(`ısıtma ${s.climate}°`);
+  if (s.cover) parts.push(s.cover === 'open' ? 'perdeler açık' : 'perdeler kapalı');
+  if (s.lock) parts.push('kapı kilitli');
+  if (s.vacuum) parts.push(s.vacuum === 'clean' ? 'robot süpürge temizliğe başlar' : 'süpürge istasyonuna döner');
+  if (s.purifier) parts.push({ auto: 'hava temizleyici otomatik', sleep: 'hava temizleyici uyku modunda', max: 'hava temizleyici tam hızda', off: 'hava temizleyici kapalı' }[s.purifier]);
+  if (s.fan === false) parts.push('vantilatör kapalı'); else if (s.fan != null) parts.push(`vantilatör %${s.fan}`);
+  if (s.kettle) parts.push('su ısıtıcı çalışır');
+  if (!parts.length) return 'Henüz bir şey ayarlanmadı.';
+  const text = parts.join(', ');
+  return `${text.charAt(0).toLocaleUpperCase('tr-TR')}${text.slice(1)}.`;
+}
 
 // ---- which rooms each scene uses (kept on this device) -----------------------------
 

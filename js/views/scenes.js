@@ -1,19 +1,36 @@
 import { store, sortedAreas, areaName } from '../store.js';
 import { h, toast, relTime, loadSettings } from '../util.js';
 import { icon } from '../icons.js';
-import { SCENES, sceneRooms, setSceneRooms, planScene, runScene } from '../scenes.js';
+import { SCENES, sceneRooms, setSceneRooms, planScene, runScene, loadScenes, resetScenes, scenesCustomised } from '../scenes.js';
+import { onData } from '../appdata.js';
+import { renderSceneEditor } from './scene-editor.js';
 import { getCustom, ordered, isHidden, isEditing } from '../custom.js';
 import { arrangeable } from '../edit.js';
 
-export function renderScenes(root, cleanup) {
+export function renderScenes(root, cleanup, ctx = {}) {
+  const [first, second] = ctx.params || [];
+  if (first === 'new') return renderSceneEditor(root, cleanup, null);
+  if (first === 'edit' && second) return renderSceneEditor(root, cleanup, decodeURIComponent(second));
   const grid = h('div', { class: 'scene-grid' });
+  const footer = h('div', { class: 'scene-footer' });
   // Scenes in the person's order; in edit mode they can be dragged and hidden.
   const draw = () => {
     const cfg = getCustom().scenes;
     const list = ordered(SCENES, cfg);
-    grid.replaceChildren(...list.filter((s) => isEditing() || !isHidden(cfg, s.id)).map((s) => sceneCard(s)));
+    grid.replaceChildren(...list.filter((s) => isEditing() || !isHidden(cfg, s.id)).map((s) => sceneCard(s)),
+      isEditing() ? null : h('a', { class: 'scene scene-add', href: '#/scenes/new' }, icon('plus', 28), h('strong', null, 'Yeni sahne'), h('span', { class: 'muted small' }, 'Işıkları, perdeleri ve cihazları tek dokunuşla ayarlayın')));
     arrangeable(grid, 'scenes', { all: list.map((s) => s.id), big: true });
+    // Back to the built-in scenes, once the person has changed any.
+    footer.replaceChildren(...(scenesCustomised() ? [h('button', {
+      class: 'btn small ghost', type: 'button',
+      onclick: async () => {
+        if (!confirm('Hazır sahnelere dönülsün mü? Kendi eklediğiniz sahneler ve hazır sahnelerde yaptığınız değişiklikler silinir.')) return;
+        try { await resetScenes(); toast('Hazır sahnelere dönüldü'); } catch (e) { toast(`Olmadı: ${e.message}`, 'error'); }
+      },
+    }, icon('refresh', 14), 'Hazır sahnelere dön')] : []));
   };
+  cleanup.push(onData('scenes', () => draw()));
+  loadScenes().then(() => draw());
 
   // Re-draw when devices or rooms change, since that changes what each scene does.
   let sig = '';
@@ -25,8 +42,10 @@ export function renderScenes(root, cleanup) {
   cleanup.push(() => clearInterval(tick));
 
   root.append(
-    h('p', { class: 'muted intro' }, 'Tek dokunuşla ortamı ayarlayın. Her sahnenin hangi odalarda çalışacağını seçin; yalnızca o odalardaki cihazlar değişir.'),
-    grid);
+    h('div', { class: 'toolbar' },
+      h('p', { class: 'muted intro' }, 'Tek dokunuşla ortamı ayarlayın. Her sahnenin hangi odalarda çalışacağını seçin; yalnızca o odalardaki cihazlar değişir.'),
+      h('a', { class: 'btn primary', href: '#/scenes/new' }, icon('plus', 16), 'Yeni sahne')),
+    grid, footer);
   draw();
 }
 
@@ -82,6 +101,7 @@ function sceneCard(scene) {
       h('div', { class: 'scene-titles' },
         h('h3', null, scene.name),
         last?.id === scene.id ? h('span', { class: 'scene-last', 'data-at': last.at }, lastText(last.at)) : null),
+      h('a', { class: 'icon-btn scene-edit', href: `#/scenes/edit/${encodeURIComponent(scene.id)}`, 'aria-label': `${scene.name} sahnesini düzenle`, title: 'Düzenle' }, icon('edit', 16)),
       start),
     h('p', { class: 'scene-text' }, scene.text),
     areas.length ? chips : null,
