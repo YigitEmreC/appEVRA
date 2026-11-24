@@ -23,6 +23,7 @@ import { member, accountToken, canUseAssistant, onAccount, refreshMember, plansU
 import { accountPanel } from './account-ui.js';
 import { openLegal, AI_CONSENT_VERSION } from '../legal.js';
 import { mascot } from '../mascot.js';
+import { pauseWake, resumeWake } from '../wake.js';
 
 const CHAT_KEY = 'evra.chat';
 const MAX_KEPT = 60; // messages kept for this browser tab
@@ -151,14 +152,14 @@ function richText(text) {
 // Nothing is sent to the assistant from here.
 function lockedView(root, cleanup) {
   const u = member();
-  root.append(h('section', { class: 'chat chat-locked', 'aria-label': 'Evra' },
+  root.append(h('section', { class: 'chat chat-locked', 'aria-label': 'EvrAI' },
     h('header', { class: 'chat-head' },
       h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, mascot(46, { locked: Boolean(member()) })),
-      h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
+      h('div', { class: 'chat-titles' }, h('h2', null, 'EvrAI'),
         h('p', { class: 'chat-status' }, icon('lock', 14), u ? 'Premium planla gelir' : 'Evra üyeleri için'))),
     u
       ? h('div', { class: 'card chat-plans' },
-        h('h3', null, 'Evra Asistan Premium planda'),
+        h('h3', null, 'EvrAI Premium planda'),
         h('p', null, 'Plan bütün ev için geçerlidir: evdeki bir kişinin Premium aboneliği, eve bağlı herkese asistanı açar. Evinizi sohbetle yönetin:'),
         h('ul', null,
           h('li', null, 'Evde neler olduğunu sorun: açık pencereler, sıcaklık, pil durumları'),
@@ -205,13 +206,13 @@ function consentView(root, redraw) {
     saveSettings({ aiConsent: { version: AI_CONSENT_VERSION, at: new Date().toISOString() } });
     redraw();
   });
-  root.append(h('section', { class: 'chat chat-locked chat-consent', 'aria-label': 'Evra Asistan onayı' },
+  root.append(h('section', { class: 'chat chat-locked chat-consent', 'aria-label': 'EvrAI onayı' },
     h('header', { class: 'chat-head' },
       h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, mascot(46)),
-      h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
+      h('div', { class: 'chat-titles' }, h('h2', null, 'EvrAI'),
         h('p', { class: 'chat-status' }, icon('lock', 14), 'Kullanmadan önce onayınız gerekiyor'))),
     h('div', { class: 'card' },
-      h('h3', null, 'Evra Asistan\'ı kullanmadan önce'),
+      h('h3', null, 'EvrAI\'ı kullanmadan önce'),
       h('p', null, 'Asistan, yanıtlarını Google\'ın Gemini yapay zekâsıyla hazırlar. Bunun için sorularınız ve cihazlarınızın adları, odaları ve durumları yurt dışındaki sunuculara aktarılır. Adınız, e-postanız, adresiniz, telefonunuz, kamera görüntüleri, kilitler, şifreler ve ödeme bilgileri gönderilmez; konuşmalar en fazla 30 dakika saklanır, sonra silinir.'),
       h('p', { class: 'muted small' }, 'Onay vermezseniz asistan kapalı kalır; uygulamanın diğer bütün özellikleri çalışır. Onayınızı Ayarlar → Gizlilik ve koşullar bölümünden geri alabilirsiniz.'),
       h('div', { class: 'btn-row' }, accept,
@@ -247,18 +248,18 @@ function chatView(root, cleanup, prefill = '') {
   cleanup.push(stopSpeaking); // leaving the tab stops the voice
   const head = h('header', { class: 'chat-head' },
     h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, mascot(46)),
-    h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'), status),
+    h('div', { class: 'chat-titles' }, h('h2', null, 'EvrAI'), status),
     h('div', { class: 'chat-head-actions' }, ...[voiceBtn, newChat].filter(Boolean)));
 
   const intro = h('div', { class: 'msg assistant intro' },
-    h('div', { class: 'msg-body' }, h('p', null, 'Merhaba, ben Evra! Eviniz hakkında her şeyi sorabilir ya da neyi değiştirmek istediğinizi söyleyebilirsiniz: cihazlar, sahneler, otomasyonlar, odalar, yeni cihaz eşleştirme, Evra ürünleri.'),
+    h('div', { class: 'msg-body' }, h('p', null, 'Merhaba, ben EvrAI! Eviniz hakkında her şeyi sorabilir ya da neyi değiştirmek istediğinizi söyleyebilirsiniz: cihazlar, sahneler, otomasyonlar, odalar, yeni cihaz eşleştirme, Evra ürünleri.'),
       h('p', { class: 'muted small' }, 'Her değişikliği bir kart olarak hazırlarım; siz Onayla\'ya basmadan hiçbir şey olmaz.')));
-  const log = h('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions', 'aria-label': 'Evra ile sohbet', tabindex: '0' });
+  const log = h('div', { class: 'chat-log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions', 'aria-label': 'EvrAI ile sohbet', tabindex: '0' });
   const suggest = h('div', { class: 'chat-suggest', role: 'group', 'aria-label': 'Önerilen sorular' },
     SUGGESTIONS.map((q) => h('button', { type: 'button', class: 'room-chip small', onclick: () => ask(q) }, q)));
 
   const input = h('textarea', {
-    id: 'chat-input', class: 'chat-input', rows: 1, maxlength: 1500, placeholder: 'Evra\'ya sorun…',
+    id: 'chat-input', class: 'chat-input', rows: 1, maxlength: 1500, placeholder: 'EvrAI\'ya sorun…',
     'aria-describedby': 'chat-note', enterkeyhint: 'send', autocomplete: 'off',
   });
   const send = h('button', { class: 'btn primary chat-send', type: 'submit' }, icon('send', 18), h('span', { class: 'sr-only' }, 'Gönder'));
@@ -266,7 +267,7 @@ function chatView(root, cleanup, prefill = '') {
   const mic = canListen() ? h('button', { class: 'btn ghost chat-mic', type: 'button', 'aria-pressed': 'false', title: 'Sesle sorun' },
     icon('mic', 18), h('span', { class: 'sr-only' }, 'Sesle sorun')) : null;
   const form = h('form', { class: 'chat-form' },
-    h('label', { for: 'chat-input', class: 'sr-only' }, 'Evra\'ya mesaj'), input, mic, send);
+    h('label', { for: 'chat-input', class: 'sr-only' }, 'EvrAI\'ya mesaj'), input, mic, send);
   const note = h('p', { id: 'chat-note', class: 'chat-note muted small' },
     'Yanıt için sorunuz ve cihazlarınızın adları, odaları ve durumları Google Gemini\'ye gönderilir.',
     mic ? ' Sesle sorduğunuzda sesiniz tarayıcınızın ses tanıma hizmetinde yazıya çevrilir; Evra ses kaydı almaz.' : '');
@@ -348,7 +349,7 @@ function chatView(root, cleanup, prefill = '') {
 
   function bubble(m) {
     const el = h('div', { class: `msg ${m.role}${m.error ? ' error' : ''}` },
-      h('span', { class: 'sr-only' }, m.role === 'user' ? 'Siz: ' : 'Evra: '),
+      h('span', { class: 'sr-only' }, m.role === 'user' ? 'Siz: ' : 'EvrAI: '),
       h('div', { class: 'msg-body' }, m.role === 'assistant' && !m.error ? richText(m.text) : h('p', null, m.text)),
       m.proposals?.length ? h('div', { class: 'proposals' }, m.proposals.map((p) => proposalCard(p, m))) : null,
       m.role === 'assistant' && !m.error && canSpeak() ? listenButton(m) : null);
@@ -386,7 +387,7 @@ function chatView(root, cleanup, prefill = '') {
     log.setAttribute('aria-busy', 'true');
     const thinking = h('div', { class: 'msg assistant thinking' },
       h('span', { class: 'dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
-      h('span', { class: 'sr-only' }, 'Evra düşünüyor…'));
+      h('span', { class: 'sr-only' }, 'EvrAI düşünüyor…'));
     log.append(thinking);
     reveal(thinking);
     try {
@@ -426,12 +427,13 @@ function chatView(root, cleanup, prefill = '') {
     mic.setAttribute('aria-pressed', String(on));
     mic.classList.toggle('listening', on);
     mic.title = on ? 'Dinliyorum… bitirmek için dokunun' : 'Sesle sorun';
-    input.placeholder = on ? 'Dinliyorum…' : 'Evra\'ya sorun…';
+    input.placeholder = on ? 'Dinliyorum…' : 'EvrAI\'ya sorun…';
   };
   mic?.addEventListener('click', async () => {
     if (hearing) { hearing.stop(); return; }
     if (busy) return;
     const before = input.value;
+    pauseWake(); // "Hey EvrAI" steps aside while this mic listens
     hearing = listen({ onText: (t) => { input.value = t; grow(); } });
     paintMic(true);
     try {
@@ -441,10 +443,15 @@ function chatView(root, cleanup, prefill = '') {
       if (alive) { input.value = before; toast(err.message, 'error'); }
     } finally {
       hearing = null;
+      resumeWake();
       if (alive) paintMic(false);
     }
   });
   cleanup.push(() => hearing?.cancel());
+  // "Hey EvrAI" heard elsewhere in the app (js/wake.js): listen for the question.
+  const onWake = () => { if (mic && !hearing && !busy) mic.click(); };
+  window.addEventListener('evrai-wake', onWake);
+  cleanup.push(() => window.removeEventListener('evrai-wake', onWake));
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -491,7 +498,7 @@ function chatView(root, cleanup, prefill = '') {
     }
   }
 
-  root.append(h('section', { class: 'chat', 'aria-label': 'Evra' }, head, log, suggest, h('div', { class: 'chat-dock' }, form, note)));
+  root.append(h('section', { class: 'chat', 'aria-label': 'EvrAI' }, head, log, suggest, h('div', { class: 'chat-dock' }, form, note)));
   drawAll();
   checkHealth();
   if (chat.messages.length) reveal(log.lastElementChild);

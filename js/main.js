@@ -1,8 +1,9 @@
 import { HOME } from './config.js';
 import { store } from './store.js';
-import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, toast } from './util.js';
+import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, toast, applyLite } from './util.js';
 import { icon } from './icons.js';
 import { mascot } from './mascot.js';
+import { syncWake } from './wake.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
 import { startWeather } from './weather.js';
@@ -39,7 +40,7 @@ const VIEWS = [
   { id: 'automations', label: 'Otomasyonlar', short: 'Otomasyon', icon: 'robot', render: renderAutomations, title: 'Otomasyonlar' },
   { id: 'energy', label: 'Enerji', icon: 'chart', render: renderEnergy, title: 'Enerji ve iklim', mobile: false },
   { id: 'remotes', label: 'Kumandalar', icon: 'remote', render: renderRemotes, title: 'Kumandalar', mobile: false },
-  { id: 'chat', label: 'Evra', icon: 'devil', render: renderChat, title: 'Evra asistanı' },
+  { id: 'chat', label: 'EvrAI', icon: 'devil', render: renderChat, title: 'EvrAI' },
   { id: 'settings', label: 'Ayarlar', icon: 'gear', render: renderSettings, title: 'Ayarlar' },
   // Reached from Settings, not shown in the navigation.
 ];
@@ -96,6 +97,7 @@ function applyTheme() {
   // The person's own theme, background, shapes and spacing.
   ensureSky();
   applyLook(dark);
+  applyLite();
   layoutHeader();
 }
 
@@ -230,6 +232,10 @@ onAccount(() => {
   }
 });
 refreshMember();
+// "Hey EvrAI" (js/wake.js) follows its setting and whether the home has EvrAI.
+syncWake();
+onAccount(syncWake);
+window.addEventListener('evra-prefs', syncWake);
 // Pick up access changes (plan, app access), when the app comes back into view.
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshMember(); });
 

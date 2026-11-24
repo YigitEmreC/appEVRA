@@ -121,7 +121,7 @@ export function renderAutomations(root, cleanup, ctx) {
   }
 
   cleanup.push(store.onStatus(() => { drawn = ''; draw(); }));
-  const poll = setInterval(draw, 1500);
+  const poll = setInterval(() => { if (!document.hidden) draw(); }, 1500);
   cleanup.push(() => clearInterval(poll));
 
   // ---- tabs: your automations, and ideas for the home's devices ----

@@ -125,6 +125,50 @@ export function createLiveBackend(hassUrl) {
   let closedByUs = false;
   let token = null;
   let registryTimer = null;
+  let entitiesSub = null;          // the subscribe_entities subscription's id
+  const entityCache = new Map();   // entity_id -> its full state, for applying the diffs
+
+  // subscribe_entities messages: {a: added or replaced (whole, compressed), c: changed
+  // (diffs: "+" new or changed fields, "-" removed attributes), r: removed entity ids}.
+  // Compressed keys: s state, a attributes, c context, lc last changed, lu last updated
+  // (times in seconds; lu is left out when it equals lc).
+  const iso = (sec) => new Date(sec * 1000).toISOString();
+  function fromCompressed(entityId, x) {
+    const lc = iso(x.lc);
+    return { entity_id: entityId, state: x.s, attributes: x.a || {}, last_changed: lc, last_updated: x.lu ? iso(x.lu) : lc, context: typeof x.c === 'string' ? { id: x.c } : x.c || null };
+  }
+  function applyCompressed(ev) {
+    if (!ev) return;
+    const first = entityCache.size === 0;
+    if (ev.a) for (const [id, x] of Object.entries(ev.a)) entityCache.set(id, fromCompressed(id, x));
+    if (first && ev.a) {
+      emit({ type: 'all', states: [...entityCache.values()] });
+    } else if (ev.a) {
+      for (const id of Object.keys(ev.a)) emit({ type: 'update', entity_id: id, state: entityCache.get(id) });
+    }
+    if (ev.c) {
+      for (const [id, diff] of Object.entries(ev.c)) {
+        const old = entityCache.get(id);
+        if (!old) continue;
+        const next = { ...old, attributes: { ...old.attributes } };
+        const add = diff['+'];
+        if (add) {
+          if ('s' in add) next.state = add.s;
+          if (add.a) Object.assign(next.attributes, add.a);
+          if (add.c) next.context = typeof add.c === 'string' ? { id: add.c } : add.c;
+          if (add.lc) { next.last_changed = iso(add.lc); next.last_updated = next.last_changed; }
+          if (add.lu) next.last_updated = iso(add.lu);
+        }
+        for (const key of diff['-']?.a || []) delete next.attributes[key];
+        entityCache.set(id, next);
+        emit({ type: 'update', entity_id: id, state: next });
+      }
+    }
+    for (const id of ev.r || []) {
+      entityCache.delete(id);
+      emit({ type: 'update', entity_id: id, state: null });
+    }
+  }
 
   async function loadRegistries() {
     const [devices, areas, entities] = await Promise.all([
@@ -206,10 +250,22 @@ export function createLiveBackend(hassUrl) {
         retry = 0;
         setStatus({ mode: 'live', state: 'connecting', message: 'Durumlar yükleniyor' });
         try {
-          const all = await send({ type: 'get_states' });
-          emit({ type: 'all', states: all });
+          // States: subscribe_entities, the compressed stream Home Assistant's own frontend
+          // uses. The first message has every state, later ones only what changed, so the
+          // Pi, the network and the phone do much less than with state_changed events
+          // (which repeat the whole old and new state every time). Older Home Assistant
+          // without it: the full states and state_changed events, as before.
+          entityCache.clear();
+          entitiesSub = nextId;
+          try {
+            await send({ type: 'subscribe_entities' });
+          } catch {
+            entitiesSub = null;
+            const all = await send({ type: 'get_states' });
+            emit({ type: 'all', states: all });
+            await send({ type: 'subscribe_events', event_type: 'state_changed' });
+          }
           await loadRegistries();
-          await send({ type: 'subscribe_events', event_type: 'state_changed' });
           for (const ev of ['device_registry_updated', 'area_registry_updated', 'entity_registry_updated']) {
             await send({ type: 'subscribe_events', event_type: ev });
           }
@@ -219,6 +275,8 @@ export function createLiveBackend(hassUrl) {
           setStatus({ mode: 'live', state: 'error', message: e.message });
           ws.close();
         }
+      } else if (m.type === 'event' && entitiesSub !== null && m.id === entitiesSub) {
+        applyCompressed(m.event);
       } else if (m.type === 'event' && m.event && m.event.event_type === 'state_changed') {
         const d = m.event.data;
         emit({ type: 'update', entity_id: d.entity_id, state: d.new_state });
@@ -307,6 +365,13 @@ export function createLiveBackend(hassUrl) {
     createArea(name) { return send({ type: 'config/area_registry/create', name }); },
     renameArea(areaId, name) { return send({ type: 'config/area_registry/update', area_id: areaId, name }); },
     deleteArea(areaId) { return send({ type: 'config/area_registry/delete', area_id: areaId }); },
+
+    // ---- backups (Home Assistant 2025.1+: Settings > System > Backups) ----
+    backupInfo() { return send({ type: 'backup/info' }); },
+    backupConfig() { return send({ type: 'backup/config/info' }); },
+    backupAgents() { return send({ type: 'backup/agents/info' }); },
+    backupConfigure(patch) { return send({ type: 'backup/config/update', ...patch }); },
+    backupNow() { return send({ type: 'backup/generate_with_automatic_settings' }, 30000); },
 
     // ---- devices ----
     updateDevice(deviceId, patch) { return send({ type: 'config/device_registry/update', device_id: deviceId, ...patch }); },

@@ -59,7 +59,7 @@ export function renderHome(root, cleanup) {
     fab.replaceChildren(mascot(46, { locked: !open && Boolean(member()) }));
     fab.href = open ? '#/chat' : plansUrl();
     if (open) { fab.removeAttribute('target'); fab.removeAttribute('rel'); } else { fab.target = '_blank'; fab.rel = 'noopener'; }
-    fab.title = open ? "Evra'ya sor" : 'Evra asistanı Premium planla gelir: planları gör';
+    fab.title = open ? "EvrAI'ya sor" : 'EvrAI Premium planla gelir: planları gör';
     fab.setAttribute('aria-label', fab.title);
   };
   drawFab();
@@ -208,7 +208,7 @@ export function renderHome(root, cleanup) {
         h('div', null, h('strong', null, `${what}${where ? ' · ' + where : ''}`), h('p', null, `${dev ? deviceName(dev) : s.attributes.friendly_name}. ${tip}`)));
     }));
   };
-  const alertTick = setInterval(drawAlerts, 2000);
+  const alertTick = setInterval(() => { if (!document.hidden) drawAlerts(); }, 2000); // not while the app is in the background
   cleanup.push(() => clearInterval(alertTick));
   drawAlerts();
 }
@@ -333,7 +333,7 @@ function hero(roomId, cleanup, ind, editing) {
       }
     }
   };
-  const tick = setInterval(drawChips, 3000);
+  const tick = setInterval(() => { if (!document.hidden) drawChips(); }, 3000);
   cleanup.push(() => clearInterval(tick));
   drawChips();
   const chipEls = { window: openChip, presence: presenceChip, lights: lightsChip };

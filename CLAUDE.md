@@ -96,6 +96,12 @@ index.html → js/main.js (shell, hash router, theme, connect())
 
 ## Assistant and accounts
 
+- **EvrAI** is the assistant's name everywhere in the app (the brand is still Evra). Its mascot is `js/mascot.js` (SVG; rings take the theme colours via `--mascot-*`; gold lock when the home has no Premium). It's the EvrAI tab's icon, the chat avatar and the small button on Home. No separate tab.
+- **Household plan:** the plan belongs to the home (webEVRA `lib/household.js`); `features.ai` in /me already reflects it.
+- **Hey EvrAI** (`js/wake.js`): optional continuous Web Speech recognition for the wake word, per device (setting `wakeWord`); pauses while the chat mic listens (`pauseWake`/`resumeWake`) and when the app is hidden; on the phrase it opens `#/chat` and fires `evrai-wake`.
+- **Home care** (`js/home-care.js`, Settings): smart alerts are Home Assistant automations with fixed ids `evra_alert_open|battery|morning`; automatic backups use HA's `backup/config/*` WebSocket API (2025.1+), Güvence/Premium only.
+- **Performance:** live mode uses `subscribe_entities` (compressed diffs, `applyCompressed` in `backends/live.js`) with a fallback to `get_states` + `state_changed`. Light mode (`util.js` `applyLite`, `:root[data-lite]`) drops blur/glass and stops the sky on slow devices; setting `lite` auto/on/off. Polls on Home skip while `document.hidden`.
+
 - **Assistant** (`js/views/chat.js`, `js/assistant-actions.js`):
   - The app never talks to Gemini; the key is the Cloudflare Secret `GEMINI_API_KEY` of the website's Worker.
   - `chat.js` posts the question plus a **filtered snapshot** of the home (`homeContext()`: states of `SHARED_DOMAINS` with only `SHARED_ATTRS`, rooms, devices, entities, automation configs; the same in live and demo mode) to `assistantUrl` (default `https://evrasmarthome.com/api/assistant`).

@@ -84,7 +84,7 @@ export function accountPanel(cleanup, { intro } = {}) {
     const u = member();
     if (u) {
       const access = canUseAssistant(u)
-        ? h('span', { class: 'pill ok-pill' }, icon('check', 12), 'Evra asistanını kullanabilir')
+        ? h('span', { class: 'pill ok-pill' }, icon('check', 12), 'EvrAI\'ı kullanabilir')
         : h('span', { class: 'pill' }, icon('lock', 12), 'Asistan erişimi yok');
       const site = !!u.email; // a website account (the stand-in has usernames only)
       const plan = site ? h('span', { class: 'pill' }, `${u.planName || u.plan} planı`) : null;
@@ -93,7 +93,7 @@ export function accountPanel(cleanup, { intro } = {}) {
           h('span', { class: 'account-avatar', 'aria-hidden': 'true' }, (u.name || '?').trim().charAt(0).toUpperCase()),
           h('div', { class: 'account-text' }, h('strong', null, u.name), h('small', { class: 'muted' }, `${u.username} · ${u.role === 'admin' ? 'Yönetici' : 'Üye'}`))),
         h('div', { class: 'account-pills' }, ...[access, plan].filter(Boolean)),
-        site && !canUseAssistant(u) ? h('p', { class: 'muted small' }, 'Evra asistanı Premium planla gelir.') : null,
+        site && !canUseAssistant(u) ? h('p', { class: 'muted small' }, 'EvrAI Premium planla gelir; evdeki bir Premium abonelik bütün eve açılır.') : null,
         h('div', { class: 'btn-row' },
           site ? h('a', { class: 'btn ghost', href: `${websiteOrigin()}/hesabim.html`, target: '_blank', rel: 'noopener' }, icon('person', 16), 'Web sitesindeki hesabım') : null,
           h('button', { class: 'btn ghost', type: 'button', 'aria-expanded': String(showPassword), onclick: () => { showPassword = !showPassword; draw(); } }, icon('lock', 16), 'Şifreyi değiştir'),

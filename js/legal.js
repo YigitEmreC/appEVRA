@@ -241,7 +241,7 @@ export const DOCS = [
     "8. Yapay zekâ asistanı (Premium)",
     [
      [
-      "Evra Asistan, yapay zekâ ile çalışır ve yanıtları otomatik olarak üretilir; yanıtlar eksik veya hatalı olabilir.",
+      "EvrAI, yapay zekâ ile çalışır ve yanıtları otomatik olarak üretilir; yanıtlar eksik veya hatalı olabilir.",
       "Asistanın hazırladığı her değişiklik (otomasyon kurma, cihaz ekleme veya çıkarma, ayar değiştirme) size bir kart olarak gösterilir ve **siz onaylamadan uygulanmaz.** Onayladığınız değişikliklerden siz sorumlusunuz.",
       "Asistanı kullanmak için sorularınızın ve cihaz bilgilerinizin Google'a aktarılmasına açık rıza vermeniz gerekir (bkz. Gizlilik Politikası).",
       "Asistan kötüye kullanılamaz; makul kullanım sınırları uygulanabilir."
@@ -294,7 +294,7 @@ export const DOCS = [
   "id": "yapayzeka",
   "title": "Yapay Zekâ Asistanı Açık Rıza Metni",
   "short": "Yapay zekâ onayı",
-  "lead": "Evra Asistan'ı (Premium) kullanmadan önce okuyun.",
+  "lead": "EvrAI'ı (Premium) kullanmadan önce okuyun.",
   "sections": [
    [
     "Asistan hangi verileri kullanır?",

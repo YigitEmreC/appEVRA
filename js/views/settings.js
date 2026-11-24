@@ -1,6 +1,6 @@
 import { HOME } from '../config.js';
 import { store } from '../store.js';
-import { h, num, numVal, isAvailable, loadSettings, saveSettings, setPrefs, toast, effectiveTheme, homeSource } from '../util.js';
+import { h, num, numVal, isAvailable, loadSettings, saveSettings, setPrefs, toast, effectiveTheme, homeSource, liteWanted } from '../util.js';
 import { getCustom, setCustom } from '../custom.js';
 import { PALETTES } from '../themes.js';
 import { icon } from '../icons.js';
@@ -10,7 +10,9 @@ import { accountPanel } from './account-ui.js';
 import { openLegal } from '../legal.js';
 import { pushState, enablePush, disablePush, showHere, pushEntities } from '../push.js';
 import { locationCard } from './location-ui.js';
-import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome } from '../account.js';
+import { alertsCard, backupCard } from '../home-care.js';
+import { wakeAvailable } from '../wake.js';
+import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome, canUseAssistant } from '../account.js';
 
 export function renderSettings(root, cleanup, { reconnect }) {
   const settings = loadSettings();
@@ -79,6 +81,12 @@ export function renderSettings(root, cleanup, { reconnect }) {
   // ---- preferences -------------------------------------------------------
   const themeTabs = h('div', { class: 'segmented theme-tabs', role: 'radiogroup', 'aria-label': 'Görünüm' });
   const devSwitch = toggle('Geliştirici modu', (on) => { setPrefs({ devMode: on }); toast(on ? 'Geliştirici modu açık' : 'Geliştirici modu kapalı'); });
+  // Light mode for slow devices (util.js applyLite) and the "Hey EvrAI" wake word (js/wake.js).
+  const liteTabs = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Hafif mod' });
+  const wakeSwitch = wakeAvailable() ? toggle('Hey EvrAI', (on) => {
+    setPrefs({ wakeWord: on });
+    toast(on ? '"Hey EvrAI" açık: bu cihaz dinliyor' : '"Hey EvrAI" kapalı');
+  }) : null;
   const drawPrefs = () => {
     const { theme, devMode } = loadSettings();
     themeTabs.replaceChildren(...[['light', 'Açık', 'sun'], ['dark', 'Koyu', 'moon'], ['auto', 'Otomatik', 'auto']].map(([id, label, ic]) => h('button', {
@@ -87,6 +95,12 @@ export function renderSettings(root, cleanup, { reconnect }) {
       onclick: () => setPrefs({ theme: id }),
     }, icon(ic, 16), label)));
     devSwitch.set(devMode);
+    const { lite, wakeWord } = loadSettings();
+    liteTabs.replaceChildren(...[['auto', 'Otomatik'], ['on', 'Açık'], ['off', 'Kapalı']].map(([id, label]) => h('button', {
+      type: 'button', role: 'radio', 'aria-checked': String(lite === id), class: lite === id ? 'active' : '',
+      onclick: () => setPrefs({ lite: id }),
+    }, label)));
+    wakeSwitch?.set(wakeWord, !canUseAssistant());
   };
   drawPrefs();
   window.addEventListener('evra-prefs', drawPrefs);
@@ -117,10 +131,14 @@ export function renderSettings(root, cleanup, { reconnect }) {
     card({ title: 'Bağlantı', iconName: 'home' }, statusLine, homeNote, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
     locationCard(cleanup),
     notifyCard(cleanup),
+    alertsCard(),
+    backupCard(),
     lookCard(),
     card({ title: 'Tercihler', iconName: 'gear' },
       settingRow('Görünüm', 'Otomatik, bu cihazın açık/koyu ayarını izler.', themeTabs),
       settingRow('Geliştirici modu', 'Teknik ayrıntıları gösterir: varlık listeleri, model ve yazılım numaraları, JSON düzenleme ve örnek ev araçları.', devSwitch),
+      settingRow('Hafif mod', `Bulanıklık ve hareketli arka planı kapatır; duvar paneli gibi yavaş cihazlar akıcı kalır. Otomatik: bu cihazda şu an ${liteWanted() ? 'açık' : 'kapalı'}.`, liteTabs),
+      wakeSwitch ? settingRow('"Hey EvrAI" ile uyandır', 'Elleriniz doluyken: "Hey EvrAI" deyin, sonra sorunuzu sorun. Açıkken bu cihaz ortamı dinler ve ses, tarayıcının ses tanıma hizmetine (Google) gider; yalnızca duvar paneli gibi sabit cihazlarda açın. Uygulama arka plandayken dinlemez.', wakeSwitch) : null,
       h('label', { class: 'field' }, h('span', null, 'Elektrik fiyatı (kWh başına ₺)'), price)),
     demoCard,
     card({ title: 'Sensör pilleri', iconName: 'battery' }, batteryList),

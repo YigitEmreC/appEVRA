@@ -248,7 +248,26 @@ export function loadSettings() {
     accountsServer: saved.accountsServer || undefined,
     // The place for the weather (js/weather.js): { name, admin1, country, latitude, longitude, timezone }.
     weatherLocation: saved.weatherLocation || null,
+    // Light mode for slow devices (wall panels): 'auto', 'on' or 'off' (applyLite below).
+    lite: ['on', 'off'].includes(saved.lite) ? saved.lite : 'auto',
+    // "Hey EvrAI" wake word on this device (js/wake.js).
+    wakeWord: saved.wakeWord === true,
   };
+}
+
+/**
+ * Light mode: no blur, glass or moving background, so slow devices (wall panels, old
+ * phones) stay smooth. 'auto' turns it on for devices with little memory or few cores,
+ * and when the system asks for less motion.
+ */
+export function liteWanted(setting = loadSettings().lite) {
+  if (setting === 'on') return true;
+  if (setting === 'off') return false;
+  const mem = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
+  return (mem && mem <= 2) || (cores && cores <= 2) || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+export function applyLite() {
+  if (liteWanted()) document.documentElement.setAttribute('data-lite', ''); else document.documentElement.removeAttribute('data-lite');
 }
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
