@@ -9,11 +9,12 @@ import { getCustom, setCustom, ordered, isHidden, withFlag, mergeOrder, isEditin
 import { arrangeable } from '../edit.js';
 import { mascot } from '../mascot.js';
 import { member, canUseAssistant, onAccount, plansUrl } from '../account.js';
+import { homeModel } from '../home-model.js';
 
 // Home follows the person's layout (js/custom.js). In edit mode everything
 // here can be dragged and hidden on the screen itself: the sections, the quick
-// action buttons, the climate card's readings and chips, the room chips and
-// the device tiles (which can also be made wide or small).
+// action buttons, the climate card's readings and chips, the rooms (their order
+// sets the house model's plan) and the device tiles (which can also be made wide or small).
 export function renderHome(root, cleanup) {
   const custom = getCustom();
   const editing = isEditing();
@@ -22,10 +23,12 @@ export function renderHome(root, cleanup) {
   const shows = (id) => sections.some((s) => s.id === id);
   // The rooms in the chosen order; hidden rooms leave Home (not the Devices screen).
   const rooms = () => ordered(sortedAreas(), getCustom().rooms, (a) => a.area_id).filter((a) => shown(getCustom().rooms, a.area_id));
-  // Without the room chips there's no way to pick a room, so show them all.
+  // Without the house model there's no way to pick a room, so show them all.
   let room = shows('rooms') && !isHidden(custom.sections, 'rooms') ? loadSettings().room || 'all' : 'all';
   const alerts = h('div', { class: 'alerts' });
   const heroSlot = h('div', { class: 'hero-slot' });
+  const model = h('div', { class: 'home-model' });
+  // While editing, the rooms show as chips too, to drag into order or hide.
   const chips = h('div', { class: 'room-chips', role: 'tablist', 'aria-label': 'Odalar' });
   const devicesSlot = h('div', { class: 'devices-slot' });
   let local = [];
@@ -34,7 +37,9 @@ export function renderHome(root, cleanup) {
     climate: heroSlot,
     quick: quickActions(custom, editing),
     rooms: [h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, 'Odalar'),
-      h('a', { class: 'link', href: '#/devices/add' }, icon('plus', 14), 'Cihaz ekle')), chips],
+      h('div', { class: 'section-links' },
+        h('a', { class: 'link', href: '#/devices?tab=rooms' }, icon('plus', 14), 'Oda'),
+        h('a', { class: 'link', href: '#/devices/add' }, icon('plus', 14), 'Cihaz ekle'))), model, chips],
     devices: devicesSlot,
   };
   // Each section is a block. On wide screens a "half" block sits next to
@@ -70,15 +75,31 @@ export function renderHome(root, cleanup) {
     for (const fn of local) { try { fn(); } catch { /* ignore */ } }
     local = [];
     if (room !== 'all' && !rooms().some((a) => a.area_id === room)) room = 'all';
-    if (shows('rooms')) drawChips();
+    if (shows('rooms')) drawRooms();
     if (shows('climate')) heroSlot.replaceChildren(hero(room, local, custom.indicators, editing));
     if (shows('devices')) drawDevices();
   }
 
-  function drawChips() {
+  const pickRoom = (id) => { room = id; saveSettings({ room: id }); draw(); };
+  // A marker on the house model: its room's tiles, with its own tile brought into view.
+  function showDevice(d) {
+    const target = d.area_id && rooms().some((a) => a.area_id === d.area_id) ? d.area_id : 'all';
+    if (room !== target) pickRoom(target);
+    const tile = shows('devices') && devicesSlot.querySelector(`.device[data-id="${CSS.escape(d.id)}"]`);
+    if (!tile) { location.hash = `#/devices/${encodeURIComponent(d.id)}`; return; }
+    tile.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    tile.classList.remove('flash');
+    void tile.offsetWidth;
+    tile.classList.add('flash');
+  }
+
+  function drawRooms() {
     const devs = userDevices();
+    const loose = devs.filter((d) => !d.area_id || !store.areas.has(d.area_id));
+    model.replaceChildren(homeModel({ rooms: rooms(), devices: devs, loose, selected: room, onPick: pickRoom, onDevice: showDevice, cleanup: local }));
+    chips.hidden = !editing;
+    if (!editing) { chips.replaceChildren(); return; }
     const count = (areaId) => devs.filter((d) => (d.area_id || null) === areaId).length;
-    const pickRoom = (id) => { room = id; saveSettings({ room: id }); draw(); };
     chips.replaceChildren(
       roomChip(null, 'Tüm odalar', devs.length, room === 'all', () => pickRoom('all')),
       ...rooms().map((a) => roomChip(a.area_id, a.name, count(a.area_id), room === a.area_id, () => pickRoom(a.area_id))),
