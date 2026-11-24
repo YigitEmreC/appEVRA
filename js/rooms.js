@@ -10,17 +10,20 @@ const dc = (s) => s.attributes?.device_class;
 const OCCUPANCY = ['occupancy', 'motion', 'presence'];
 const OPENING = ['opening', 'door', 'window', 'garage_door'];
 
-// An icon from the room's name (Turkish or English), else a generic one.
-const NAME_ICONS = [
-  [/yatak|bed|uyku/, 'bed'], [/mutfak|kitchen|yemek|dining/, 'dinner'], [/banyo|bath|tuvalet|wc|duş/, 'droplet'],
-  [/salon|oturma|living|lounge|tv/, 'tv'], [/çocuk|bebek|kid|child|nursery|oyun/, 'party'], [/çalışma|ofis|office|study/, 'devices'],
-  [/bahçe|balkon|teras|garden|balcony|terrace/, 'sprout'], [/giriş|koridor|antre|hall|entrance|hol/, 'door'],
-  [/garaj|garage|depo|kiler/, 'lock'], [/çamaşır|laundry/, 'air'],
+// What kind of room a name means (Turkish or English): it picks the room's icon and,
+// on Home's house model, its furniture. Anything else is a plain room.
+const NAME_TYPES = [
+  [/yatak|bed|uyku/, 'bedroom', 'bed'], [/mutfak|kitchen|yemek|dining/, 'kitchen', 'dinner'], [/banyo|bath|tuvalet|wc|duş/, 'bath', 'droplet'],
+  [/salon|oturma|living|lounge|tv/, 'living', 'tv'], [/çocuk|bebek|kid|child|nursery|oyun/, 'kids', 'party'], [/çalışma|ofis|office|study/, 'office', 'devices'],
+  [/bahçe|balkon|teras|garden|balcony|terrace/, 'garden', 'sprout'], [/giriş|koridor|antre|hall|entrance|hol/, 'hall', 'door'],
+  [/garaj|garage|depo|kiler/, 'storage', 'lock'], [/çamaşır|laundry/, 'laundry', 'air'],
 ];
-export function roomIcon(name) {
+const typeEntry = (name) => {
   const n = String(name || '').toLocaleLowerCase('tr-TR');
-  return (NAME_ICONS.find(([re]) => re.test(n)) || [null, 'rooms'])[1];
-}
+  return NAME_TYPES.find(([re]) => re.test(n)) || [null, 'room', 'rooms'];
+};
+export const roomType = (name) => typeEntry(name)[1];
+export const roomIcon = (name) => typeEntry(name)[2];
 
 /** The entities of a room's devices (and ones placed in it directly), without hidden or technical ones. */
 export function roomEntities(areaId) {
