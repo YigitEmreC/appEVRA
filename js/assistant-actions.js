@@ -58,11 +58,18 @@ async function control(steps) {
   return { ok: failed === 0, detail: lines.join('; ') };
 }
 
+// The assistant may never touch these, whatever a card says. The server already refuses
+// them (webEVRA lib/assistant/home.js BLOCKED_DOMAINS); this is the second lock, in case a
+// card was tampered with on the way.
+const NEVER = /\b(lock|camera|alarm_control_panel|person|device_tracker|shell_command|rest_command|python_script|hassio|pyscript|command_line|recorder|system_log)\.[a-z0-9_]+/;
+const touchesBlocked = (a) => NEVER.test(JSON.stringify(a || {}));
+
 // Runs one approved proposal. Returns { ok, detail } in plain words.
 export async function runProposal(p) {
   const a = p.action || {};
   const b = store.backend;
   if (!b) return { ok: false, detail: 'Uygulama bağlı değil.' };
+  if (touchesBlocked(a)) return { ok: false, detail: 'Kilitler, kameralar ve alarmlar asistanla değiştirilemez; bunu uygulamadan kendiniz yapın.' };
   try {
     switch (a.type) {
       case 'control':

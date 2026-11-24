@@ -7,6 +7,8 @@ import { chip, sortable } from '../components.js';
 import { deviceCardFor } from '../devices/cards.js';
 import { getCustom, setCustom, ordered, isHidden, withFlag, mergeOrder, isEditing, SECTIONS, INDICATORS } from '../custom.js';
 import { arrangeable } from '../edit.js';
+import { mascot } from '../mascot.js';
+import { member, canUseAssistant, onAccount, plansUrl } from '../account.js';
 
 // Home follows the person's layout (js/custom.js). In edit mode everything
 // here can be dragged and hidden on the screen itself: the sections, the quick
@@ -48,6 +50,21 @@ export function renderHome(root, cleanup) {
     flag: { field: 'half', cls: 'half', icon: 'widen', label: 'Yarım genişlik (büyük ekranlarda yan yana)' },
   });
   root.append(alerts, blocks);
+
+  // Evra's mascot: a small button that opens the assistant. When the home's plan doesn't
+  // include it, the mascot wears a gold lock and opens the plans on the website instead.
+  const fab = h('a', { class: 'mascot-fab' });
+  const drawFab = () => {
+    const open = canUseAssistant();
+    fab.replaceChildren(mascot(46, { locked: !open && Boolean(member()) }));
+    fab.href = open ? '#/chat' : plansUrl();
+    if (open) { fab.removeAttribute('target'); fab.removeAttribute('rel'); } else { fab.target = '_blank'; fab.rel = 'noopener'; }
+    fab.title = open ? "Evra'ya sor" : 'Evra asistanı Premium planla gelir: planları gör';
+    fab.setAttribute('aria-label', fab.title);
+  };
+  drawFab();
+  cleanup.push(onAccount(drawFab));
+  root.append(fab);
 
   function draw() {
     for (const fn of local) { try { fn(); } catch { /* ignore */ } }

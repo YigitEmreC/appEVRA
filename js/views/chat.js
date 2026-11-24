@@ -22,6 +22,7 @@ import { canSpeak, speak, stopSpeaking, speakingId, guessLang, canListen, listen
 import { member, accountToken, canUseAssistant, onAccount, refreshMember, plansUrl } from '../account.js';
 import { accountPanel } from './account-ui.js';
 import { openLegal, AI_CONSENT_VERSION } from '../legal.js';
+import { mascot } from '../mascot.js';
 
 const CHAT_KEY = 'evra.chat';
 const MAX_KEPT = 60; // messages kept for this browser tab
@@ -152,13 +153,13 @@ function lockedView(root, cleanup) {
   const u = member();
   root.append(h('section', { class: 'chat chat-locked', 'aria-label': 'Evra' },
     h('header', { class: 'chat-head' },
-      h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
+      h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, mascot(46, { locked: Boolean(member()) })),
       h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
         h('p', { class: 'chat-status' }, icon('lock', 14), u ? 'Premium planla gelir' : 'Evra üyeleri için'))),
     u
       ? h('div', { class: 'card chat-plans' },
         h('h3', null, 'Evra Asistan Premium planda'),
-        h('p', null, 'Evinizi sohbetle yönetin:'),
+        h('p', null, 'Plan bütün ev için geçerlidir: evdeki bir kişinin Premium aboneliği, eve bağlı herkese asistanı açar. Evinizi sohbetle yönetin:'),
         h('ul', null,
           h('li', null, 'Evde neler olduğunu sorun: açık pencereler, sıcaklık, pil durumları'),
           h('li', null, '"Salonun ışığını %40 yap" deyin; değişiklik bir kart olarak hazırlanır, siz onaylarsınız'),
@@ -206,7 +207,7 @@ function consentView(root, redraw) {
   });
   root.append(h('section', { class: 'chat chat-locked chat-consent', 'aria-label': 'Evra Asistan onayı' },
     h('header', { class: 'chat-head' },
-      h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
+      h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, mascot(46)),
       h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'),
         h('p', { class: 'chat-status' }, icon('lock', 14), 'Kullanmadan önce onayınız gerekiyor'))),
     h('div', { class: 'card' },
@@ -245,7 +246,7 @@ function chatView(root, cleanup, prefill = '') {
   }
   cleanup.push(stopSpeaking); // leaving the tab stops the voice
   const head = h('header', { class: 'chat-head' },
-    h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, icon('devil', 26)),
+    h('span', { class: 'chat-avatar', 'aria-hidden': 'true' }, mascot(46)),
     h('div', { class: 'chat-titles' }, h('h2', null, 'Evra'), status),
     h('div', { class: 'chat-head-actions' }, ...[voiceBtn, newChat].filter(Boolean)));
 

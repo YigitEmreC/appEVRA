@@ -2,6 +2,7 @@ import { CATEGORIES, PRODUCTS, productById, productForDevice, PAIRING_LABEL } fr
 import { store, userDevices, sortedAreas, deviceName, areaName, deviceEntities } from '../store.js';
 import { h, num, numVal, isAvailable, toast, sleep, fold } from '../util.js';
 import { icon } from '../icons.js';
+import { mascot } from '../mascot.js';
 import { card } from '../components.js';
 import { deviceCardFor, kindIcon } from '../devices/cards.js';
 import { roomBadges, roomEntities, roomIcon, roomDevices } from '../rooms.js';
@@ -369,7 +370,7 @@ function productAbout(p) {
     p.features?.length ? h('ul', { class: 'feature-list' }, p.features.map((f) => h('li', null, icon('check', 14), f))) : null,
     p.emergency ? h('p', { class: 'alarm-note static' }, icon('alert', 16), p.emergency) : null,
     p.howItWorks ? h('div', { class: 'product-works' }, h('h4', null, 'Çalışma şekli'), h('p', null, p.howItWorks)) : null,
-    p.evraSays ? h('p', { class: 'evra-says' }, h('span', { class: 'evra-says-who' }, icon('devil', 14), 'Evra'), p.evraSays) : null,
+    p.evraSays ? h('p', { class: 'evra-says' }, h('span', { class: 'evra-says-who' }, mascot(18), 'Evra'), p.evraSays) : null,
     p.examples?.length ? h('div', { class: 'product-asks' }, h('h4', null, 'Evra\'ya sorun'),
       h('div', { class: 'chips' }, p.examples.map((q) => h('a', { class: 'room-chip small', href: ask(q) }, q)))) : null);
 }

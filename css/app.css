@@ -2068,3 +2068,65 @@ button, a, .nav-item, .room-chip { touch-action: manipulation; }
 .chat-mic.listening { background: var(--danger); color: var(--danger-ink); border-color: transparent; animation: mic-pulse 1.2s ease-in-out infinite; }
 @keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); } 50% { box-shadow: 0 0 0 10px transparent; } }
 @media (prefers-reduced-motion: reduce) { .chat-mic.listening { animation: none; } }
+
+/* Phones: the moving background used to jump and sit too low. Browsers grow and shrink
+   the screen while their address bar or the keyboard comes and goes, and "vh" counts
+   the biggest size, so ground scenes slid below the visible edge and behind the tab
+   bar. The layer now has the small, steady viewport height (svh: always fully on
+   screen), and its ground scenes stand on the tab bar instead of behind it. */
+.sky { bottom: auto; height: 100vh; height: 100svh; }
+@media (max-width: 899px) {
+  .sky { --sky-floor: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
+  .sky-waves, .sky-dusk, .sky-retro, .sky-istanbul, .sky-mountains, .sky-fire { bottom: var(--sky-floor); }
+  .sky-waves { height: 42svh; }
+  .sky-dusk { height: 75svh; }
+  .sky-retro { height: 58svh; }
+  .sky-mountains { height: 40svh; }
+  .sky-fire { height: 50svh; }
+  .sky-istanbul { height: clamp(260px, 27.8vw, 44svh); }
+  .sky-aurora { height: 75svh; }
+  /* The strip under the ground scenes, behind the tab bar, takes the scene's floor colour. */
+  .sky::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--sky-floor); background: color-mix(in srgb, var(--m1) 10%, var(--bg)); display: block; }
+}
+
+/* ---- Evra's mascot (js/mascot.js): rings in the theme's colours, the house as drawn ---- */
+:root { --mascot-a: var(--accent-fill, var(--accent)); }
+:root[data-sky] { --mascot-a: var(--m1, var(--accent-fill, var(--accent))); }
+.mascot {
+  --mascot-r1: color-mix(in srgb, var(--mascot-a) 82%, #000);
+  --mascot-r2: var(--mascot-a);
+  --mascot-r3: color-mix(in srgb, var(--mascot-a) 62%, #000);
+  --mascot-r4: color-mix(in srgb, var(--mascot-a) 42%, #000);
+  --mascot-hole: color-mix(in srgb, var(--mascot-a) 22%, #120707);
+  position: relative; display: inline-grid; place-items: center; width: var(--mascot-size); height: var(--mascot-size); flex: none; line-height: 0;
+}
+.mascot-svg { display: block; filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.25)); }
+.mascot-hand { transform-box: fill-box; transform-origin: 20% 90%; }
+.mascot.is-locked .mascot-svg { filter: saturate(0.55) drop-shadow(0 2px 4px rgb(0 0 0 / 0.25)); opacity: 0.85; }
+/* The gold lock: the home's plan doesn't include the assistant (it opens the plans). */
+.mascot-lock, .nav-lock {
+  background: linear-gradient(160deg, #ffe58a, #e0a81e 55%, #b07a0c) !important; color: #4a3000 !important;
+  box-shadow: 0 0 0 2px var(--card), 0 2px 6px rgb(0 0 0 / 0.35) !important;
+}
+.mascot-lock { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; border-radius: 50%;
+  width: calc(var(--mascot-size) * 0.42); height: calc(var(--mascot-size) * 0.42); min-width: 16px; min-height: 16px; }
+@keyframes mascot-wave { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-16deg); } 80% { transform: rotate(10deg); } 90% { transform: rotate(-8deg); } }
+.nav-item:hover .mascot-hand, .chat-head .mascot-hand, .mascot-fab .mascot-hand { animation: mascot-wave 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .mascot-hand { animation: none !important; } }
+
+/* In the tab bar the mascot replaces the icon; in the chat it's the avatar. */
+.nav-devil .nav-icon .mascot { margin: -3px 0; }
+.chat-avatar:has(.mascot) { background: none; }
+
+/* Home: a small mascot button above the tab bar that opens the assistant (or the plans). */
+.mascot-fab {
+  position: fixed; z-index: 25; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 14px);
+  display: grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; text-decoration: none;
+  background: color-mix(in srgb, var(--card) 70%, transparent); backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.5), 0 0 0 1px var(--line);
+  transition: transform 0.2s var(--spring, ease);
+}
+.mascot-fab:hover, .mascot-fab:focus-visible { transform: translateY(-2px) scale(1.04); }
+.mascot-fab:active { transform: scale(0.94); }
+@media (min-width: 900px) { .mascot-fab { bottom: 24px; right: 24px; } }
+.editing .mascot-fab { display: none; }

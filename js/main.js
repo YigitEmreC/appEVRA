@@ -2,6 +2,7 @@ import { HOME } from './config.js';
 import { store } from './store.js';
 import { h, clockText, loadSettings, loadSiteConfig, setPrefs, effectiveTheme, toast } from './util.js';
 import { icon } from './icons.js';
+import { mascot } from './mascot.js';
 import { createDemoBackend } from './backends/demo.js';
 import { createLiveBackend } from './backends/live.js';
 import { startWeather } from './weather.js';
@@ -170,7 +171,7 @@ function buildNav() {
     href: `#/${v.id}`, 'data-view': v.id, 'data-id': v.id, 'data-name': v.label,
     class: `nav-item${v.mobile === false ? ' wide-only' : ''}${v.id === 'chat' ? ' nav-devil' : ''}${locked(v) ? ' nav-locked' : ''}`,
     ...(locked(v) ? { title: 'Asistan Premium planla gelir. Planları görmek için dokunun.', 'aria-label': `${v.label} (kilitli: Premium planla gelir, planları açar)` } : {}),
-  }, h('span', { class: 'nav-icon' }, icon(v.icon, 22), locked(v) ? h('span', { class: 'nav-lock', 'aria-hidden': 'true' }, icon('lock', 12)) : null),
+  }, h('span', { class: 'nav-icon' }, v.id === 'chat' ? mascot(30, { locked: locked(v) }) : icon(v.icon, 22)),
   h('span', { class: 'nav-label' }, v.short || v.label))));
   arrangeable(nav, 'nav', { whole: true, locked: LOCKED_NAV, all: all.map((v) => v.id) });
   markActive();
