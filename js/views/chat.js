@@ -24,6 +24,7 @@ import { accountPanel } from './account-ui.js';
 import { openLegal, AI_CONSENT_VERSION } from '../legal.js';
 import { mascot } from '../mascot.js';
 import { pauseWake, resumeWake } from '../wake.js';
+import { createMascot } from '../mascot-puppet.js';
 
 const CHAT_KEY = 'evra.chat';
 const MAX_KEPT = 60; // messages kept for this browser tab
@@ -225,8 +226,13 @@ function chatView(root, cleanup, prefill = '') {
   let busy = false;
   let alive = true;
   cleanup.push(() => { alive = false; });
+  // Evra's mascot hangs out by the message box: next to it on wide screens, peeking over it on phones.
+  const puppet = createMascot();
+  cleanup.push(() => puppet.destroy());
+  let typingTimer = 0;
+  cleanup.push(() => clearTimeout(typingTimer));
 
-  const status = h('p', { class: 'chat-status', role: 'status' }, h('span', { class: 'status-dot connecting' }), 'Evra\'ya bağlanılıyor…');
+  const status = h('p', { class: 'chat-status', role: 'status' }, h('span', { class: 'status-dot connecting' }), 'EvrAI\'ya bağlanılıyor…');
   const newChat = h('button', { class: 'btn ghost small', type: 'button' }, icon('refresh', 14), 'Yeni sohbet');
   // Read aloud: new replies are spoken as they arrive (each reply also has its own Listen button).
   const voiceBtn = canSpeak() ? h('button', { class: 'btn ghost small voice-btn', type: 'button' }) : null;
@@ -301,9 +307,12 @@ function chatView(root, cleanup, prefill = '') {
         approve.addEventListener('click', async () => {
           buttons.querySelectorAll('button').forEach((x) => { x.disabled = true; });
           result.textContent = 'Yapılıyor…';
+          puppet.set('thinking');
           const r = await runProposal(p);
           report(r.ok ? 'done' : 'failed', r.detail);
           finish(r.ok ? 'done' : 'failed', r.detail);
+          puppet.set(r.ok ? 'happy' : 'sad', r.ok ? 1300 : 2400);
+          puppet.say(r.ok ? 'Tamamdır!' : 'Olmadı, bir bakalım…', 2200);
         });
         cancel.addEventListener('click', () => { report('cancelled', ''); finish('cancelled', 'İptal edildi'); });
         review?.addEventListener('click', () => {
@@ -334,7 +343,11 @@ function chatView(root, cleanup, prefill = '') {
       ? `${m.text}\n${n === 1 ? 'Hazırlanan değişiklik' : 'Hazırlanan değişiklikler'}: ${titles}. Onaylamak için aşağıya bakın.`
       : `${m.text}\n${n === 1 ? 'Prepared change' : 'Prepared changes'}: ${titles}. Approve below to go ahead.`;
   };
-  const speakMessage = (m) => speak(spokenText(m), { id: m, onstart: () => speakers.get(m)?.(true), onend: () => speakers.get(m)?.(false) });
+  const speakMessage = (m) => speak(spokenText(m), {
+    id: m,
+    onstart: () => { speakers.get(m)?.(true); puppet.set('talking'); },
+    onend: () => { speakers.get(m)?.(false); if (puppet.state === 'talking') puppet.set('idle'); },
+  });
   function listenButton(m) {
     const btn = h('button', { class: 'btn small ghost msg-listen', type: 'button' });
     const paint = (on) => {
@@ -390,6 +403,8 @@ function chatView(root, cleanup, prefill = '') {
       h('span', { class: 'sr-only' }, 'EvrAI düşünüyor…'));
     log.append(thinking);
     reveal(thinking);
+    puppet.set('thinking');
+    puppet.say(byVoice ? 'Hmm, bir bakayım…' : 'Hmm, düşünüyorum…', 0);
     try {
       const home = await homeContext();
       const res = await fetch(`${base}/chat`, {
@@ -406,13 +421,19 @@ function chatView(root, cleanup, prefill = '') {
       if (alive) {
         const reply = { role: 'assistant', text: j.reply, proposals: (j.proposals || []).map((p) => ({ ...p, status: 'pending' })) };
         add(reply);
+        puppet.say(reply.proposals.length ? 'Hazırladım; onayınızı bekliyorum.' : '', 3200);
         if (loadSettings().speakReplies || byVoice) speakMessage(reply); // asked by voice: answered by voice
+        else puppet.set('talking', Math.min(4500, Math.max(1300, (reply.text || '').length * 28)));
       }
     } catch (e) {
       const message = e instanceof TypeError
-        ? 'Evra\'ya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.'
+        ? 'EvrAI\'ya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.'
         : e.message;
-      if (alive) add({ role: 'assistant', text: message, error: true, retry: text });
+      if (alive) {
+        add({ role: 'assistant', text: message, error: true, retry: text });
+        puppet.set('sad', 2600);
+        puppet.say('Hay aksi, olmadı…', 2600);
+      }
     } finally {
       thinking.remove();
       log.removeAttribute('aria-busy');
@@ -428,6 +449,7 @@ function chatView(root, cleanup, prefill = '') {
     mic.classList.toggle('listening', on);
     mic.title = on ? 'Dinliyorum… bitirmek için dokunun' : 'Sesle sorun';
     input.placeholder = on ? 'Dinliyorum…' : 'EvrAI\'ya sorun…';
+    if (on) { puppet.set('listening'); puppet.say('Dinliyorum…', 0); } else if (puppet.state === 'listening') { puppet.set('idle'); puppet.say(''); }
   };
   mic?.addEventListener('click', async () => {
     if (hearing) { hearing.stop(); return; }
@@ -468,6 +490,13 @@ function chatView(root, cleanup, prefill = '') {
   });
   const grow = () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 160)}px`; };
   input.addEventListener('input', grow);
+  // While the person types, the mascot watches the box.
+  input.addEventListener('input', () => {
+    if (busy) return;
+    puppet.lookAt(...(section.classList.contains('has-peek') ? [-0.5, 1] : [-1, 0.55]));
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => puppet.lookAt(null), 1400);
+  });
 
   newChat.addEventListener('click', () => {
     fetch(`${base}/reset`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ session: chat.session }) }).catch(() => {});
@@ -477,6 +506,8 @@ function chatView(root, cleanup, prefill = '') {
     saveChat(chat);
     drawAll();
     input.focus();
+    puppet.set('wave', 1600);
+    puppet.say('Temiz bir sayfa açtık!', 2200);
   });
 
   // Connects only now, when the assistant's tab is open (and only for members with the assistant).
@@ -498,7 +529,23 @@ function chatView(root, cleanup, prefill = '') {
     }
   }
 
-  root.append(h('section', { class: 'chat', 'aria-label': 'EvrAI' }, head, log, suggest, h('div', { class: 'chat-dock' }, form, note)));
+  const section = h('section', { class: 'chat', 'aria-label': 'EvrAI' }, head, log, suggest, h('div', { class: 'chat-dock' }, puppet.el, form, note));
+  root.append(section);
+  // Whole body when there's room beside the conversation, else peeking over the message box.
+  const fit = () => {
+    const peek = window.innerWidth - section.getBoundingClientRect().right < 236;
+    puppet.mode(peek ? 'peek' : 'stand');
+    section.classList.toggle('has-peek', peek);
+  };
+  window.addEventListener('resize', fit);
+  cleanup.push(() => window.removeEventListener('resize', fit));
+  fit();
+  requestAnimationFrame(fit);
+  setTimeout(() => {
+    if (!alive || busy) return;
+    puppet.set('wave', 2000);
+    puppet.say(chat.messages.length ? 'Tekrar hoş geldiniz!' : 'Merhaba! Ben EvrAI. Ne yapalım?', 3200);
+  }, 450);
   drawAll();
   checkHealth();
   if (chat.messages.length) reveal(log.lastElementChild);
