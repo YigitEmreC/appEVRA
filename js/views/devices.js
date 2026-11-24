@@ -191,8 +191,8 @@ function renderDetail(root, cleanup, deviceId) {
       if (!confirm(`${deviceName(d)} ağdan kaldırılsın mı? Yeniden kullanmak için tekrar eşleştirmeniz gerekir.`)) return;
       remove.disabled = true;
       try {
-        await store.backend.removeDevice(d.id, d);
-        toast(`${deviceName(d)} kaldırıldı`);
+        const r = await store.backend.removeDevice(d.id, d);
+        toast(r?.hidden ? `${deviceName(d)} kaldırıldı. Ulaşılamadığı için yeniden kullanmak üzere tekrar eşleştirin.` : `${deviceName(d)} kaldırıldı`);
         location.hash = '#/devices';
       } catch (err) {
         toast(`Kaldırılamadı: ${err.message}`, 'error');
@@ -313,8 +313,13 @@ function renderProduct(root, cleanup, p) {
         productTrouble(p))),
   );
 
-  const before = new Set(store.devices.keys());
-  const newDeviceId = () => [...store.devices.keys()].find((id) => !before.has(id));
+  // A device of this product that was removed while it couldn't be reached is only
+  // hidden (live.js removeDevice). Pairing the product again brings it back, and it
+  // counts as the new device.
+  const hidden = [...store.devices.values()].filter((d) => d.disabled_by === 'user' && productForDevice(d)?.id === p.id).map((d) => d.id);
+  const before = new Set([...store.devices.keys()].filter((id) => !hidden.includes(id)));
+  const newDeviceId = () => [...store.devices.keys()].find((id) => !before.has(id) && !store.devices.get(id)?.disabled_by);
+  const bringBack = () => hidden.forEach((id) => store.backend.updateDevice(id, { disabled_by: null }).catch(() => {}));
 
   // Empty parts (no hint, no title) are skipped; replaceChildren would print them as "null".
   function show(...kids) { if (alive) panel.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false)); }
@@ -371,6 +376,7 @@ function renderProduct(root, cleanup, p) {
     start.addEventListener('click', async () => {
       if (notConnected()) return;
       try { await store.backend.permitJoin(254, p); } catch (err) { toast(`Eşleştirme başlatılamadı: ${err.message}`, 'error'); return; }
+      bringBack();
       stopJoin = () => store.backend.stopJoin();
       const ends = Date.now() + 254000;
       const count = h('strong', null, '4:14');
@@ -406,7 +412,7 @@ function renderProduct(root, cleanup, p) {
       if (!code.value.trim()) { toast('Önce Matter kodunu girin', 'error'); return; }
       go.disabled = true;
       show(h('p', { class: 'waiting' }, h('span', { class: 'spinner' }), 'Bağlanıyor… bu bir dakika sürebilir.'));
-      try { await store.backend.matterCommission(code.value.trim(), p); await awaitDevice('Bağlandı. Görünmesi bekleniyor…'); }
+      try { await store.backend.matterCommission(code.value.trim(), p); bringBack(); await awaitDevice('Bağlandı. Görünmesi bekleniyor…'); }
       catch (err) { show(h('p', { class: 'error-line' }, `Bağlanılamadı: ${err.message}`), h('button', { class: 'btn primary', type: 'button', onclick: renderAgain }, 'Tekrar dene')); }
     });
     show(form);
@@ -443,6 +449,7 @@ function renderProduct(root, cleanup, p) {
   });
 
   async function begin() {
+    bringBack();
     try { renderStep(await store.backend.flowStart(domain, p)); }
     catch (err) { show(h('p', { class: 'error-line' }, `Kurulum başlatılamadı: ${err.message}`), fallbackLink()); }
   }
