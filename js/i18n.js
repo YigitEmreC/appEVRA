@@ -6,8 +6,9 @@
 //
 // How: i18n-index.js (built by webEVRA tools/i18n_build.py) knows every interface text
 // by id, plus patterns for texts with values in them ("{0} kaldırıldı"). The translations
-// come from /api/i18n: first all known ones in one request (kept on this device), then
-// any missing ones by id. Only ids are sent, so names, chats and anything else people
+// come first from a file shipped with the site / app (i18n/<lang>.json, written by webEVRA
+// tools/i18n_fill.py: instant, no waiting for anyone), then from /api/i18n: all the server
+// knows in one request (kept on this device), then any still missing ones by id. Only ids are sent, so names, chats and anything else people
 // type never go anywhere for translation; text that isn't in the index (a device's name,
 // a room) stays as it is.
 // The same file is used by the website (webEVRA public/assets/js/i18n.js) and the app.
@@ -267,6 +268,21 @@ function createEngine(lang) {
     }, delay);
   }
   /** Every translation the server already has, in one request (then kept on this device). */
+  // The file shipped with the site / app: everything translated so far, served like any
+  // other file (cached by the browser), so it doesn't wait for the server or the AI.
+  async function loadStatic() {
+    if (!config.staticUrl) return false;
+    try {
+      const res = await fetch(config.staticUrl(lang));
+      if (!res.ok) return false;
+      const texts = await res.json();
+      let added = 0;
+      for (const [id, t] of Object.entries(texts || {})) if (cache[id] !== t) { cache[id] = t; added++; }
+      if (added) persist();
+      return added > 0;
+    } catch { return false; }
+  }
+
   async function loadAll() {
     let at = 0;
     try { at = Number(localStorage.getItem(CACHE_AT)) || 0; } catch { /* none */ }
@@ -306,6 +322,7 @@ function createEngine(lang) {
       observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
       const titleEl = document.querySelector('title');
       if (titleEl) { titleObserver = new MutationObserver(doTitle); titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true }); }
+      if (await loadStatic() && !stopped) { walk(document.body); doTitle(); reveal(); }
       await loadAll();
       if (!stopped) { walk(document.body); doTitle(); }
       reveal();

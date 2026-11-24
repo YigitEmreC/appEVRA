@@ -33,7 +33,7 @@ document.documentElement.dataset.evraStarted = '1';
 // The Evra add-on's settings (evra-config.json) come first: everything below reads settings.
 await loadSiteConfig();
 // TR/EN (js/i18n.js): Turkish by default; in English the page's texts are swapped as they appear.
-startI18n({ api: `${websiteOrigin() || 'https://evrasmarthome.com'}/api/i18n`, loadIndex: () => import('./i18n-index.js') });
+startI18n({ api: `${websiteOrigin() || 'https://evrasmarthome.com'}/api/i18n`, staticUrl: (lang) => new URL(`i18n/${lang}.json`, document.baseURI).href, loadIndex: () => import('./i18n-index.js') });
 
 // "mobile: false" views are reached from links on phones and shown in the side bar on wide screens.
 const VIEWS = [

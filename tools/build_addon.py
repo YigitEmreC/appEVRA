@@ -27,7 +27,7 @@ from pathlib import Path
 APP = Path(__file__).resolve().parents[1]
 ADDON = APP / "evra"
 APP_FILES = ["index.html", "manifest.webmanifest", "sw.js"]
-APP_DIRS = ["css", "js", "icons"]
+APP_DIRS = ["css", "js", "icons", "i18n"]
 TEXT = {".yaml", ".yml", ".md", ".conf", ".json", "", ".sh", ".txt", ".js", ".css", ".html", ".webmanifest", ".svg"}
 
 
