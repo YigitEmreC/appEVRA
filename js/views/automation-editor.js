@@ -6,7 +6,7 @@ import { store, entityArea, areaName } from '../store.js';
 import { h, toast, isDev, setPrefs } from '../util.js';
 import { icon } from '../icons.js';
 import { card } from '../components.js';
-import { pushEntities } from '../push.js';
+import { notifyActions } from '../notify-links.js';
 
 // notify.notify (the Home Assistant app), or notify.send_message to the devices
 // registered from Evra (any other send_message target is an ordinary action).
@@ -211,15 +211,10 @@ export function toConfig(st) {
     } else if (a.type === 'press') cfg.actions.push({ action: 'button.press', target: { entity_id: a.entity_id } });
     else if (a.type === 'delay') cfg.actions.push({ delay: { seconds: Number(a.seconds) || 0 } });
     else if (a.type === 'notify') {
-      cfg.actions.push({ action: 'persistent_notification.create', data: { title: cfg.alias, message: a.message } });
-      if (a.push) {
-        // Devices that switched on notifications in Evra (Settings › Notifications).
-        // First, so they're reached even if the next step fails.
-        const evra = pushEntities();
-        if (evra.length) cfg.actions.push({ action: 'notify.send_message', target: { entity_id: evra }, data: { title: cfg.alias, message: a.message }, continue_on_error: true });
-        // Phones with the Home Assistant app; without one this step fails, which mustn't end the automation.
-        cfg.actions.push({ action: 'notify.notify', data: { title: cfg.alias, message: a.message }, continue_on_error: true });
-      }
+      // To the phones with Evra notifications (only there, so nothing arrives twice);
+      // unticked, or with no such phone yet, to Home Assistant's notification list.
+      if (a.push) cfg.actions.push(...notifyActions(cfg.alias, a.message));
+      else cfg.actions.push({ action: 'persistent_notification.create', data: { title: cfg.alias, message: a.message } });
     }
   }
   return cfg;
@@ -438,7 +433,7 @@ export function renderAutomationEditor(root, cleanup, configId, template = null)
 
   function actionRow(a, redraw) {
     const typeSel = select([['service', 'Bir cihazı kontrol et'], ['press', 'Bir düğmeye bas'], ['delay', 'Bekle'], ['notify', 'Bildirim gönder']], a.type, (v) => {
-      Object.assign(a, { type: v, entity_id: '', service: 'turn_on', data: {}, seconds: 30, message: '', push: false });
+      Object.assign(a, { type: v, entity_id: '', service: 'turn_on', data: {}, seconds: 30, message: '', push: true });
       redraw();
     }, 'Eylem türü');
     if (a.type === 'service') {
@@ -480,7 +475,7 @@ export function renderAutomationEditor(root, cleanup, configId, template = null)
     }
     return [typeSel,
       input(a.message, (v) => { a.message = v; }, { placeholder: 'Mesaj, örneğin "Pencere hâlâ açık"', 'aria-label': 'Mesaj' }),
-      h('label', { class: 'check-field' }, h('input', { type: 'checkbox', checked: !!a.push, onchange: (e) => { a.push = e.target.checked; } }), h('span', null, 'Telefonlara da gönder (Evra bildirimleri ya da Home Assistant uygulaması)'))];
+      h('label', { class: 'check-field' }, h('input', { type: 'checkbox', checked: !!a.push, onchange: (e) => { a.push = e.target.checked; } }), h('span', null, 'Telefonlara gönder (Evra bildirimleri). İşaretsizse yalnızca Home Assistant listesine düşer.'))];
   }
 
   load();

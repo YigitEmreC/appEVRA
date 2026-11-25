@@ -1,8 +1,9 @@
 // Notifications tied to scenes and automations (the Bildirimler tab, the scene editor).
 //
-// Who gets them: the phones and computers that switched on Evra notifications (js/push.js,
-// Home Assistant's HTML5 push), phones with the Home Assistant app (notify.notify), and
-// Home Assistant's own notification list.
+// Who gets them: only the phones and computers that switched on Evra notifications
+// (js/push.js, Home Assistant's HTML5 push), so nothing arrives twice (not also from the
+// Home Assistant app or its notification list). With no such device yet, the message goes to
+// Home Assistant's own notification list, so it isn't lost.
 //
 // Scenes are Evra's own (js/scenes.js, run by the app), so a scene carries
 // notify: { on, message } and runScene sends it right after it runs.
@@ -16,15 +17,12 @@ import { pushEntities } from './push.js';
 
 export const LINK_PREFIX = 'evra_notify_';
 
-/** Home Assistant actions that tell everyone (also used by js/home-care.js). */
+/** Home Assistant actions that tell the household (also js/home-care.js, the automation editor). */
 export function notifyActions(title, message) {
   const phones = pushEntities();
-  return [
-    ...(phones.length ? [{ action: 'notify.send_message', target: { entity_id: phones }, data: { title, message }, continue_on_error: true }] : []),
-    // Phones with the Home Assistant app; without one this step fails, which mustn't stop the rest.
-    { action: 'notify.notify', data: { title, message }, continue_on_error: true },
-    { action: 'persistent_notification.create', data: { title, message } },
-  ];
+  return phones.length
+    ? [{ action: 'notify.send_message', target: { entity_id: phones }, data: { title, message }, continue_on_error: true }]
+    : [{ action: 'persistent_notification.create', data: { title, message } }];
 }
 
 /** Sends a notification now, from the app (a scene that just ran). Quietly; never throws. */

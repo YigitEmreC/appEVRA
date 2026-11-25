@@ -11,7 +11,7 @@ import { store } from './store.js';
 import { h, toast } from './util.js';
 import { icon } from './icons.js';
 import { card, toggle } from './components.js';
-import { pushEntities } from './push.js';
+import { notifyActions } from './notify-links.js';
 import { member, plansUrl } from './account.js';
 
 // ---- smart alerts ----
@@ -20,14 +20,8 @@ const OPENINGS = ['door', 'window', 'opening', 'garage_door'];
 const LOW = "{% set ns = namespace(l=[]) %}{% for s in states.sensor if s.attributes.device_class == 'battery' and s.state | is_number and s.state | float(100) < 20 %}{% set ns.l = ns.l + [s.name ~ ' %' ~ (s.state | float | round(0) | int)] %}{% endfor %}";
 const WEATHER_TR = "{% set tr = {'sunny':'güneşli','clear-night':'açık','cloudy':'bulutlu','partlycloudy':'parçalı bulutlu','rainy':'yağmurlu','snowy':'karlı','snowy-rainy':'karla karışık yağmurlu','fog':'sisli','windy':'rüzgârlı','windy-variant':'rüzgârlı','pouring':'sağanak yağışlı','lightning':'şimşekli','lightning-rainy':'gök gürültülü','hail':'dolu yağışlı'} %}";
 
-// Each alert's message goes to the phones with Evra notifications and to Home Assistant's own list.
-function tell(title, message) {
-  const phones = pushEntities();
-  return [
-    ...(phones.length ? [{ action: 'notify.send_message', target: { entity_id: phones }, data: { title, message }, continue_on_error: true }] : []),
-    { action: 'persistent_notification.create', data: { title, message } },
-  ];
-}
+// Each alert's message goes to the phones with Evra notifications (js/notify-links.js).
+const tell = (title, message) => notifyActions(title, message);
 
 // One main entity per device that has its own connection (not Zigbee: reloading Zigbee would
 // restart every Zigbee device), to reload that connection when the device drops off.
@@ -106,6 +100,21 @@ const ALERTS = [
     }),
   },
 ];
+
+/**
+ * Saves the alerts that are on again, so they send to today's list of phones (a phone that
+ * just switched notifications on) and in today's way. Quietly; an alert that can't be read
+ * or saved stays as it was.
+ */
+export async function refreshAlerts() {
+  const b = store.backend;
+  if (!b || b.mode !== 'live') return;
+  for (const a of ALERTS) {
+    try {
+      if (await b.fetchAutomationConfig(a.id)) await b.saveAutomation(a.id, a.config());
+    } catch { /* the next one */ }
+  }
+}
 
 export function alertsCard() {
   const rows = ALERTS.map((a) => {

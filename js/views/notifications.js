@@ -11,7 +11,7 @@ import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { card, toggle } from '../components.js';
 import { pushState, enablePush, disablePush, showHere, pushEntities, waitForPushEntity } from '../push.js';
-import { alertsCard } from '../home-care.js';
+import { alertsCard, refreshAlerts } from '../home-care.js';
 import { SCENES, saveScene, loadScenes } from '../scenes.js';
 import { userAutomations, linkedAutomations, automationLink, setAutomationLink, removeAutomationLink, refreshAutomationLinks } from '../notify-links.js';
 
@@ -39,7 +39,7 @@ export function deviceNotifyCard(cleanup) {
     try {
       if (on) { await enablePush(); toast('Bu cihazda bildirimler açıldı'); } else { await disablePush(); toast('Bu cihazda bildirimler kapatıldı'); }
       // The automations' notifications are sent to the list of devices saved with them.
-      if (store.backend?.mode === 'live') setTimeout(() => refreshAutomationLinks(), 4000);
+      if (store.backend?.mode === 'live') setTimeout(() => { refreshAutomationLinks(); refreshAlerts(); }, 4000);
     } catch (e) {
       toast(`Bildirimler ${on ? 'açılamadı' : 'kapatılamadı'}: ${e.message}`, 'error');
     } finally {
@@ -246,7 +246,15 @@ function automationsCard() {
     h('div', { class: 'btn-row' }, h('a', { class: 'btn ghost small', href: '#/automations/new' }, icon('plus', 16), 'Bildirimli otomasyon oluştur')));
 }
 
+// Alerts and automation notifications saved by an older Evra also sent to the Home Assistant
+// app and its list; saving them again once makes them Evra-only (and current).
+let updatedThisVisit = false;
+
 export function renderNotifications(root, cleanup) {
+  if (!updatedThisVisit && store.backend?.mode === 'live') {
+    updatedThisVisit = true;
+    setTimeout(() => { refreshAlerts(); refreshAutomationLinks(); }, 2000);
+  }
   root.replaceChildren(
     deviceNotifyCard(cleanup),
     installCard(),
