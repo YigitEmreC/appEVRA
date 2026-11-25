@@ -49,8 +49,11 @@ export function updatesCard(cleanup) {
   const checkBtn = h('button', { class: 'btn small', type: 'button' }, icon('refresh', 15), 'Güncellemeleri kontrol et');
   const notes = new Map(); // entity_id -> open release notes element (kept across redraws)
   let watching = () => {};
+  let watchedKey = '';
+  const openParts = new Set(); // which lists are open, kept across redraws
 
   checkBtn.addEventListener('click', async () => {
+    if (!confirm('Home Assistant yeni güncellemeleri arasın mı?')) return;
     checkBtn.disabled = true;
     try {
       await store.backend?.refreshUpdates?.(store.all('update').map((s) => s.entity_id));
@@ -73,9 +76,11 @@ export function updatesCard(cleanup) {
     }
   };
   const skip = async (s) => {
+    if (!confirm(`${titleOf(s)} ${s.attributes.latest_version || ''} sürümü atlansın mı? Bir sonraki sürüm çıkınca yine görünür.`)) return;
     try { await store.backend.callService('update', 'skip', {}, { entity_id: s.entity_id }); toast(`${titleOf(s)} ${s.attributes.latest_version} atlandı`); } catch (e) { toast(`Atlanamadı: ${e.message}`, 'error'); }
   };
   const unskip = async (s) => {
+    if (!confirm(`${titleOf(s)} için atlama geri alınsın mı?`)) return;
     try { await store.backend.callService('update', 'clear_skipped', {}, { entity_id: s.entity_id }); } catch (e) { toast(`Olmadı: ${e.message}`, 'error'); }
   };
   const notesFor = (s) => {
@@ -113,6 +118,12 @@ export function updatesCard(cleanup) {
       notes.get(s.entity_id));
   };
 
+  const keepOpen = (key, el) => {
+    el.open = openParts.has(key);
+    el.addEventListener('toggle', () => { if (el.open) openParts.add(key); else openParts.delete(key); });
+    return el;
+  };
+
   const draw = () => {
     const all = store.all('update').sort((a, b) => rank(a) - rank(b) || titleOf(a).localeCompare(titleOf(b), 'tr'));
     const avail = all.filter((s) => s.state === 'on' || inProgress(s));
@@ -122,18 +133,26 @@ export function updatesCard(cleanup) {
       : avail.length ? `${avail.length} güncelleme var.` : 'Her şey güncel.';
     list.replaceChildren(
       ...avail.map(row),
-      skipped.length ? h('details', { class: 'upd-more' }, h('summary', null, `Atlanan güncellemeler (${skipped.length})`),
+      skipped.length ? keepOpen('skipped', h('details', { class: 'upd-more' }, h('summary', null, `Atlanan güncellemeler (${skipped.length})`),
         ...skipped.map((s) => {
           const b = h('button', { class: 'btn small ghost', type: 'button' }, 'Geri al');
           b.addEventListener('click', () => unskip(s));
           return h('div', { class: 'upd-line' }, h('span', null, `${titleOf(s)} ${s.attributes.skipped_version}`), b);
-        })) : null,
-      current.length ? h('details', { class: 'upd-more' }, h('summary', null, `Güncel olanlar (${current.length})`),
-        ...current.map((s) => h('div', { class: 'upd-line' }, h('span', null, titleOf(s)), h('small', { class: 'muted' }, s.attributes.installed_version || '')))) : null);
+        }))) : null,
+      current.length ? keepOpen('current', h('details', { class: 'upd-more' }, h('summary', null, `Güncel olanlar (${current.length})`),
+        ...current.map((s) => h('div', { class: 'upd-line' }, h('span', null, titleOf(s)), h('small', { class: 'muted' }, s.attributes.installed_version || ''))))) : null);
     // Follow these entities (progress, a new version); a new update entity shows on the next check.
-    watching();
+    // Only redraw when the set of update entities changes; store.watch calls its function
+    // right away, so the first call is skipped (it used to redraw again and again, closing
+    // whatever was open).
     const ids = all.map((s) => s.entity_id);
-    watching = ids.length ? store.watch(ids, () => queueMicrotask(redrawSoon)) : () => {};
+    const key = ids.join(',');
+    if (key !== watchedKey) {
+      watching();
+      watchedKey = key;
+      let first = true;
+      watching = ids.length ? store.watch(ids, () => { if (first) { first = false; return; } redrawSoon(); }) : () => {};
+    }
   };
   let pending = false;
   const redrawSoon = () => { if (pending) return; pending = true; setTimeout(() => { pending = false; draw(); }, 300); };
@@ -160,10 +179,12 @@ export function systemCard() {
   const say = (text) => { result.hidden = false; result.textContent = text; };
   const away = 'Evra bağlantıyı kaybedecek ve Home Assistant açılınca kendisi yeniden bağlanacak (1–3 dakika).';
 
-  const action = (label, iconName, hint, run, { danger = false, ask = null } = {}) => {
+  // Every button asks first, so nothing happens from a stray tap; shutting the Pi down asks twice.
+  const action = (label, iconName, hint, run, { danger = false, ask = null, askAgain = null } = {}) => {
     const btn = h('button', { class: `btn small${danger ? ' danger' : ''}`, type: 'button' }, icon(iconName, 15), SHORT[label] || label);
     btn.addEventListener('click', async () => {
-      if (ask && !confirm(ask)) return;
+      if (!confirm(ask || `${label}?`)) return;
+      if (askAgain && !confirm(askAgain)) return;
       btn.disabled = true;
       try { await run(); } catch (e) {
         // Restarting drops the connection on purpose.
@@ -186,11 +207,11 @@ export function systemCard() {
       say('Kontrol ediliyor…');
       const r = await b().checkConfig();
       say(r?.result === 'valid' ? 'Yapılandırma geçerli; güvenle yeniden başlatabilirsiniz.' : `Yapılandırmada hata var: ${String(r?.errors || r?.result || '').slice(0, 400)}`);
-    }),
+    }, { ask: 'Home Assistant ayarları kontrol edilsin mi? Hiçbir şey değişmez.' }),
     action('Hızlı yeniden yükle', 'refresh', 'Otomasyonları, sahneleri ve YAML ayarlarını yeniden yükler; Home Assistant kapanmaz.', async () => {
       await b().callService('homeassistant', 'reload_all', {}, {});
       say('Ayarlar yeniden yüklendi.');
-    }),
+    }, { ask: 'Otomasyonlar, sahneler ve YAML ayarları yeniden yüklensin mi? Çalışmakta olan otomasyonlar baştan başlar.' }),
     action('Home Assistant’ı yeniden başlat', 'power', 'Takılan bir entegrasyon ya da yeni bir ayar için. Pi kapanmaz.', async () => {
       say(away);
       await b().callService('homeassistant', 'restart', {}, {});
@@ -206,7 +227,7 @@ export function systemCard() {
     action('Pi’yi kapat', 'power', 'Pi tamamen kapanır. Yeniden açmak için fişini çekip takmak gerekir; uzaktan açılamaz.', async () => {
       say('Pi kapanıyor. Yeniden açmak için fişini çekip geri takın.');
       await b().callService('hassio', 'host_shutdown', {}, {});
-    }, { danger: true, ask: 'Pi KAPATILSIN mı? Uzaktan geri açılamaz; biri fişini çekip takana kadar ev çevrimdışı kalır.' }),
+    }, { danger: true, ask: 'Pi KAPATILSIN mı? Uzaktan geri açılamaz; biri fişini çekip takana kadar ev çevrimdışı kalır.', askAgain: 'Emin misiniz? Pi kapanacak ve evde biri fişini çekip takana kadar hiçbir şey çalışmayacak.' }),
   ];
 
   const body = h('div', { class: 'sys-body' });
