@@ -381,6 +381,38 @@ export function createLiveBackend(hassUrl) {
 
     // ---- devices ----
     updateDevice(deviceId, patch) { return send({ type: 'config/device_registry/update', device_id: deviceId, ...patch }); },
+    // Reconnecting a device that dropped off (js/device-health.js). Its own connection (config
+    // entry) is reloaded, so Home Assistant looks for it again: a Wi-Fi bulb after the router
+    // restarted, an ESPHome module, a Shelly. A Zigbee device is asked to report in instead;
+    // reloading Zigbee itself would restart every Zigbee device in the home.
+    async reconnectDevice(device, ids = []) {
+      const update = () => (ids.length ? send({ type: 'call_service', domain: 'homeassistant', service: 'update_entity', target: { entity_id: ids } }, 20000).catch(() => {}) : null);
+      const zha = (device?.identifiers || []).find((i) => i[0] === 'zha');
+      if (zha) {
+        try { await send({ type: 'zha/devices/reconfigure', ieee: zha[1] }, 30000); } catch { /* a sleeping battery device answers when woken */ }
+        await update();
+        return { how: 'zigbee' };
+      }
+      let reloaded = false;
+      for (const entryId of device?.config_entries || []) {
+        try { await rest('POST', `config/config_entries/entry/${entryId}/reload`); reloaded = true; } catch { /* the service below */ }
+      }
+      if (!reloaded) {
+        try { await send({ type: 'call_service', domain: 'homeassistant', service: 'reload_config_entry', target: { device_id: device.id } }, 60000); reloaded = true; } catch { /* only a refresh then */ }
+      }
+      await update();
+      return { how: reloaded ? 'reloaded' : 'refreshed' };
+    },
+    async refreshDevice(device, ids = []) {
+      if (ids.length) await send({ type: 'call_service', domain: 'homeassistant', service: 'update_entity', target: { entity_id: ids } }, 20000);
+    },
+    // How Home Assistant's connections for this device are doing (loaded, setup_retry …).
+    async connectionInfo(device) {
+      const want = new Set(device?.config_entries || []);
+      if (!want.size) return [];
+      const all = await send({ type: 'config_entries/get' });
+      return (all || []).filter((e) => want.has(e.entry_id)).map((e) => ({ domain: e.domain, title: e.title, state: e.state, reason: e.reason || '' }));
+    },
     // Evra's own data (the person's scenes and remotes), kept in Home Assistant for this
     // user, so it's the same on every screen they sign in on (js/appdata.js).
     async getAppData(key) { const r = await send({ type: 'frontend/get_user_data', key: `evra_${key}` }); return r?.value ?? null; },

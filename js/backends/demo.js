@@ -677,6 +677,9 @@ export function createDemoBackend() {
     },
 
     // devices
+    async reconnectDevice() { await new Promise((r) => setTimeout(r, 600)); return { how: 'demo' }; },
+    async refreshDevice() {},
+    async connectionInfo() { return [{ domain: 'demo', title: 'Örnek ev', state: 'loaded', reason: '' }]; },
     async updateDevice(deviceId, patch) {
       const d = devices.get(deviceId);
       if (!d) throw new Error('device not found');

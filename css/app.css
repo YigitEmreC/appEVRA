@@ -2380,3 +2380,24 @@ html.i18n-rtl body :is(h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, button, a, 
   .hm-fname { max-width: none; font-size: 11px; margin-left: 2px; white-space: nowrap; }
   .hm.has-floors .hm-all { left: auto; right: 0; }
 }
+
+/* Devices that dropped off: banner (Home, Devices) and the device page card (js/device-health.js) */
+.offline-banner { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 14px; border-radius: var(--radius); background: color-mix(in srgb, #f08a24 14%, var(--card)); border: 1px solid color-mix(in srgb, #f08a24 45%, transparent); }
+.offline-banner > .icon { color: #f08a24; flex: none; }
+.offline-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.offline-text small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offline-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) { .offline-banner { flex-wrap: wrap; } .offline-actions { width: 100%; justify-content: space-between; } }
+.conn-status { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 0 0 6px; }
+.conn-status.ok { color: var(--ok, #2f9e5f); }
+.conn-status.bad { color: var(--danger); }
+.conn-entry { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.conn-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 650; background: var(--card-2); }
+.conn-pill.ok { color: var(--ok, #2f9e5f); }
+.conn-pill.warn { color: #d97706; }
+.conn-pill.bad { color: var(--danger); }
+.conn-ok { color: var(--ok, #2f9e5f); }
+.conn-bad { color: var(--danger); }
+.conn-tips { margin-top: 8px; }
+.conn-tips summary { cursor: pointer; font-weight: 700; }
+.conn-tips ol { margin: 8px 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: 13.5px; }

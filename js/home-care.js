@@ -29,7 +29,40 @@ function tell(title, message) {
   ];
 }
 
+// One main entity per device that has its own connection (not Zigbee: reloading Zigbee would
+// restart every Zigbee device), to reload that connection when the device drops off.
+function reconnectTargets() {
+  const out = [];
+  for (const d of store.devices.values()) {
+    if (d.disabled_by || d.entry_type === 'service' || !(d.config_entries || []).length) continue;
+    if ((d.identifiers || []).some((i) => i[0] === 'zha')) continue;
+    const e = [...store.entities.values()].find((x) => x.device_id === d.id && !x.entity_category && !x.disabled_by && !x.hidden_by);
+    if (e) out.push(e.entity_id);
+  }
+  return out;
+}
+
 const ALERTS = [
+  {
+    id: 'evra_auto_reconnect', title: 'Kopan cihazları yeniden bağla',
+    hint: 'Bir cihaz 10 dakika ulaşılamaz kalırsa (gece modem yeniden başlayınca kopan ampuller gibi) sistem onu kendiliğinden yeniden bağlar; olmazsa size haber verir. Yeni cihaz ekledikten sonra bunu bir kez kapatıp açın.',
+    config() {
+      const ids = reconnectTargets();
+      if (!ids.length) throw new Error('Yeniden bağlanabilecek cihaz yok');
+      return {
+        alias: 'Evra: kopan cihazları yeniden bağla', description: 'Evra uygulaması kurdu (Ayarlar → Akıllı uyarılar).', mode: 'queued', max: 25,
+        triggers: [{ trigger: 'state', entity_id: ids, to: 'unavailable', for: { minutes: 10 } }],
+        actions: [
+          { action: 'homeassistant.reload_config_entry', target: { entity_id: '{{ trigger.entity_id }}' }, continue_on_error: true },
+          { delay: { minutes: 3 } },
+          {
+            if: [{ condition: 'template', value_template: "{{ is_state(trigger.entity_id, 'unavailable') }}" }],
+            then: tell('Cihaz bağlanamadı', '{{ trigger.to_state.name }} 13 dakikadır ulaşılamıyor; yeniden bağlamayı denedim ama gelmedi. Elektriğini kontrol edin ya da uygulamada cihazın sayfasından sorun gidermeye bakın.'),
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'evra_alert_open', title: 'Açık kalan kapı ve pencereler', hint: 'Bir kapı ya da pencere 1 saatten uzun açık kalınca haber verir.',
     config() {

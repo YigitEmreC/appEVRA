@@ -10,6 +10,7 @@ import { arrangeable } from '../edit.js';
 import { mascot } from '../mascot.js';
 import { member, canUseAssistant, onAccount, plansUrl } from '../account.js';
 import { homeModel } from '../home-model.js';
+import { offlineBanner } from '../device-health.js';
 import { roomsByFloor } from '../rooms.js';
 
 // Home follows the person's layout (js/custom.js). In edit mode everything
@@ -58,7 +59,7 @@ export function renderHome(root, cleanup) {
     big: true,
     flag: { field: 'half', cls: 'half', icon: 'widen', label: 'Yarım genişlik (büyük ekranlarda yan yana)' },
   });
-  root.append(alerts, blocks);
+  root.append(alerts, offlineBanner(cleanup), blocks);
 
   // Evra's mascot: a small button that opens the assistant. When the home's plan doesn't
   // include it, the mascot wears a gold lock and opens the plans on the website instead.

@@ -1,4 +1,5 @@
 import { CATEGORIES, PRODUCTS, productById, productForDevice, PAIRING_LABEL } from '../catalog.js';
+import { offlineBanner, connectionCard } from '../device-health.js';
 import { store, userDevices, sortedAreas, deviceName, areaName, deviceEntities } from '../store.js';
 import { h, num, numVal, isAvailable, toast, sleep, fold } from '../util.js';
 import { icon } from '../icons.js';
@@ -173,7 +174,7 @@ function renderList(root, cleanup, initialTab) {
     if (next !== sig) { sig = next; draw(); }
   }));
   drawTabs();
-  root.append(h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Cihaz ekle')), search, body);
+  root.append(h('div', { class: 'toolbar' }, tabs, h('a', { class: 'btn primary', href: '#/devices/add' }, icon('plus', 16), 'Cihaz ekle')), offlineBanner(cleanup), search, body);
 }
 
 // ---- rooms ---------------------------------------------------------------------------------
@@ -358,6 +359,7 @@ function renderDetail(root, cleanup, deviceId) {
       h('div', { class: 'detail-grid' },
         h('div', { class: 'detail-main' }, deviceCardFor(d, local)),
         h('div', { class: 'detail-side' },
+          connectionCard(d, local),
           card({ title: 'Ayarlar', iconName: 'gear' },
             h('label', { class: 'field' }, h('span', null, 'Ad'), nameForm),
             h('label', { class: 'field' }, h('span', null, 'Oda'), room)),
