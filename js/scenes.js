@@ -14,6 +14,7 @@ import { store, userDevices, deviceEntities, deviceName, ensurePower } from './s
 import { productForDevice } from './catalog.js';
 import { sleep, loadSettings, saveSettings } from './util.js';
 import { loadData, saveData, cachedData, onData } from './appdata.js';
+import { notifyNow } from './notify-links.js';
 
 export const WARM = 2700;
 export const NEUTRAL = 4000;
@@ -218,5 +219,7 @@ export async function runScene(scene, rooms = sceneRooms(scene.id)) {
     lastIr = !!step.ir;
   }
   saveSettings({ lastScene: { id: scene.id, at: Date.now() } });
+  // A scene with its notification on (Bildirimler, or the scene editor) tells everyone.
+  if (scene.notify?.on) notifyNow(scene.name, scene.notify.message || `${scene.name} sahnesi açıldı`);
   return { steps: steps.length, failed };
 }

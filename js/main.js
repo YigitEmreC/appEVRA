@@ -19,6 +19,7 @@ import { renderDevices } from './views/devices.js';
 import { renderChat } from './views/chat.js';
 import { renderScenes } from './views/scenes.js';
 import { renderSupport } from './views/support.js';
+import { renderNotifications } from './views/notifications.js';
 import { openCustomizer } from './views/customize.js';
 import { getCustom, applyLook, ordered, isHidden, isEditing, setEditing, LOCKED_NAV, HEADER_ITEMS } from './custom.js';
 import { arrangeable } from './edit.js';
@@ -45,6 +46,7 @@ const VIEWS = [
   { id: 'energy', label: 'Enerji', icon: 'chart', render: renderEnergy, title: 'Enerji ve iklim', mobile: false },
   { id: 'remotes', label: 'Kumandalar', icon: 'remote', render: renderRemotes, title: 'Kumandalar', mobile: false },
   { id: 'chat', label: 'EvrAI', icon: 'devil', render: renderChat, title: 'EvrAI' },
+  { id: 'notifications', label: 'Bildirimler', icon: 'bell', render: renderNotifications, title: 'Bildirimler', mobile: false },
   { id: 'support', label: 'Destek', icon: 'sos', render: renderSupport, title: 'Destek', mobile: false },
   { id: 'settings', label: 'Ayarlar', icon: 'gear', render: renderSettings, title: 'Ayarlar' },
   // Reached from Settings, not shown in the navigation.

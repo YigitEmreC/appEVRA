@@ -139,43 +139,110 @@ const ENTRY_STATE = {
   failed_unload: ['bad', 'Bağlantı takıldı'],
 };
 
+// What to try, built for this device: how it gets power (a bulb on a wall switch, a plug,
+// a battery sensor, a module behind the fuse box…), how it talks to the hub (Wi-Fi, Zigbee,
+// the maker's cloud, Bluetooth, Thread), its brand (Tapo, ESPHome, the cloud app's name) and a
+// few notes for the product itself. Catalog ids: js/catalog.js.
+const POWER_OF = {
+  panel: 'wired', motion: 'battery', 'climate-sensor': 'battery', contact: 'battery', presence: 'usb',
+  smoke: 'battery', leak: 'battery', sos: 'battery', 'camera-indoor': 'usb', gas: 'plugin',
+  'water-valve': 'plugin', siren: 'usb', 'camera-outdoor': 'plugin', lock: 'lock', trv: 'battery',
+  'boiler-relay': 'wired', thermostat: 'wired', co2: 'usb', plug: 'plug', bulb: 'bulb', 'led-strip': 'strip',
+  'wall-switch': 'wired', 'zigbee-plug': 'plug', 'energy-meter': 'wired', 'blind-chain': 'recharge',
+  'blind-tube': 'wired', curtain: 'plugin', shutter: 'wired', irrigation: 'battery', mesh: 'plugin',
+  'ir-remote': 'usb', 'robot-vacuum': 'dock', 'air-purifier': 'appliance', 'pet-feeder': 'appliance',
+  'cat-litter': 'appliance', 'smart-kettle': 'kettle', 'smart-fan': 'appliance',
+};
+// Zigbee devices on mains power also carry the Zigbee network for the battery ones near them.
+const ZIGBEE_ROUTERS = new Set(['presence', 'gas', 'water-valve', 'thermostat', 'zigbee-plug', 'energy-meter', 'shutter', 'blind-tube']);
+const POWER_TIPS = {
+  bulb: ['Elektriği var mı? Ampulün duvar anahtarı açık kalmalı; anahtar kapanınca ampul ağdan düşer.', 'Duvar anahtarını kapatıp 10 saniye sonra açın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  strip: ['Şeridin adaptörü prize takılı mı, kontrol kutusunun ışığı yanıyor mu?', 'Şeridin adaptörünü prizden çekip 10 saniye sonra geri takın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  plug: ['Akıllı priz duvardaki prize tam oturmuş mu, üzerindeki ışık yanıyor mu?', 'Akıllı prizi duvardan çekip 10 saniye sonra geri takın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  plugin: ['Cihazın adaptörü ya da fişi prize takılı mı, ışığı yanıyor mu?', 'Fişini çekip 10 saniye sonra geri takın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  usb: ['USB kablosu ve adaptörü takılı mı, cihazın ışığı yanıyor mu? Zayıf bir telefon şarj aleti de kopmalara yol açabilir.', 'USB kablosunu çekip 10 saniye sonra geri takın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  battery: ['Pili bitmiş olabilir: uygulamada pil seviyesine bakın, düşükse pilini değiştirin.', 'Cihazın düğmesine bir kez basın ya da pilini çıkarıp geri takın; uyanıp kendini bildirir.'],
+  lock: ['Kilidin pilleri zayıflayınca önce bağlantısını kapatır: uygulamada pil seviyesine bakın, düşükse pillerini değiştirin. Kapı yine anahtarla ve parmak iziyle açılır.', 'Kilidin tuş takımına bir kez dokunun; kilit uyanır ve kendini bildirir.'],
+  recharge: ['Motorun pili şarjlıdır: bittiyse şarj kablosuyla doldurun (birkaç saat sürer).', 'Motorun düğmesine bir kez basın; uyanıp kendini bildirir.'],
+  wired: ['Bağlı olduğu hattın sigortası açık mı? Elektrik kesintisinden sonra modül birkaç dakika geç gelebilir.', 'İlgili sigortayı 10 saniye indirip kaldırın; 1 dakika bekleyip "Yeniden bağla"ya basın. Sigorta kutusunun dışında elektrik işine kendiniz girmeyin.'],
+  appliance: ['Cihazın kendisi açık mı, fişi takılı mı?', 'Fişini çekip 10 saniye sonra geri takın; cihaz açılınca 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  kettle: ['Su ısıtıcının tabanı prize takılı mı, ısıtıcı tabanına oturmuş mu?', 'Tabanın fişini çekip 10 saniye sonra geri takın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  dock: ['Süpürge şarj istasyonunda mı, istasyonun fişi takılı mı? Pili bitip bir yerde kaldıysa istasyona taşıyın.', 'Süpürgenin açma düğmesine birkaç saniye basılı tutup yeniden başlatın; 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+  unknown: ['Cihazın elektriği ya da pili var mı, ışığı yanıyor mu?', 'Cihazın elektriğini 10 saniye kesip geri verin (pilliyse pilini çıkarıp takın); 1 dakika bekleyip "Yeniden bağla"ya basın.'],
+};
+const CLOUD_APP = { tuya: 'Tuya / Smart Life', xiaomi_miio: 'Xiaomi Home', petkit: 'PETKIT' };
+const PRODUCT_NOTES = {
+  'ir-remote': ['Modül bağlı görünüyor ama klima ya da televizyon tepki vermiyorsa sorun bağlantıda değil, kızılötesi ışıktadır: modülü klimayı ve televizyonu doğrudan görecek bir yere koyun.'],
+  'camera-indoor': ['Kameranın ışığı kırmızı yanıp sönüyorsa Wi-Fi ağını bulamıyordur; modemin adı ya da şifresi değiştiyse Destek sekmesinden bize yazın.'],
+  'camera-outdoor': ['Kameranın ışığı kırmızı yanıp sönüyorsa Wi-Fi ağını bulamıyordur; dışarıda sinyal zayıfsa kameraya yakın bir mesh ünitesi çözer.'],
+  panel: ['Ekran açık ama Evra boş görünüyorsa ekranın kendisini yeniden başlatın (ekranın ayarları → yeniden başlat).'],
+  'robot-vacuum': ['Süpürge bağlı ama haritası kaybolduysa ya da temizlik yarıda kalıyorsa bu bir bağlantı sorunu değildir; üreticinin uygulamasında hata mesajına bakın.'],
+  'pet-feeder': ['Elektrik kesilince yedek pille mama vermeye devam eder ama Wi-Fi kapanır; elektrik gelince kendiliğinden bağlanır.'],
+  'boiler-relay': ['Röle bağlı ama kombi çalışmıyorsa sorun kombi tarafındadır: kombinin kendi ekranında hata kodu var mı bakın.'],
+  thermostat: ['Termostat ekranı yanıyor ama ayarlar gelmiyorsa merkezle bağlantısı kopmuştur; önce sigortayı deneyin.'],
+  lock: ['Merkezin Thread çubuğu takılı olmalı; kapı merkezden çok uzaksa araya bir Thread cihazı (ör. Matter priz) ağı güçlendirir.'],
+  mesh: ['Deco uygulamasında bütün üniteler çevrimiçi mi bakın; ana ünite modeme kabloyla bağlı olmalı.'],
+  gas: ['Dedektörü uzun süre prizden çekmeyin: çekiliyken gaz kaçağını algılamaz.'],
+  smoke: ['Test düğmesine basınca öterse dedektör çalışıyordur; sorun yalnızca merkezle bağlantıdadır.'],
+  'water-valve': ['Vana kolunun motoru ana vanaya sıkıca oturmalı; bağlantı gelse de vana dönmüyorsa kelepçeyi kontrol edin.'],
+};
+
 function kindOfLink(d, p) {
-  if ((d.identifiers || []).some((i) => i[0] === 'zha')) return 'zigbee';
+  const ids = (d.identifiers || []).map((i) => i[0]);
+  if (ids.includes('zha')) return 'zigbee';
+  if (ids.includes('matter') && p?.id === 'lock') return 'thread';
   const proto = (p?.protocol || '').toLowerCase();
-  if (proto.includes('bulut')) return 'cloud';
+  if (proto.includes('bulut') || p?.pairing === 'cloud') return 'cloud';
   if (proto.includes('bluetooth')) return 'bluetooth';
   if (proto.includes('zigbee') && !proto.includes('wi-fi')) return 'zigbee';
   if (proto.includes('thread')) return 'thread';
   return 'wifi';
 }
 
-const TIPS = {
-  wifi: [
-    'Elektriği var mı? Ampulde duvar anahtarı açık kalmalı; anahtar kapanınca ampul ağdan düşer.',
-    'Elektriğini 10 saniye kesip geri verin (ampulde anahtarı kapatıp açın), 1 dakika bekleyip "Yeniden bağla"ya basın.',
-    'Tapo / TP-Link cihazıysa telefondan Tapo uygulamasını açın: telefon ağda cihazı arar, gece "uyuyan" ampul uyanır ve geri gelir. "Yeniden bağla" da aynı aramayı yapar.',
-    'Gece modem yeniden başladıysa cihazın adresi (IP) değişmiş olabilir. Modemde bu cihaza sabit IP (DHCP rezervasyonu) verilirse bir daha olmaz. Modemine erişilemeyen (kiralık) evlerde kalıcı çözüm Evra Ağ Kutusu (evin içinde küçük bir router) ya da Zigbee ampullerdir; Destek sekmesinden bize yazın.',
-    'Modemden uzaksa ya da arada kalın duvar varsa sinyal zayıftır; mesh Wi-Fi çözer.',
-  ],
-  zigbee: [
-    'Pilli bir cihazsa düğmesine bir kez basın; uyanıp kendini bildirir.',
-    'Pili bitmiş olabilir; pilini değiştirip düğmesine basın.',
-    'Merkezden uzaksa araya bir Zigbee priz koymak ağı güçlendirir.',
-    'Hâlâ gelmiyorsa cihazı kaldırıp yeniden eşleştirin (Cihazı kaldır → Cihaz ekle).',
-  ],
-  cloud: [
-    'Bu cihaz üreticinin bulutu üzerinden bağlanır: evde internet var mı, üreticinin kendi uygulamasında çevrimiçi görünüyor mu kontrol edin.',
-    'Cihazı elektrikten çekip geri takın, sonra "Yeniden bağla"ya basın.',
-  ],
-  bluetooth: [
-    'Bluetooth köprüsüne (Klima ve TV Kumandası modülü) yakın olmalı; araya duvar girmesin.',
-    'Cihazı kaldırıp tabanına yeniden oturtun ya da pilini kontrol edin.',
-  ],
-  thread: [
-    'Elektriği ya da pili var mı kontrol edin; merkezin Thread çubuğu takılı olmalı.',
-    'Cihazı yeniden başlatıp 1 dakika sonra "Yeniden bağla"ya basın.',
-  ],
-};
+function powerOf(d, p) {
+  if (p && POWER_OF[p.id]) return POWER_OF[p.id];
+  // Not one of ours: a battery entity says it runs on batteries.
+  const battery = deviceEntities(d.id).some((e) => /battery/.test(e.entity_id) || e.original_device_class === 'battery' || e.device_class === 'battery');
+  return battery ? 'battery' : 'unknown';
+}
+
+/** The steps for this device, in the order worth trying. */
+export function tipsFor(d, p = productForDevice(d)) {
+  const link = kindOfLink(d, p);
+  const power = powerOf(d, p);
+  const ids = (d.identifiers || []).map((i) => i[0]);
+  const maker = `${d.manufacturer || ''} ${p?.model || ''}`.toLowerCase();
+  const tips = [...POWER_TIPS[power]];
+  if (link === 'wifi') {
+    if (ids.includes('tplink') || p?.integration === 'tplink' || /tapo|tp-link/.test(maker)) {
+      tips.push('Bu bir Tapo cihazı: telefondan Tapo uygulamasını açın. Telefon ağda cihazı arar; gece "uyuyan" cihaz uyanır ve geri gelir. "Yeniden bağla" da aynı aramayı yapar.');
+    }
+    if (ids.includes('esphome') || /esphome/i.test(p?.protocol || '')) {
+      tips.push('Cihazın ışığı yanıp sönüyorsa Wi-Fi ağına bağlanamıyordur: modemin adı ya da şifresi değiştiyse cihazın yeniden kurulması gerekir; Destek sekmesinden bize yazın.');
+    }
+    // Written out whole (not pieced together) so each sentence has its translation.
+    tips.push({
+      bulb: 'Gece modem yeniden başladıysa cihazın adresi (IP) değişmiş olabilir. Modemde bu cihaza sabit IP (DHCP rezervasyonu) verilirse bir daha olmaz. Modemine erişilemeyen (kiralık) evlerde kalıcı çözüm için Evra Ağ Kutusu (evin içinde küçük bir router) kurabiliriz ya da Zigbee ampullere geçebilirsiniz; Destek sekmesinden bize yazın.',
+      plug: 'Gece modem yeniden başladıysa cihazın adresi (IP) değişmiş olabilir. Modemde bu cihaza sabit IP (DHCP rezervasyonu) verilirse bir daha olmaz. Modemine erişilemeyen (kiralık) evlerde kalıcı çözüm için Evra Ağ Kutusu (evin içinde küçük bir router) kurabiliriz ya da Zigbee prize geçebilirsiniz; Destek sekmesinden bize yazın.',
+    }[p?.id] || 'Gece modem yeniden başladıysa cihazın adresi (IP) değişmiş olabilir. Modemde bu cihaza sabit IP (DHCP rezervasyonu) verilirse bir daha olmaz. Modemine erişilemeyen (kiralık) evlerde kalıcı çözüm için Evra Ağ Kutusu (evin içinde küçük bir router) kurabiliriz; Destek sekmesinden bize yazın.');
+    tips.push('Modemden uzaksa ya da arada kalın duvar varsa sinyal zayıftır; mesh Wi-Fi çözer.');
+  } else if (link === 'zigbee') {
+    tips.push(ZIGBEE_ROUTERS.has(p?.id)
+      ? 'Bu cihaz Zigbee ağını da güçlendirir: o koptuğunda yakınındaki pilli sensörler de kopabilir, önce bunu geri getirin.'
+      : 'Merkezden uzaksa araya bir Zigbee priz koymak ağı güçlendirir.');
+    tips.push('Hâlâ gelmiyorsa cihazı kaldırıp yeniden eşleştirin (Cihazı kaldır → Cihaz ekle).');
+  } else if (link === 'cloud') {
+    const app = CLOUD_APP[p?.integration];
+    tips.push(app
+      ? `Bu cihaz üreticinin bulutu üzerinden bağlanır: evde internet var mı, ${app} uygulamasında çevrimiçi görünüyor mu kontrol edin.`
+      : 'Bu cihaz üreticinin bulutu üzerinden bağlanır: evde internet var mı, üreticinin kendi uygulamasında çevrimiçi görünüyor mu kontrol edin.');
+  } else if (link === 'bluetooth') {
+    tips.push('Bluetooth köprüsüne (Klima ve TV Kumandası modülü) yakın olmalı; araya duvar girmesin.');
+  } else if (link === 'thread' && p?.id !== 'lock') {
+    tips.push('Merkezin Thread çubuğu takılı olmalı; cihaz merkezden çok uzaksa Thread ağı zayıf kalır.');
+  }
+  return [...tips, ...(PRODUCT_NOTES[p?.id] || [])];
+}
 
 export function connectionCard(d, cleanup) {
   const p = productForDevice(d);
@@ -186,7 +253,7 @@ export function connectionCard(d, cleanup) {
   // problems and fixes (js/catalog-details.js), then Evra support with everything filled in.
   const tips = h('details', { class: 'conn-tips' },
     h('summary', null, 'Olmazsa ne yapmalı?'),
-    h('ol', null, TIPS[kindOfLink(d, p)].map((t) => h('li', null, t))));
+    h('ol', null, tipsFor(d, p).map((t) => h('li', null, t))));
   const known = p?.troubleshooting?.length ? h('details', { class: 'conn-tips known-issues' },
     h('summary', null, `${p.name}: bilinen sorunlar ve çözümleri (${p.troubleshooting.length})`),
     h('div', { class: 'issue-list' }, p.troubleshooting.map((t) => h('details', { class: 'issue' },

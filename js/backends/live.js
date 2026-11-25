@@ -181,10 +181,28 @@ export function createLiveBackend(hassUrl) {
     emit({ type: 'registry', devices, areas, entities, floors });
   }
 
+  // REST calls carry the access token themselves. It lasts 30 minutes, while the websocket
+  // stays signed in from when it connected, so a token taken at connect time is refused
+  // (401) later on. Each call takes a current one, and a refused call is retried once with
+  // a freshly refreshed token.
+  async function authedFetch(url, opts = {}) {
+    const go = async () => {
+      try { token = await getAccessToken(hassUrl, { interactive: false }); } catch { /* the old one, then */ }
+      return fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` } });
+    };
+    let res = await go();
+    if (res.status === 401) {
+      const saved = readJson(localStorage, TOKENS_KEY);
+      if (saved && saved.hassUrl === hassUrl) writeJson(localStorage, TOKENS_KEY, { ...saved, expires: 0 });
+      res = await go();
+    }
+    return res;
+  }
+
   async function rest(method, path, body) {
-    const res = await fetch(`${hassUrl}/api/${path}`, {
+    const res = await authedFetch(`${hassUrl}/api/${path}`, {
       method,
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) {
@@ -346,10 +364,10 @@ export function createLiveBackend(hassUrl) {
       return out;
     },
     async fetchAutomationConfig(configId) {
-      const res = await fetch(`${hassUrl}/api/config/automation/config/${encodeURIComponent(configId)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      return res.ok ? res.json() : null;
+      const res = await authedFetch(`${hassUrl}/api/config/automation/config/${encodeURIComponent(configId)}`);
+      if (res.status === 404) return null; // there's no such automation
+      if (!res.ok) throw new Error(`Home Assistant ${res.status} ile yanıt verdi`);
+      return res.json();
     },
     automationEditorUrl(configId) {
       return `${hassUrl}/config/automation/edit/${encodeURIComponent(configId)}`;

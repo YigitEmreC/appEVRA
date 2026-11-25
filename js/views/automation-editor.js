@@ -364,18 +364,19 @@ export function renderAutomationEditor(root, cleanup, configId, template = null)
           select([['single', 'Yeni tetiklemeyi yok say'], ['restart', 'Baştan başla'], ['queued', 'Bitince yeniden çalıştır']], st.mode, (v) => { st.mode = v; }, 'Mod'))),
       section('Ne zaman', 'clock', 'Bunlardan herhangi biri otomasyonu başlatır.', st.triggers, triggerRow, () => st.triggers.push({ type: 'state', entity_id: '', to: 'on', extra: {} }), 'Tetikleyici ekle', redraw),
       section('Yalnızca şu durumda', 'check', 'İsteğe bağlı. Hepsi doğru olmalı.', st.conditions, conditionRow, () => st.conditions.push({ type: 'time', after: '18:00', before: '23:00', weekday: [], extra: {} }), 'Koşul ekle', redraw),
-      section('Ne yapılsın', 'play', 'Bu sırayla yapılır.', st.actions, actionRow, () => st.actions.push({ type: 'service', entity_id: '', service: 'turn_on', data: {} }), 'Eylem ekle', redraw, true),
+      section('Ne yapılsın', 'play', 'Bu sırayla yapılır. Telefonlara haber vermek için "Bildirim gönder" adımı ekleyin.', st.actions, actionRow, () => st.actions.push({ type: 'service', entity_id: '', service: 'turn_on', data: {} }), 'Eylem ekle', redraw, true,
+        st.actions.some((a) => a.type === 'notify') ? null : h('button', { class: 'btn ghost add-rule', type: 'button', onclick: () => { st.actions.push({ type: 'notify', message: `${st.alias.trim() || 'Otomasyon'} çalıştı`, push: true }); redraw(); } }, icon('bell', 16), 'Bildirim gönder')),
     );
   }
 
-  function section(title, iconName, hint, items, rowFn, addFn, addLabel, redraw, orderable = false) {
+  function section(title, iconName, hint, items, rowFn, addFn, addLabel, redraw, orderable = false, extra = null) {
     const rows = items.map((item, i) => h('div', { class: 'rule-row' },
       h('div', { class: 'rule-fields' }, rowFn(item, redraw)),
       h('div', { class: 'rule-tools' },
         orderable && i > 0 ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Yukarı taşı', title: 'Yukarı taşı', onclick: () => { [items[i - 1], items[i]] = [items[i], items[i - 1]]; redraw(); } }, icon('up', 16)) : null,
         h('button', { class: 'icon-btn danger', type: 'button', 'aria-label': 'Kaldır', title: 'Kaldır', onclick: () => { items.splice(i, 1); redraw(); } }, icon('trash', 16)))));
     const add = h('button', { class: 'btn ghost add-rule', type: 'button', onclick: () => { addFn(); redraw(); } }, icon('plus', 16), addLabel);
-    return card({ title, iconName }, h('p', { class: 'muted small' }, hint), rows, add);
+    return card({ title, iconName }, h('p', { class: 'muted small' }, hint), rows, extra ? h('div', { class: 'btn-row' }, add, extra) : add);
   }
 
   function triggerRow(t, redraw) {

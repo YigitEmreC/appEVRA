@@ -8,9 +8,8 @@ import { card, toggle } from '../components.js';
 import { signOut } from '../backends/live.js';
 import { accountPanel } from './account-ui.js';
 import { openLegal } from '../legal.js';
-import { pushState, enablePush, disablePush, showHere, pushEntities } from '../push.js';
 import { locationCard } from './location-ui.js';
-import { alertsCard, backupCard } from '../home-care.js';
+import { backupCard } from '../home-care.js';
 import { wakeAvailable } from '../wake.js';
 import { getLang, setLang } from '../i18n.js';
 import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome, canUseAssistant } from '../account.js';
@@ -141,12 +140,11 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('a', { class: 'shortcut', href: '#/energy' }, icon('chart', 20), h('span', null, 'Enerji ve iklim'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/remotes' }, icon('remote', 20), h('span', null, 'Kumandalar'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/devices?tab=rooms' }, icon('rooms', 20), h('span', null, 'Odalar'), icon('right', 16)),
+      h('a', { class: 'shortcut', href: '#/notifications' }, icon('bell', 20), h('span', null, 'Bildirimler'), icon('right', 16)),
       h('a', { class: 'shortcut', href: '#/support' }, icon('sos', 20), h('span', null, 'Destek'), icon('right', 16))),
     card({ title: 'Evra hesabı', iconName: 'person', className: 'account-card' }, accountPanel(cleanup), accountsServerField()),
     card({ title: 'Bağlantı', iconName: 'home' }, statusLine, homeNote, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
     locationCard(cleanup),
-    notifyCard(cleanup),
-    alertsCard(),
     backupCard(),
     lookCard(),
     card({ title: 'Tercihler', iconName: 'gear' },
@@ -210,56 +208,6 @@ function accountsServerField() {
 }
 
 // ---- notifications on this device (js/push.js) ---------------------------------------
-
-const PUSH_HINTS = {
-  unsupported: 'Bu tarayıcı bildirim alamıyor. Telefonda Chrome (Android) ya da Safari (iPhone) kullanın.',
-  insecure: 'Telefonlar yalnızca https:// ile açılan uygulamalara bildirim izni verir. Home Assistant\'a güvenli bir adres verin (örneğin Home Assistant Cloud, DuckDNS ya da Tailscale) ve Evra\'yı onunla açın.',
-  install: 'iPhone\'da önce Evra\'yı ana ekrana ekleyin (Paylaş › Ana Ekrana Ekle), sonra oradan açıp bunu açın.',
-  blocked: 'Evra\'nın bildirimleri engellenmiş. Tarayıcının site ayarlarından izin verip buraya dönün.',
-  ready: 'Otomasyonlarınızın uyarıları (su kaçağı, duman, açık kalan kapı) Evra kapalıyken bile buraya gelir.',
-  on: 'Otomasyonlarınızın uyarıları Evra kapalıyken bile bu cihaza gelir.',
-};
-
-function notifyCard(cleanup) {
-  const hint = h('small');
-  const sw = toggle('Bu cihazda bildirimler', async (on) => {
-    try {
-      if (on) { await enablePush(); toast('Bu cihazda bildirimler açıldı'); } else { await disablePush(); toast('Bu cihazda bildirimler kapatıldı'); }
-    } catch (e) {
-      toast(`Bildirimler ${on ? 'açılamadı' : 'kapatılamadı'}: ${e.message}`, 'error');
-    } finally {
-      // Puts the switch where things really are, also after a failure.
-      draw();
-    }
-  });
-  const testBtn = h('button', { class: 'btn small', type: 'button' }, icon('bell', 16), 'Deneme gönder');
-  testBtn.addEventListener('click', async () => {
-    const title = 'Evra denemesi';
-    const message = 'Bildirimler bu cihazda çalışıyor.';
-    try {
-      if (store.backend?.mode === 'live') {
-        const targets = pushEntities();
-        if (!targets.length) { toast('Home Assistant bu cihazı henüz listelemedi; birazdan tekrar deneyin', 'error'); return; }
-        await store.call('notify', 'send_message', { entity_id: targets }, { title, message });
-        toast(targets.length > 1 ? `${targets.length} Evra cihazına gönderildi` : 'Gönderildi');
-      } else if (await showHere(title, message)) toast('Gönderildi');
-    } catch { /* store.call already said why */ }
-  });
-  const draw = () => {
-    const state = pushState();
-    hint.textContent = PUSH_HINTS[state];
-    sw.set(state === 'on', !['ready', 'on'].includes(state));
-    testBtn.hidden = state !== 'on';
-  };
-  draw();
-  // Coming back from the browser's settings (a permission may have changed).
-  const onVisible = () => { if (document.visibilityState === 'visible') draw(); };
-  document.addEventListener('visibilitychange', onVisible);
-  cleanup.push(() => document.removeEventListener('visibilitychange', onVisible));
-  return card({ title: 'Bildirimler', iconName: 'bell' },
-    h('div', { class: 'setting-row' }, h('div', { class: 'setting-text' }, h('strong', null, 'Bu cihazda'), hint), sw),
-    h('div', { class: 'btn-row' }, testBtn));
-}
 
 function settingRow(title, hint, control) {
   return h('div', { class: 'setting-row' },

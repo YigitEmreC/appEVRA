@@ -7,7 +7,7 @@ import { store, userDevices, deviceEntities } from '../store.js';
 import { productForDevice } from '../catalog.js';
 import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
-import { card } from '../components.js';
+import { card, toggle } from '../components.js';
 import { SCENES, WARM, NEUTRAL, COOL, planScene, saveScene, deleteScene, isDefaultScene, defaultScene, describeScene, loadScenes } from '../scenes.js';
 
 const ICONS = ['sunrise', 'sun', 'moon', 'bed', 'leaf', 'party', 'film', 'gamepad', 'music', 'dinner', 'door', 'vacuum', 'tv', 'heater', 'bulb', 'flame', 'home', 'sparkle'];
@@ -157,6 +157,17 @@ export function renderSceneEditor(root, cleanup, sceneId) {
     shown('kettle') ? seg('Su ısıtıcı', [[null, 'Dokunma'], [true, 'Çalıştır']], ...keyed('kettle')) : null,
   ];
 
+  // ---- notification when the scene runs (js/notify-links.js) ----
+  const notifyMsg = h('input', { class: 'input', type: 'text', maxlength: 160, value: draft.notify?.message || '', placeholder: 'Örneğin: Sinema modu açıldı', 'aria-label': 'Bildirim metni' });
+  notifyMsg.addEventListener('input', () => { if (draft.notify) draft.notify.message = notifyMsg.value; });
+  const notifyField = h('label', { class: 'field', hidden: !draft.notify?.on }, h('span', null, 'Bildirim metni'), notifyMsg);
+  const notifySwitch = toggle('Sahne açılınca bildirim gönder', (on) => {
+    draft.notify = on ? { on: true, message: notifyMsg.value } : undefined;
+    notifyField.hidden = !on;
+    notifySwitch.set(on, false);
+  });
+  notifySwitch.set(Boolean(draft.notify?.on), false);
+
   // ---- saving ----
   const save = h('button', { class: 'btn primary', type: 'button' }, icon('check', 16), 'Kaydet');
   save.addEventListener('click', async () => {
@@ -164,6 +175,7 @@ export function renderSceneEditor(root, cleanup, sceneId) {
     if (!name) { toast('Sahneye bir ad verin', 'error'); nameInput.focus(); return; }
     if (SCENES.some((s) => s.id !== draft.id && s.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'))) { toast('Bu adda bir sahne zaten var', 'error'); return; }
     const out = { ...draft, name };
+    if (out.notify?.on && !String(out.notify.message || '').trim()) out.notify = { on: true, message: `${name} sahnesi açıldı` };
     delete out._effect;
     out.text = autoText ? describeScene(out) : draft.text;
     if (out.text === 'Henüz bir şey ayarlanmadı.') { toast('En az bir ayar seçin', 'error'); return; }
@@ -195,6 +207,10 @@ export function renderSceneEditor(root, cleanup, sceneId) {
       card({ title: 'Ne yapsın', iconName: 'sparkle' },
         h('p', { class: 'muted small' }, 'Her cihaz türü için seçin. "Dokunma" seçilenler değişmez. Hangi odalarda çalışacağını Sahneler ekranında seçersiniz.'),
         h('div', { class: 'scene-rows' }, rows)),
+      card({ title: 'Bildirim', iconName: 'bell' },
+        h('div', { class: 'setting-row' }, h('div', { class: 'setting-text' }, h('strong', null, 'Sahne açılınca bildirim gönder'),
+          h('small', null, 'Bildirimleri açık telefonlara ve Home Assistant uygulamasına gider. Telefonda bildirimleri Bildirimler sekmesinden açın.')), notifySwitch),
+        notifyField),
       card({ title: 'Önizleme (bütün ev)', iconName: 'eye' }, preview)),
     h('div', { class: 'editor-bar' }, save, restore, h('span', { class: 'sep' }), remove));
   paintPreview();

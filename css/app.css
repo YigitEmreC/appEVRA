@@ -2443,3 +2443,11 @@ button.support-opt { font: inherit; text-align: left; cursor: pointer; width: 10
 .status-body { display: inline-flex; align-items: center; gap: 7px; }
 .puppet.peek .puppet-bubble { max-width: clamp(118px, calc(100vw - 250px), 200px); font-size: 13.5px; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 380px) { .puppet.peek .puppet-bubble { font-size: 12.5px; padding: 6px 10px; } }
+
+/* Bildirimler tab (js/views/notifications.js) */
+.install-steps { margin: 10px 0 6px; padding-left: 22px; display: grid; gap: 6px; }
+.install-steps li { line-height: 1.45; }
+.notify-list { display: grid; gap: 4px; }
+.notify-item { border-top: 1px solid var(--line); padding-top: 4px; }
+.notify-item:first-child { border-top: 0; }
+.notify-msg { margin: 2px 0 10px; }
