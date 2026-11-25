@@ -783,6 +783,11 @@ export function createDemoBackend() {
     // js/push.js then only remembers the choice and the demo shows them itself.
     async pushKey() { return null; },
     async pushRegister() {},
+    async currentUser() { return { name: 'Örnek', is_admin: true }; },
+    async releaseNotes() { return ''; },
+    async checkConfig() { return { result: 'valid', errors: null }; },
+    async refreshUpdates() {},
+    async systemInfo() { return { core: '2026.11.2', os: '16.3', board: 'rpi4-64', disk_total: 234.5, disk_used: 18.2 }; },
     async pushUnregister() {},
     // The weather at the place chosen in Settings (js/weather.js): the demo home's
     // weather and sun follow it, so weather and darkness automations behave as there.

@@ -10,6 +10,7 @@ import { accountPanel } from './account-ui.js';
 import { openLegal } from '../legal.js';
 import { locationCard } from './location-ui.js';
 import { backupCard } from '../home-care.js';
+import { updatesCard, systemCard } from './system.js';
 import { wakeAvailable } from '../wake.js';
 import { getLang, setLang } from '../i18n.js';
 import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome, canUseAssistant } from '../account.js';
@@ -118,11 +119,20 @@ export function renderSettings(root, cleanup, { reconnect }) {
   drawPrefs();
   window.addEventListener('evra-prefs', drawPrefs);
   cleanup.push(() => window.removeEventListener('evra-prefs', drawPrefs));
-  const price = h('input', { class: 'input', type: 'number', min: 0, step: 0.01, value: settings.pricePerKwh, 'aria-label': 'kWh başına elektrik fiyatı' });
-  price.addEventListener('change', () => {
-    const v = parseFloat(price.value);
-    if (Number.isFinite(v) && v >= 0) { saveSettings({ pricePerKwh: v }); toast('Fiyat kaydedildi'); } else toast('2,50 gibi bir fiyat girin', 'error');
-  });
+  // Household tariff: a cheaper price up to a monthly limit, a higher one above it (js/util.js).
+  const priceField = (key, label, value, step) => {
+    const inp = h('input', { class: 'input', type: 'number', min: 0, step, value, 'aria-label': label });
+    inp.addEventListener('change', () => {
+      const v = parseFloat(String(inp.value).replace(',', '.'));
+      if (Number.isFinite(v) && v >= 0) { saveSettings({ [key]: v }); toast('Kaydedildi'); } else toast('3,24 gibi bir sayı girin', 'error');
+    });
+    return h('label', { class: 'field' }, h('span', null, label), inp);
+  };
+  const price = h('div', { class: 'price-fields' },
+    priceField('priceLow', `Elektrik: aylık ${settings.priceLimit} kWh'a kadar (₺/kWh)`, settings.priceLow, 0.01),
+    priceField('priceHigh', `Elektrik: aylık ${settings.priceLimit} kWh üstü (₺/kWh)`, settings.priceHigh, 0.01),
+    priceField('priceLimit', 'Kademe sınırı (kWh/ay)', settings.priceLimit, 1),
+    h('small', { class: 'muted' }, 'Konut tarifesi: ayın ilk kısmı düşük, sınırın üstü yüksek fiyatla hesaplanır. Enerji ekranındaki aylık tutar buna göre.'));
 
   // ---- batteries -----------------------------------------------------------
   const batteryList = h('ul', { class: 'battery-list' });
@@ -144,6 +154,8 @@ export function renderSettings(root, cleanup, { reconnect }) {
       h('a', { class: 'shortcut', href: '#/support' }, icon('sos', 20), h('span', null, 'Destek'), icon('right', 16))),
     card({ title: 'Evra hesabı', iconName: 'person', className: 'account-card' }, accountPanel(cleanup), accountsServerField()),
     card({ title: 'Bağlantı', iconName: 'home' }, statusLine, homeNote, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
+    updatesCard(cleanup),
+    systemCard(),
     locationCard(cleanup),
     backupCard(),
     lookCard(),
@@ -153,7 +165,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
       settingRow('Geliştirici modu', 'Teknik ayrıntıları gösterir: varlık listeleri, model ve yazılım numaraları, JSON düzenleme ve örnek ev araçları.', devSwitch),
       settingRow('Hafif mod', `Bulanıklık ve hareketli arka planı kapatır; duvar paneli gibi yavaş cihazlar akıcı kalır. Otomatik: bu cihazda şu an ${liteWanted() ? 'açık' : 'kapalı'}.`, liteTabs),
       wakeSwitch ? settingRow('"Hey EvrAI" ile uyandır', 'Elleriniz doluyken: "Hey EvrAI" deyin, sonra sorunuzu sorun. Açıkken bu cihaz ortamı dinler ve ses, tarayıcının ses tanıma hizmetine (Google) gider; yalnızca duvar paneli gibi sabit cihazlarda açın. Uygulama arka plandayken dinlemez.', wakeSwitch) : null,
-      h('label', { class: 'field' }, h('span', null, 'Elektrik fiyatı (kWh başına ₺)'), price)),
+      price),
     demoCard,
     card({ title: 'Sensör pilleri', iconName: 'battery' }, batteryList),
     legalCard(),

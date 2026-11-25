@@ -218,6 +218,11 @@ function placeDefaults() {
 }
 /** Which Home Assistant this place would use by itself (for Settings > Connection). */
 export const homeSource = () => (siteHassUrl() ? 'site' : accountHomeUrl() ? 'account' : null);
+// ---- electricity tariff ----
+// Turkish household tariff (Kasım 2026): up to 240 kWh a month ~3,24 ₺/kWh, above that ~4,86 ₺/kWh.
+// The person can change the prices and the limit in Settings › Tercihler.
+export const TARIFF = { low: 3.24, high: 4.86, limit: 240 };
+
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { saved = {}; }
@@ -227,7 +232,12 @@ export function loadSettings() {
     hassUrl: saved.hassUrl || place.hassUrl,
     theme: saved.theme || 'auto',
     devMode: saved.devMode === true,
-    pricePerKwh: saved.pricePerKwh ?? 3.0,
+    // Household electricity tariff (₺ per kWh): the first priceLimit kWh of a month at
+    // priceLow, the rest at priceHigh. pricePerKwh (the low one) is for small estimates.
+    priceLow: saved.priceLow ?? TARIFF.low,
+    priceHigh: saved.priceHigh ?? TARIFF.high,
+    priceLimit: saved.priceLimit ?? TARIFF.limit,
+    pricePerKwh: saved.priceLow ?? TARIFF.low,
     room: saved.room,
     homeFloor: saved.homeFloor,
     remote: saved.remote,
@@ -291,4 +301,12 @@ export function effectiveTheme() {
   const { theme } = loadSettings();
   if (theme === 'light' || theme === 'dark') return theme;
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+
+/** What a month's use costs: the first priceLimit kWh at the low price, the rest at the high one. */
+export function monthCost(kwh) {
+  const s = loadSettings();
+  const k = Math.max(0, Number(kwh) || 0);
+  return Math.min(k, s.priceLimit) * s.priceLow + Math.max(0, k - s.priceLimit) * s.priceHigh;
 }

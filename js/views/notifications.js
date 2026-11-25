@@ -13,7 +13,7 @@ import { card, toggle } from '../components.js';
 import { pushState, enablePush, disablePush, showHere, pushEntities, waitForPushEntity } from '../push.js';
 import { alertsCard, refreshAlerts } from '../home-care.js';
 import { SCENES, saveScene, loadScenes } from '../scenes.js';
-import { userAutomations, linkedAutomations, automationLink, setAutomationLink, removeAutomationLink, refreshAutomationLinks } from '../notify-links.js';
+import { userAutomations, linkedAutomations, automationLink, setAutomationLink, removeAutomationLink, refreshAutomationLinks, migrateHaAppNotifications } from '../notify-links.js';
 
 // Android / desktop Chrome offers to install the app once; keep the offer for the button below.
 let installOffer = null;
@@ -39,7 +39,7 @@ export function deviceNotifyCard(cleanup) {
     try {
       if (on) { await enablePush(); toast('Bu cihazda bildirimler açıldı'); } else { await disablePush(); toast('Bu cihazda bildirimler kapatıldı'); }
       // The automations' notifications are sent to the list of devices saved with them.
-      if (store.backend?.mode === 'live') setTimeout(() => { refreshAutomationLinks(); refreshAlerts(); }, 4000);
+      if (store.backend?.mode === 'live') setTimeout(() => { refreshAutomationLinks(); refreshAlerts(); migrateHaAppNotifications(); }, 4000);
     } catch (e) {
       toast(`Bildirimler ${on ? 'açılamadı' : 'kapatılamadı'}: ${e.message}`, 'error');
     } finally {
@@ -253,7 +253,7 @@ let updatedThisVisit = false;
 export function renderNotifications(root, cleanup) {
   if (!updatedThisVisit && store.backend?.mode === 'live') {
     updatedThisVisit = true;
-    setTimeout(() => { refreshAlerts(); refreshAutomationLinks(); }, 2000);
+    setTimeout(() => { refreshAlerts(); refreshAutomationLinks(); migrateHaAppNotifications(); }, 2000);
   }
   root.replaceChildren(
     deviceNotifyCard(cleanup),

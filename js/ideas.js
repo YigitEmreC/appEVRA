@@ -11,6 +11,7 @@
 import { HOME } from './config.js';
 import { store, userDevices, deviceEntities, deviceName, areaName } from './store.js';
 import { productForDevice } from './catalog.js';
+import { notifyActions } from './notify-links.js';
 
 // ---- what devices can do, and which catalogue products do it ------------------
 
@@ -150,9 +151,9 @@ const lightOn = (entity, pct, kelvin, hs) => act(entity, 'turn_on', lightData(en
 const press = (entity) => ({ action: 'button.press', target: { entity_id: entity } });
 const wait = (seconds) => ({ delay: { seconds } });
 const note = (title, message) => ({ action: 'persistent_notification.create', data: { title, message } });
-// Also to phones. Without the Home Assistant app on a phone, notify.notify doesn't
-// exist; continue_on_error stops that from ending the automation.
-const urgent = (title, message) => [note(title, message), { action: 'notify.notify', data: { title, message }, continue_on_error: true }];
+// Also to phones: the ones with Evra notifications (js/notify-links.js; Home Assistant's
+// list when there are none yet).
+const urgent = (title, message) => notifyActions(title, message);
 const minutes = (m) => (m ? { for: { minutes: m } } : {});
 const when = (entity, to, forMin) => ({ trigger: 'state', entity_id: entity, ...(to != null ? { to } : {}), ...minutes(forMin) });
 const drops = (entity, below, forMin) => ({ trigger: 'numeric_state', entity_id: entity, below, ...minutes(forMin) });

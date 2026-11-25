@@ -2451,3 +2451,26 @@ button.support-opt { font: inherit; text-align: left; cursor: pointer; width: 10
 .notify-item { border-top: 1px solid var(--line); padding-top: 4px; }
 .notify-item:first-child { border-top: 0; }
 .notify-msg { margin: 2px 0 10px; }
+
+/* Settings › Güncellemeler and Sistem (js/views/system.js) */
+.upd-list { display: grid; gap: 10px; margin: 10px 0; }
+.upd-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--card-2); }
+.upd-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.upd-name { display: flex; flex-direction: column; min-width: 0; }
+.upd-head .btn-row { margin: 0; }
+.upd-progress { height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 8px; }
+.upd-progress span { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.upd-progress span.indeterminate { animation: upd-slide 1.2s ease-in-out infinite; }
+@keyframes upd-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(330%); } }
+.upd-notes { margin-top: 6px; }
+.upd-notes summary, .upd-more summary { cursor: pointer; font-weight: 650; font-size: 13px; }
+.upd-notes-text { white-space: pre-wrap; font-size: 12.5px; max-height: 260px; overflow: auto; background: var(--card); padding: 8px 10px; border-radius: 8px; margin: 6px 0; }
+.upd-more { margin-top: 4px; }
+.upd-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.sys-info { margin: 0 0 8px; }
+.sys-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+.sys-row:first-of-type { border-top: 0; }
+@media (max-width: 520px) { .sys-row { flex-direction: column; align-items: stretch; } }
+
+.price-fields { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; }
+.price-fields > small { grid-column: 1 / -1; }

@@ -1,6 +1,6 @@
 import { HOME } from '../config.js';
 import { store } from '../store.js';
-import { h, num, numVal, isAvailable, loadSettings, dec } from '../util.js';
+import { h, num, numVal, isAvailable, loadSettings, dec, monthCost } from '../util.js';
 import { icon } from '../icons.js';
 import { card, lineChart, timeline } from '../components.js';
 
@@ -25,7 +25,7 @@ export function renderEnergy(root, cleanup) {
     today.value.replaceChildren(num(t, 3), h('small', null, ' kWh'));
     month.value.replaceChildren(num(m, 3), h('small', null, ' kWh'));
     const mv = numVal(m);
-    cost.value.textContent = mv != null ? `${dec(mv * loadSettings().pricePerKwh, 2)} ₺` : '–';
+    cost.value.textContent = mv != null ? `${dec(monthCost(mv), 2)} ₺` : '–';
   }));
 
   let range = RANGES[1];

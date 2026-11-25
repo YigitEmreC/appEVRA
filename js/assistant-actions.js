@@ -7,6 +7,7 @@ import { HOME } from './config.js';
 import { store, ensurePower, deviceName } from './store.js';
 import { sleep, setPrefs } from './util.js';
 import { SCENES, runScene } from './scenes.js';
+import { evraNotifyConfig } from './notify-links.js';
 
 const TEMPLATE_KEY = 'evra.template';
 
@@ -90,7 +91,8 @@ export async function runProposal(p) {
       }
       case 'automation_save': {
         const id = a.automation_id || String(Date.now());
-        await b.saveAutomation(id, a.config);
+        // "Tell the phones" goes through Evra's notifications, not the Home Assistant app.
+        await b.saveAutomation(id, evraNotifyConfig(a.config) || a.config);
         const saved = await b.fetchAutomationConfig(id);
         const ok = saved && saved.alias === a.config.alias;
         return { ok: !!ok, detail: ok ? `'${a.config.alias}' otomasyonu kaydedildi ve açık` : 'Kaydedildi ama geri okunamadı' };

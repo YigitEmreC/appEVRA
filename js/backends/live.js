@@ -555,6 +555,26 @@ export function createLiveBackend(hassUrl) {
       return rest('POST', 'notify.html5', { subscription, browser, name });
     },
     pushUnregister(subscription) { return rest('DELETE', 'notify.html5', { subscription }); },
+    // ---- Settings › Güncellemeler and Sistem (js/views/system.js) ----
+    currentUser() { return send({ type: 'auth/current_user' }); },
+    releaseNotes(entityId) { return send({ type: 'update/release_notes', entity_id: entityId }, 30000); },
+    checkConfig() { return rest('POST', 'config/core/check_config'); },
+    // Asks the Supervisor to look for new versions (Home Assistant OS), and each update entity.
+    async refreshUpdates(ids = []) {
+      let asked = false;
+      try { await send({ type: 'supervisor/api', endpoint: '/refresh_updates', method: 'post' }, 60000); asked = true; } catch { /* not Home Assistant OS */ }
+      if (ids.length) {
+        try { await send({ type: 'call_service', domain: 'homeassistant', service: 'update_entity', target: { entity_id: ids } }, 60000); asked = true; } catch { /* the Supervisor one is enough */ }
+      }
+      if (!asked) throw new Error('Home Assistant kontrol edemedi');
+    },
+    // Versions and disk from the Supervisor (Home Assistant OS); null elsewhere.
+    async systemInfo() {
+      const api = (endpoint) => send({ type: 'supervisor/api', endpoint, method: 'get' }).catch(() => null);
+      const [core, os, host] = await Promise.all([api('/core/info'), api('/os/info'), api('/host/info')]);
+      if (!core && !os && !host) return null;
+      return { core: core?.version, os: os?.version, board: os?.board, disk_total: host?.disk_total, disk_used: host?.disk_used };
+    },
     // Home Assistant's log (Settings › System › Logs): errors and warnings, newest first.
     async systemLog() { return (await send({ type: 'system_log/list' })) || []; },
     // A phone registered just now gets its notify entity when the integration (re)loads.

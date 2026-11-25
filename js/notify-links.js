@@ -95,3 +95,79 @@ export async function refreshAutomationLinks() {
     try { await setAutomationLink(auto, await automationLink(auto)); } catch { /* the next one */ }
   }
 }
+
+// ---- automations written another way (EvrAI, ideas, older Evra, by hand) ----
+
+const svcOf = (a) => (a && typeof a === 'object' ? a.action || a.service || '' : '');
+const isHaAppNotify = (a) => svcOf(a) === 'notify.notify';
+const isNote = (a) => svcOf(a) === 'persistent_notification.create';
+const isEvraPush = (a) => svcOf(a) === 'notify.send_message'
+  && [].concat(a.target?.entity_id ?? a.data?.entity_id ?? []).some((id) => store.entities.get(id)?.platform === 'html5');
+
+/**
+ * Actions with "tell the phones" written as Home Assistant's app (notify.notify, usually
+ * next to a persistent notification with the same text) changed into Evra's notification
+ * (notifyActions), so it arrives once, from Evra. Goes into choose / if / repeat / parallel
+ * too. Returns [actions, changed].
+ */
+export function evraNotifySteps(actions) {
+  let changed = false;
+  const fix = (list) => {
+    const arr = [].concat(list ?? []);
+    const out = [];
+    for (let i = 0; i < arr.length; i++) {
+      const a = arr[i];
+      if (isHaAppNotify(a)) {
+        const title = a.data?.title || 'Evra';
+        const message = a.data?.message || '';
+        // Drop the persistent notification / Evra push with the same text right before it.
+        while (out.length && (isNote(out[out.length - 1]) || isEvraPush(out[out.length - 1])) && out[out.length - 1].data?.message === message) out.pop();
+        // ...and right after it.
+        while (i + 1 < arr.length && (isNote(arr[i + 1]) || isEvraPush(arr[i + 1])) && arr[i + 1].data?.message === message) i++;
+        out.push(...notifyActions(title, message));
+        changed = true;
+        continue;
+      }
+      out.push(nest(a));
+    }
+    return out;
+  };
+  const nest = (a) => {
+    if (!a || typeof a !== 'object') return a;
+    const b = { ...a };
+    for (const k of ['then', 'else', 'sequence', 'default', 'parallel']) if (b[k] != null) b[k] = fix(b[k]);
+    if (Array.isArray(b.choose)) b.choose = b.choose.map((c) => (c && c.sequence ? { ...c, sequence: fix(c.sequence) } : c));
+    if (b.repeat?.sequence) b.repeat = { ...b.repeat, sequence: fix(b.repeat.sequence) };
+    return b;
+  };
+  const result = fix(actions);
+  return [result, changed];
+}
+
+/** An automation's config with Evra's notifications (see evraNotifySteps); null when nothing changed. */
+export function evraNotifyConfig(cfg) {
+  if (!cfg || typeof cfg !== 'object') return null;
+  const key = cfg.actions ? 'actions' : cfg.action ? 'action' : null;
+  if (!key) return null;
+  const [actions, changed] = evraNotifySteps(cfg[key]);
+  return changed ? { ...cfg, [key]: actions } : null;
+}
+
+/**
+ * The household's automations that still notify through the Home Assistant app are saved
+ * again with Evra's notification. Needs an admin account; quietly skips what it can't change.
+ */
+export async function migrateHaAppNotifications() {
+  const b = store.backend;
+  if (!b || b.mode !== 'live' || !pushEntities().length) return 0;
+  let n = 0;
+  for (const auto of userAutomations()) {
+    try {
+      const cfg = await b.fetchAutomationConfig(auto.id);
+      if (!cfg || !JSON.stringify(cfg).includes('"notify.notify"')) continue;
+      const fixed = evraNotifyConfig(cfg);
+      if (fixed) { await b.saveAutomation(auto.id, fixed); n++; }
+    } catch { /* the next one */ }
+  }
+  return n;
+}
