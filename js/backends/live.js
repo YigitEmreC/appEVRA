@@ -199,6 +199,35 @@ export function createLiveBackend(hassUrl) {
     return res;
   }
 
+  // Sets up Home Assistant's "HTML5 Push Notifications" integration through its own setup
+  // form, the way a person would in Settings › Devices & services › Add integration. Its form
+  // asks for a contact e-mail (sent to the push services with each message: Evra support's,
+  // not the person's) and a VAPID private key, which is made here: a new P-256 key, its
+  // private part as base64url. Needs an admin account in Home Assistant.
+  async function setUpHtml5() {
+    const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+    const { d } = await crypto.subtle.exportKey('jwk', pair.privateKey);
+    let flow;
+    try {
+      flow = await rest('POST', 'config/config_entries/flow', { handler: 'html5', show_advanced_options: false });
+    } catch (e) {
+      if (/401|403|unauthori|admin/i.test(e.message)) throw new Error('bildirim hizmetini kurmak için Home Assistant yönetici hesabıyla bağlanın');
+      throw new Error(`Home Assistant bildirim hizmetini kuramadı (${e.message}). Home Assistant güncellenmeli ya da Evra desteğine yazın`);
+    }
+    if (flow?.type === 'abort') return; // already there
+    const data = {};
+    for (const f of flow?.data_schema || []) {
+      if (/mail/i.test(f.name)) data[f.name] = 'info@evrasmarthome.com';
+      else if (/prv|priv|key/i.test(f.name)) data[f.name] = d;
+    }
+    if (!Object.keys(data).length) Object.assign(data, { vapid_email: 'info@evrasmarthome.com', vapid_prv_key: d });
+    const done = await rest('POST', `config/config_entries/flow/${flow.flow_id}`, data);
+    if (done?.type === 'form') {
+      try { await rest('DELETE', `config/config_entries/flow/${flow.flow_id}`); } catch { /* it times out */ }
+      throw new Error(`Home Assistant bildirim hizmetini kuramadı (${Object.values(done.errors || {}).join(', ') || 'form'})`);
+    }
+  }
+
   async function rest(method, path, body) {
     const res = await authedFetch(`${hassUrl}/api/${path}`, {
       method,
@@ -505,15 +534,21 @@ export function createLiveBackend(hassUrl) {
     // ---- notifications on this device (js/push.js) ----
     // Home Assistant's "HTML5 Push Notifications" integration. Its public key
     // signs the browser's push subscription; registering makes a notify entity.
+    // Not set up yet: Evra sets it up by itself (setUpHtml5 below), then asks again.
     async pushKey() {
+      const ask = () => send({ type: 'notify/html5/appkey' });
       try {
-        return await send({ type: 'notify/html5/appkey' });
+        return await ask();
       } catch (e) {
-        if (/unknown command/i.test(e.message)) {
-          throw new Error('Önce Home Assistant\'a "HTML5 Push Notifications" entegrasyonunu ekleyin (Ayarlar › Cihazlar ve Servisler › Entegrasyon Ekle)');
-        }
-        throw e;
+        if (!/unknown command/i.test(e.message)) throw e;
       }
+      await setUpHtml5();
+      // The integration needs a moment to start before it answers.
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        try { return await ask(); } catch (e) { if (!/unknown command/i.test(e.message)) throw e; }
+      }
+      throw new Error('Home Assistant bildirim hizmetini kurdu ama henüz başlatmadı; bir dakika sonra tekrar deneyin');
     },
     pushRegister(subscription, name) {
       const browser = /firefox/i.test(navigator.userAgent) ? 'firefox' : 'chrome'; // the only two Home Assistant accepts
