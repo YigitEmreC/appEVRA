@@ -2429,3 +2429,17 @@ html.i18n-rtl body :is(h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, button, a, 
 .support-opt .opt-lock .icon path { stroke-width: 3; }
 .support-opt .opt-lock small { font-weight: 800; font-size: 12px; text-align: center; line-height: 1.2; padding: 0 4px; }
 .support-opt.locked:hover .opt-lock { background: var(--card-3); }
+button.support-opt { font: inherit; text-align: left; cursor: pointer; width: 100%; }
+.support-opt.chosen { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 8%, var(--card)); }
+.support-opt.chosen .opt-icon { background: var(--accent); color: #fff; }
+.support-status { margin: 8px 0 0; font-size: 13.5px; }
+.support-status:empty { display: none; }
+.support-done { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 20px 10px; }
+.support-done .icon { color: var(--accent); }
+.support-done p { margin: 0; }
+@media (max-width: 520px) { .support-opts { grid-template-columns: 1fr; } }
+/* Phone fixes: the status pill's dot and word sit in .status-body (js/main.js), so they need their own gap;
+   the peeking mascot's speech bubble must fit between the screen edge and the mascot. */
+.status-body { display: inline-flex; align-items: center; gap: 7px; }
+.puppet.peek .puppet-bubble { max-width: clamp(118px, calc(100vw - 250px), 200px); font-size: 13.5px; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 380px) { .puppet.peek .puppet-bubble { font-size: 12.5px; padding: 6px 10px; } }

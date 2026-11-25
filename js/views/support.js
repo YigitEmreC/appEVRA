@@ -1,31 +1,35 @@
 // Destek: when a device's own troubleshooting (its page, js/device-health.js) didn't help,
-// the person reaches Evra support from here. The message is prepared with what support
-// needs (which device, its model, since when it's unreachable, what Home Assistant says,
-// the home's plan), and they choose how to send it.
+// the person reaches Evra support from here.
 //
-// What support a home gets follows its plan (webEVRA public/data/settings.js → subscriptions):
-//   Temel     e-mail
-//   Güvence   + phone: fast service, remote, same day
-//   Premium   + priority WhatsApp, a home visit within 48 hours, a yearly maintenance visit
-// Options outside the plan stay visible with a lock on them and lead to the plans page.
-// Nothing is sent by the app itself; it only opens the mail app / the phone / WhatsApp.
+// The request is sent from inside the app, through the signed-in Evra account, to the
+// website (POST /api/accounts/support, webEVRA lib/app-support.js), which e-mails it to the
+// support inbox. That works the same on a phone, in the Home Assistant app and on a wall
+// panel (kiosk), where WhatsApp / mail / phone links have nothing to open.
+// The app adds what support needs (which device, its model, since when it's unreachable,
+// what Home Assistant says); the website adds the plan from the database.
+//
+// What a home may ask for follows its plan (webEVRA public/data/settings.js → subscriptions):
+//   Temel     a message, answered by e-mail
+//   Güvence   + call me back: fast service, remote, same day
+//   Premium   + priority WhatsApp, a home visit within 48 hours, the yearly maintenance visit
+// Options outside the plan stay visible with a heavy lock and lead to the plans page.
 
 import { store, deviceName, userDevices, areaName } from '../store.js';
 import { h, toast, relTime } from '../util.js';
 import { icon } from '../icons.js';
 import { card } from '../components.js';
 import { productForDevice } from '../catalog.js';
-import { member, isAdmin, plansUrl } from '../account.js';
+import { member, isAdmin, plansUrl, accountToken, sendSupport } from '../account.js';
 import { isOffline, offlineSince } from '../device-health.js';
 
 export const SUPPORT = {
   phone: '+90 533 469 51 79',
-  whatsapp: '905334695179',
   email: 'info@evrasmarthome.com',
 };
 
 const PLANS = ['temel', 'guvence', 'premium'];
 const PLAN_NAMES = { temel: 'Temel', guvence: 'Güvence', premium: 'Premium' };
+const PHONE_KEY = 'evra.supportPhone';
 
 /** The home's plan: "temel", "guvence" or "premium" (admins get everything). */
 export function supportPlan(u = member()) {
@@ -33,6 +37,22 @@ export function supportPlan(u = member()) {
   return PLANS.includes(u?.plan) ? u.plan : 'temel';
 }
 const has = (plan, need) => PLANS.indexOf(plan) >= PLANS.indexOf(need);
+
+// What can be asked for. The same ids and plans as webEVRA lib/app-support.js.
+const KINDS = [
+  { id: 'message', need: 'temel', iconName: 'mail', title: 'Mesaj gönder', note: 'Yanıtımız e-postanıza gelir', phone: false },
+  { id: 'call', need: 'guvence', iconName: 'phone', title: 'Beni arayın', note: 'Hızlı servis: uzaktan, aynı gün', phone: true },
+  { id: 'whatsapp', need: 'premium', iconName: 'send', title: 'Öncelikli WhatsApp', note: 'WhatsApp üzerinden size yazarız', phone: true },
+  { id: 'visit', need: 'premium', iconName: 'home', title: 'Ev ziyareti iste', note: '48 saat içinde evinizdeyiz', phone: true },
+  { id: 'maintenance', need: 'premium', iconName: 'wrench', title: 'Bakım ziyareti ve pil değişimi', note: 'Yılda 1 kez, plana dahil', phone: true },
+];
+const DONE = {
+  message: 'Yanıtımız hesabınızın e-posta adresine gelecek.',
+  call: 'Bugün mesai saatleri içinde sizi arayacağız (hafta içi 9:00–18:00).',
+  whatsapp: 'Öncelikli olarak WhatsApp üzerinden size yazacağız.',
+  visit: 'Ziyaret için 48 saat içinde gün ve saat belirlemek üzere size ulaşacağız.',
+  maintenance: 'Yıllık bakım ziyaretiniz için gün belirlemek üzere size ulaşacağız.',
+};
 
 export function renderSupport(root, cleanup, ctx) {
   const wanted = ctx?.query?.get('device') || '';
@@ -44,14 +64,16 @@ export function renderSupport(root, cleanup, ctx) {
     h('option', { value: '' }, 'Genel bir soru / cihaz seçmeden'),
     devices.map((d) => h('option', { value: d.id, selected: d.id === wanted }, `${deviceName(d)}${isOffline(d) ? ' · ulaşılamıyor' : ''}`)));
   const text = h('textarea', { class: 'input', rows: 4, maxlength: 1500, placeholder: 'Ne oluyor, ne zamandan beri ve neler denediniz? Örnek: Salon ampulü gece koptu, Yeniden bağla tuşuna bastım ama gelmedi.' });
+  let savedPhone = '';
+  try { savedPhone = localStorage.getItem(PHONE_KEY) || ''; } catch { /* none */ }
+  const phone = h('input', { class: 'input', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: 30, placeholder: '05xx xxx xx xx', value: savedPhone });
+  const phoneField = h('label', { class: 'field' }, h('span', null, 'Size ulaşacağımız telefon'), phone);
   const details = h('pre', { class: 'support-details' });
   let info = '';
 
   const build = async () => {
     const d = store.devices.get(select.value);
     const lines = [];
-    if (m?.name || m?.email) lines.push(`Kişi: ${[m.name, m.email].filter(Boolean).join(' · ')}`);
-    lines.push(`Plan: ${PLAN_NAMES[plan]}`);
     if (d) {
       const p = productForDevice(d);
       lines.push(`Cihaz: ${deviceName(d)}${d.area_id ? ` (${areaName(d.area_id) || ''})` : ''}`);
@@ -63,6 +85,8 @@ export function renderSupport(root, cleanup, ctx) {
       } catch { /* without it */ }
     }
     lines.push(`Evdeki ulaşılamayan cihaz sayısı: ${userDevices().filter(isOffline).length}`);
+    const offline = userDevices().filter(isOffline).slice(0, 10).map((x) => deviceName(x));
+    if (offline.length) lines.push(`Ulaşılamayanlar: ${offline.join(', ')}`);
     lines.push(`Uygulama: ${store.status.mode || '-'} · ${store.status.state || '-'} · ${new Date().toLocaleString('tr-TR')}`);
     info = lines.join('\n');
     details.textContent = info;
@@ -70,49 +94,61 @@ export function renderSupport(root, cleanup, ctx) {
   select.addEventListener('change', build);
   build();
 
-  const message = (kind) => {
-    const what = text.value.trim();
-    return `Merhaba Evra destek,\n${kind ? `${kind}\n` : ''}${what || '(sorun açıklaması yok)'}\n\n${info}`;
-  };
-  const subject = () => {
-    const d = store.devices.get(select.value);
-    return `Evra destek · ${PLAN_NAMES[plan]}${d ? ` · ${deviceName(d)}` : ''}`;
-  };
-  const wa = (kind) => `https://wa.me/${SUPPORT.whatsapp}?text=${encodeURIComponent(message(kind))}`;
-
-  // Every support option, with the plan it comes with. `link` is filled in just before it opens.
-  const OPTIONS = [
-    { need: 'temel', iconName: 'mail', title: 'E-posta ile yaz', note: 'Bütün planlarda', link: () => `mailto:${SUPPORT.email}?subject=${encodeURIComponent(subject())}&body=${encodeURIComponent(message())}` },
-    { need: 'guvence', iconName: 'phone', title: 'Telefonla ara', note: 'Hızlı servis: uzaktan, aynı gün', link: () => `tel:${SUPPORT.phone.replace(/\s+/g, '')}` },
-    { need: 'premium', iconName: 'send', title: 'Öncelikli WhatsApp', note: 'Mesajınız sıranın önüne geçer', link: () => wa(''), blank: true },
-    { need: 'premium', iconName: 'home', title: 'Ev ziyareti iste', note: '48 saat içinde evinizdeyiz', link: () => wa('Ev ziyareti istiyorum.'), blank: true },
-    { need: 'premium', iconName: 'wrench', title: 'Bakım ziyareti ve pil değişimi', note: 'Yılda 1 kez, plana dahil', link: () => wa('Yıllık bakım ziyareti ve pil değişimi için gün almak istiyorum.'), blank: true },
-  ];
-
-  const tiles = OPTIONS.map((o) => {
-    const open = has(plan, o.need);
+  // The kinds, as a choice; the ones outside the plan are locked.
+  let chosen = 'message';
+  const tiles = KINDS.map((k) => {
     const body = [
-      h('span', { class: 'opt-icon' }, icon(o.iconName, 20)),
-      h('span', { class: 'opt-text' }, h('strong', null, o.title), h('small', null, o.note)),
+      h('span', { class: 'opt-icon' }, icon(k.iconName, 20)),
+      h('span', { class: 'opt-text' }, h('strong', null, k.title), h('small', null, k.note)),
     ];
-    if (!open) {
-      return h('a', {
-        class: 'support-opt locked', href: plansUrl(), target: '_blank', rel: 'noopener',
-        title: `${PLAN_NAMES[o.need]} planıyla açılır`,
-      }, body, h('span', { class: 'opt-lock' }, icon('lock', 30), h('small', null, `${PLAN_NAMES[o.need]} ile`)));
+    if (!has(plan, k.need)) {
+      const a = h('a', { class: 'support-opt locked', href: plansUrl(), target: '_blank', rel: 'noopener', title: `${PLAN_NAMES[k.need]} planıyla açılır` },
+        body, h('span', { class: 'opt-lock' }, icon('lock', 30), h('small', null, `${PLAN_NAMES[k.need]} ile`)));
+      // On a wall panel a new tab may not open: say where to upgrade too.
+      a.addEventListener('click', () => toast(`${k.title} ${PLAN_NAMES[k.need]} planıyla gelir. Planınızı evrasmarthome.com/abonelik.html adresinden yükseltebilirsiniz.`));
+      return a;
     }
-    const a = h('a', { class: 'support-opt', href: o.link(), ...(o.blank ? { target: '_blank', rel: 'noopener' } : {}) }, body);
-    const sync = () => { a.href = o.link(); };
-    a.addEventListener('pointerdown', sync);
-    a.addEventListener('focus', sync);
-    text.addEventListener('input', sync);
-    select.addEventListener('change', () => setTimeout(sync, 400));
-    return a;
+    const b = h('button', { class: 'support-opt', type: 'button', role: 'radio', 'aria-checked': 'false', 'data-kind': k.id }, body);
+    b.addEventListener('click', () => pick(k.id));
+    return b;
   });
+  const pick = (id) => {
+    chosen = id;
+    for (const t of tiles) if (t.dataset.kind) { const on = t.dataset.kind === id; t.classList.toggle('chosen', on); t.setAttribute('aria-checked', String(on)); }
+    phoneField.hidden = !KINDS.find((k) => k.id === id)?.phone;
+    send.textContent = id === 'message' ? 'Gönder' : `${KINDS.find((k) => k.id === id).title}: gönder`;
+  };
 
-  const copyBtn = h('button', { class: 'btn ghost small', type: 'button' }, 'Mesajı kopyala');
-  copyBtn.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(message()); toast('Mesaj kopyalandı'); } catch { toast('Kopyalanamadı', 'error'); }
+  const send = h('button', { class: 'btn primary', type: 'button' }, 'Gönder');
+  const status = h('p', { class: 'support-status', role: 'status' });
+  const form = h('div', { class: 'support-form' });
+  send.addEventListener('click', async () => {
+    const kind = KINDS.find((k) => k.id === chosen);
+    const message = text.value.trim();
+    if (chosen === 'message' && !message) { toast('Sorunu birkaç kelimeyle yazın.', 'error'); text.focus(); return; }
+    if (kind.phone && phone.value.replace(/\D/g, '').length < 10) { toast('Size ulaşabilmemiz için telefon numaranızı yazın.', 'error'); phone.focus(); return; }
+    if (!accountToken()) { status.textContent = 'Göndermek için Evra hesabınızla giriş yapın (Ayarlar → Hesap). Ya da aşağıdaki numaradan bize ulaşın.'; return; }
+    try { if (phone.value.trim()) localStorage.setItem(PHONE_KEY, phone.value.trim()); } catch { /* not kept */ }
+    send.disabled = true;
+    status.textContent = 'Gönderiliyor…';
+    await build();
+    const d = store.devices.get(select.value);
+    try {
+      const r = await sendSupport({
+        kind: chosen, message, phone: phone.value.trim(),
+        device: d ? deviceName(d) : '', details: info,
+        from: `${location.host} · ${matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ? 'uygulama' : 'tarayıcı'}`,
+      });
+      form.replaceChildren(h('div', { class: 'support-done' },
+        icon('check', 28),
+        h('strong', null, 'Talebiniz bize ulaştı'),
+        h('p', null, `Referans numaranız: ${r.ticket}`),
+        h('p', { class: 'muted' }, DONE[r.kind] || DONE.message),
+        r.priority ? h('p', { class: 'muted small' }, 'Premium: talebiniz öncelikli olarak işaretlendi.') : null));
+    } catch (e) {
+      send.disabled = false;
+      status.textContent = `Gönderilemedi: ${e.message} Aşağıdaki numaradan bize ulaşabilirsiniz.`;
+    }
   });
 
   const planLine = h('div', { class: 'support-plan' },
@@ -120,23 +156,26 @@ export function renderSupport(root, cleanup, ctx) {
     plan !== 'premium' ? h('a', { class: 'link small', href: plansUrl(), target: '_blank', rel: 'noopener' }, 'Planı yükselt', icon('right', 14)) : null);
 
   const contact = has(plan, 'guvence')
-    ? `Telefon: ${SUPPORT.phone} · E-posta: ${SUPPORT.email} · Hafta içi 9:00–18:00. Birçok ayarı uzaktan yapabiliyoruz.`
-    : `E-posta: ${SUPPORT.email} · Hafta içi 9:00–18:00.`;
+    ? h('p', { class: 'muted small' }, 'Telefon: ', h('a', { href: `tel:${SUPPORT.phone.replace(/\s+/g, '')}` }, SUPPORT.phone), ` · E-posta: ${SUPPORT.email} · Hafta içi 9:00–18:00.`)
+    : h('p', { class: 'muted small' }, `E-posta: ${SUPPORT.email} · Hafta içi 9:00–18:00.`);
+
+  form.append(
+    h('label', { class: 'field' }, h('span', null, 'Hangi cihaz?'), select),
+    h('label', { class: 'field' }, h('span', null, 'Sorun'), text),
+    h('div', { class: 'field' }, h('span', null, 'Nasıl yardımcı olalım?'), h('div', { class: 'support-opts', role: 'radiogroup' }, tiles)),
+    phoneField,
+    h('details', { class: 'support-more' }, h('summary', null, 'Mesaja eklenecek bilgiler'), details),
+    h('div', { class: 'btn-row' }, send),
+    status);
+  pick(wanted && devices.find((d) => d.id === wanted && isOffline(d)) && has(plan, 'guvence') ? 'call' : 'message');
 
   const offline = userDevices().filter(isOffline);
   root.replaceChildren(...[
-    h('p', { class: 'muted intro' }, 'Önce cihazın sayfasındaki "Bağlantı ve sorun giderme" adımlarını deneyin; çoğu sorun orada çözülür. Çözülmediyse bize yazın: cihazın bilgileri mesaja kendiliğinden eklenir.'),
+    h('p', { class: 'muted intro' }, 'Önce cihazın sayfasındaki "Bağlantı ve sorun giderme" adımlarını deneyin; çoğu sorun orada çözülür. Çözülmediyse buradan bize yazın: cihazın bilgileri talebe kendiliğinden eklenir.'),
     offline.length ? card({ title: 'Şu an ulaşılamayan cihazlar', iconName: 'wifi' },
       h('ul', { class: 'support-offline' }, offline.map((d) => h('li', null,
         h('span', null, deviceName(d), h('small', { class: 'muted' }, offlineSince(d) ? ` · ${relTime(offlineSince(d))} koptu` : '')),
         h('a', { class: 'link small', href: `#/devices/${encodeURIComponent(d.id)}` }, 'Sorun gider', icon('right', 14)))))) : null,
-    card({ title: 'Evra desteğine yazın', iconName: 'sos' },
-      planLine,
-      h('label', { class: 'field' }, h('span', null, 'Hangi cihaz?'), select),
-      h('label', { class: 'field' }, h('span', null, 'Sorun'), text),
-      h('details', { class: 'support-more' }, h('summary', null, 'Mesaja eklenecek bilgiler'), details),
-      h('div', { class: 'support-opts' }, tiles),
-      h('div', { class: 'btn-row' }, copyBtn),
-      h('p', { class: 'muted small' }, contact)),
+    card({ title: 'Evra desteğine yazın', iconName: 'sos' }, planLine, form, contact),
   ].filter(Boolean));
 }

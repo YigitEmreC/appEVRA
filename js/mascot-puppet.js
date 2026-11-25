@@ -399,6 +399,13 @@ export function createMascot() {
     clearTimeout(bubbleTimer);
     if (!text) { bubble.classList.remove('show'); return; }
     bubble.textContent = text;
+    // Keep the bubble on the screen: when peeking it opens to the mascot's left, so it may only
+    // be as wide as the room between the screen edge and the mascot (phones, large text).
+    bubble.style.maxWidth = '';
+    if (el.classList.contains('peek')) {
+      const room = el.getBoundingClientRect().left + 4 - 10;
+      if (room > 0 && room < 200) bubble.style.maxWidth = `${Math.max(100, Math.floor(room))}px`;
+    }
     bubble.classList.remove('show');
     void bubble.offsetWidth;
     bubble.classList.add('show');

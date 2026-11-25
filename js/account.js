@@ -99,3 +99,5 @@ export async function refreshMember() {
 }
 export const changePassword = (currentPassword, newPassword) => api('POST', '/me/password', { current: currentPassword, new: newPassword });
 // Admins and app access are managed in the website's database (evra_app_access), not in the app.
+// The Destek tab: a support request, e-mailed to Evra support by the website (webEVRA lib/app-support.js).
+export const sendSupport = (request) => api('POST', '/support', request);
