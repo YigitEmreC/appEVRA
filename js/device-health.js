@@ -153,7 +153,8 @@ const TIPS = {
   wifi: [
     'Elektriği var mı? Ampulde duvar anahtarı açık kalmalı; anahtar kapanınca ampul ağdan düşer.',
     'Elektriğini 10 saniye kesip geri verin (ampulde anahtarı kapatıp açın), 1 dakika bekleyip "Yeniden bağla"ya basın.',
-    'Gece modem yeniden başladıysa cihazın adresi (IP) değişmiş olabilir. Modemde bu cihaza sabit IP (DHCP rezervasyonu) verilirse bir daha olmaz; Evra destek bunu uzaktan ayarlayabilir.',
+    'Tapo / TP-Link cihazıysa telefondan Tapo uygulamasını açın: telefon ağda cihazı arar, gece "uyuyan" ampul uyanır ve geri gelir. "Yeniden bağla" da aynı aramayı yapar.',
+    'Gece modem yeniden başladıysa cihazın adresi (IP) değişmiş olabilir. Modemde bu cihaza sabit IP (DHCP rezervasyonu) verilirse bir daha olmaz. Modemine erişilemeyen (kiralık) evlerde kalıcı çözüm Evra Ağ Kutusu (evin içinde küçük bir router) ya da Zigbee ampullerdir; Destek sekmesinden bize yazın.',
     'Modemden uzaksa ya da arada kalın duvar varsa sinyal zayıftır; mesh Wi-Fi çözer.',
   ],
   zigbee: [
@@ -181,10 +182,19 @@ export function connectionCard(d, cleanup) {
   const status = h('div', { class: 'conn-status' });
   const entryLine = h('p', { class: 'muted small conn-entry' });
   const result = h('p', { class: 'muted small', hidden: true });
+  // First the connection steps for this kind of device, then this product's own known
+  // problems and fixes (js/catalog-details.js), then Evra support with everything filled in.
   const tips = h('details', { class: 'conn-tips' },
     h('summary', null, 'Olmazsa ne yapmalı?'),
-    h('ol', null, TIPS[kindOfLink(d, p)].map((t) => h('li', null, t))),
-    p?.troubleshooting?.length ? h('a', { class: 'link small', href: `#/devices/add/${p.id}` }, 'Bu ürünün bütün sorunları ve çözümleri', icon('right', 14)) : null);
+    h('ol', null, TIPS[kindOfLink(d, p)].map((t) => h('li', null, t))));
+  const known = p?.troubleshooting?.length ? h('details', { class: 'conn-tips known-issues' },
+    h('summary', null, `${p.name}: bilinen sorunlar ve çözümleri (${p.troubleshooting.length})`),
+    h('div', { class: 'issue-list' }, p.troubleshooting.map((t) => h('details', { class: 'issue' },
+      h('summary', null, t.problem),
+      h('p', null, t.solution))))) : null;
+  const support = h('div', { class: 'support-cta' },
+    h('div', null, h('strong', null, 'Hâlâ çözülmedi mi?'), h('small', { class: 'muted' }, 'Cihazın bilgileri mesaja kendiliğinden eklenir.')),
+    h('a', { class: 'btn small', href: `#/support?device=${encodeURIComponent(d.id)}` }, icon('sos', 15), 'Evra desteğine yaz'));
 
   const reconnectBtn = h('button', { class: 'btn primary', type: 'button' }, icon('refresh', 16), 'Yeniden bağla');
   const refreshBtn = h('button', { class: 'btn', type: 'button' }, 'Durumu yenile');
@@ -244,5 +254,5 @@ export function connectionCard(d, cleanup) {
     h('div', { class: 'btn-row' }, reconnectBtn, refreshBtn),
     result,
     h('p', { class: 'muted small' }, 'Yeniden bağla, Home Assistant\'ın bu cihazla bağlantısını baştan kurar; cihazın ayarları ve otomasyonları silinmez.'),
-    tips);
+    tips, known, support);
 }

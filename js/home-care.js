@@ -45,19 +45,29 @@ function reconnectTargets() {
 const ALERTS = [
   {
     id: 'evra_auto_reconnect', title: 'Kopan cihazları yeniden bağla',
-    hint: 'Bir cihaz 10 dakika ulaşılamaz kalırsa (gece modem yeniden başlayınca kopan ampuller gibi) sistem onu kendiliğinden yeniden bağlar; olmazsa size haber verir. Yeni cihaz ekledikten sonra bunu bir kez kapatıp açın.',
+    hint: 'Bir cihaz 5 dakika ulaşılamaz kalırsa (gece modem yeniden başlayınca kopan ampuller gibi) sistem onu kendiliğinden yeniden bağlar ve bir saat boyunca denemeye devam eder; olmazsa size haber verir. Yeni cihaz ekledikten sonra bunu bir kez kapatıp açın.',
     config() {
       const ids = reconnectTargets();
       if (!ids.length) throw new Error('Yeniden bağlanabilecek cihaz yok');
       return {
         alias: 'Evra: kopan cihazları yeniden bağla', description: 'Evra uygulaması kurdu (Ayarlar → Akıllı uyarılar).', mode: 'queued', max: 25,
-        triggers: [{ trigger: 'state', entity_id: ids, to: 'unavailable', for: { minutes: 10 } }],
+        triggers: [{ trigger: 'state', entity_id: ids, to: 'unavailable', for: { minutes: 5 } }],
         actions: [
-          { action: 'homeassistant.reload_config_entry', target: { entity_id: '{{ trigger.entity_id }}' }, continue_on_error: true },
-          { delay: { minutes: 3 } },
+          {
+            // Up to 5 tries: right away, then every ~12 minutes, stopping as soon as it's back.
+            repeat: {
+              sequence: [
+                { action: 'homeassistant.reload_config_entry', target: { entity_id: '{{ trigger.entity_id }}' }, continue_on_error: true },
+                { delay: { minutes: 2 } },
+                { action: 'homeassistant.update_entity', target: { entity_id: '{{ trigger.entity_id }}' }, continue_on_error: true },
+                { if: [{ condition: 'template', value_template: "{{ is_state(trigger.entity_id, 'unavailable') }}" }], then: [{ delay: { minutes: 10 } }] },
+              ],
+              until: [{ condition: 'template', value_template: "{{ not is_state(trigger.entity_id, 'unavailable') or repeat.index >= 5 }}" }],
+            },
+          },
           {
             if: [{ condition: 'template', value_template: "{{ is_state(trigger.entity_id, 'unavailable') }}" }],
-            then: tell('Cihaz bağlanamadı', '{{ trigger.to_state.name }} 13 dakikadır ulaşılamıyor; yeniden bağlamayı denedim ama gelmedi. Elektriğini kontrol edin ya da uygulamada cihazın sayfasından sorun gidermeye bakın.'),
+            then: tell('Cihaz bağlanamadı', '{{ trigger.to_state.name }} 1 saattir ulaşılamıyor; birkaç kez yeniden bağlamayı denedim ama gelmedi. Elektriğini kontrol edin; uygulamada cihazın sayfasından sorun gidermeye bakın ya da Destek\'ten bize yazın.'),
           },
         ],
       };

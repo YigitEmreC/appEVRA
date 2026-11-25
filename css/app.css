@@ -2401,3 +2401,15 @@ html.i18n-rtl body :is(h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, button, a, 
 .conn-tips { margin-top: 8px; }
 .conn-tips summary { cursor: pointer; font-weight: 700; }
 .conn-tips ol { margin: 8px 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: 13.5px; }
+
+/* Known issues on the device page and the Destek tab (js/device-health.js, js/views/support.js) */
+.known-issues .issue-list { display: grid; gap: 6px; margin-top: 8px; }
+.known-issues .issue { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--card-2); }
+.known-issues .issue summary { cursor: pointer; font-weight: 650; font-size: 13.5px; }
+.known-issues .issue p { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); }
+.support-cta { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.support-cta > div { display: flex; flex-direction: column; }
+.support-details { white-space: pre-wrap; font-size: 12.5px; background: var(--card-2); padding: 10px; border-radius: 10px; margin: 8px 0 0; }
+.support-more summary { cursor: pointer; font-weight: 650; margin: 6px 0; }
+.support-offline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.support-offline li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }

@@ -393,6 +393,19 @@ export function createLiveBackend(hassUrl) {
         await update();
         return { how: 'zigbee' };
       }
+      // TP-Link / Tapo: first look for it on the network, the way opening the Tapo app does
+      // (a bulb the router "forgot" at night answers and is reachable again). Home Assistant's
+      // own TP-Link setup does this search when it's started without an address; the setup
+      // is closed again right away, nothing is added.
+      if ((device?.identifiers || []).some((i) => i[0] === 'tplink')) {
+        let flowId = null;
+        try {
+          const flow = await rest('POST', 'config/config_entries/flow', { handler: 'tplink', show_advanced_options: false });
+          flowId = flow?.flow_id || null;
+          if (flowId && flow.step_id === 'user') await rest('POST', `config/config_entries/flow/${flowId}`, { host: '' });
+        } catch { /* only the reload then */ }
+        if (flowId) { try { await rest('DELETE', `config/config_entries/flow/${flowId}`); } catch { /* it times out by itself */ } }
+      }
       let reloaded = false;
       for (const entryId of device?.config_entries || []) {
         try { await rest('POST', `config/config_entries/entry/${entryId}/reload`); reloaded = true; } catch { /* the service below */ }
