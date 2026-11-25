@@ -2413,3 +2413,19 @@ html.i18n-rtl body :is(h1, h2, h3, h4, h5, h6, p, li, dt, dd, label, button, a, 
 .support-more summary { cursor: pointer; font-weight: 650; margin: 6px 0; }
 .support-offline { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .support-offline li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+/* Destek: options by plan; the ones outside the plan carry a heavy lock (js/views/support.js) */
+.support-plan { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
+.support-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 14px 0 10px; }
+.support-opt { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: inherit; text-decoration: none; overflow: hidden; }
+.support-opt:hover { background: var(--card-2); }
+.support-opt .opt-icon { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 11px; background: var(--card-2); }
+.support-opt .opt-text { display: flex; flex-direction: column; min-width: 0; }
+.support-opt .opt-text small { color: var(--muted); font-size: 12.5px; }
+.support-opt.locked > .opt-icon, .support-opt.locked > .opt-text { opacity: .45; filter: grayscale(1); }
+.support-opt.locked { padding-right: 84px; border-style: dashed; }
+.support-opt .opt-lock { position: absolute; top: 0; bottom: 0; right: 0; width: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-left: 1px dashed var(--line); background: var(--card-2); }
+.support-opt .opt-lock .icon { stroke-width: 3; }
+.support-opt .opt-lock .icon path { stroke-width: 3; }
+.support-opt .opt-lock small { font-weight: 800; font-size: 12px; text-align: center; line-height: 1.2; padding: 0 4px; }
+.support-opt.locked:hover .opt-lock { background: var(--card-3); }
