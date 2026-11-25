@@ -47,6 +47,7 @@ export function deviceNotifyCard(cleanup) {
     }
   });
   const testBtn = h('button', { class: 'btn small', type: 'button' }, icon('bell', 16), 'Deneme gönder');
+  const report = h('p', { class: 'muted small push-report', hidden: true, role: 'status' });
   testBtn.addEventListener('click', async () => {
     const title = 'Evra denemesi';
     const message = 'Bildirimler bu cihazda çalışıyor.';
@@ -59,8 +60,22 @@ export function deviceNotifyCard(cleanup) {
         }
         const targets = pushEntities();
         if (!targets.length) { toast('Home Assistant bu cihazı listeye ekleyemedi. Bildirimleri kapatıp yeniden açın; olmazsa Home Assistant → Ayarlar → Cihazlar ve Servisler → HTML5 → Yeniden yükle', 'error'); return; }
+        const sentAt = Date.now() / 1000;
+        const arrived = arrivalWatch(12000);
         await store.call('notify', 'send_message', { entity_id: targets }, { title, message });
-        toast(targets.length > 1 ? `${targets.length} Evra cihazına gönderildi` : 'Gönderildi');
+        testBtn.disabled = true;
+        report.hidden = false;
+        report.textContent = `${targets.length} kayıtlı cihaza gönderildi; bu cihaza ulaşması bekleniyor…`;
+        const ok = await arrived;
+        testBtn.disabled = false;
+        if (ok) {
+          report.textContent = 'Bildirim bu cihaza ulaştı. Ekranda görmediyseniz telefonun Rahatsız Etmeyin / Odak modunu ve Evra için bildirim ayarını kontrol edin.';
+        } else {
+          const why = await pushProblem(sentAt);
+          report.textContent = why
+            ? `Bildirim bu cihaza ulaşmadı. Home Assistant şunu yazıyor: ${why}`
+            : 'Bildirim bu cihaza ulaşmadı. Bildirimleri kapatıp yeniden açın (cihaz yeniden kaydolur). Olmazsa Home Assistant → Ayarlar → Sistem → Günlükler içinde "html5" arayın ya da Destek sekmesinden bize yazın.';
+        }
       } else if (await showHere(title, message)) toast('Gönderildi');
     } catch { /* store.call already said why */ }
   });
@@ -76,7 +91,31 @@ export function deviceNotifyCard(cleanup) {
   cleanup.push(() => document.removeEventListener('visibilitychange', onVisible));
   return card({ title: 'Bu cihaz', iconName: 'bell' },
     h('div', { class: 'setting-row' }, h('div', { class: 'setting-text' }, h('strong', null, 'Bildirimler'), hint), sw),
-    h('div', { class: 'btn-row' }, testBtn));
+    h('div', { class: 'btn-row' }, testBtn),
+    report);
+}
+
+// The service worker posts { type: 'evra-push' } when a notification arrives (sw.js).
+function arrivalWatch(ms) {
+  return new Promise((resolve) => {
+    if (!('serviceWorker' in navigator)) { resolve(false); return; }
+    const done = (v) => { clearTimeout(timer); navigator.serviceWorker.removeEventListener('message', on); resolve(v); };
+    const on = (e) => { if (e.data?.type === 'evra-push') done(true); };
+    const timer = setTimeout(() => done(false), ms);
+    navigator.serviceWorker.addEventListener('message', on);
+  });
+}
+
+// Home Assistant logs why a push didn't go out (the push service refused it, an expired
+// subscription, a key problem). Needs an admin account; otherwise nothing is found.
+async function pushProblem(since) {
+  try {
+    const log = await store.backend?.systemLog?.();
+    const hit = (log || []).find((e) => (e.timestamp || 0) >= since - 5
+      && /html5|webpush|pywebpush|vapid|push/i.test(`${e.name} ${[].concat(e.message || []).join(' ')}`));
+    if (!hit) return '';
+    return String([].concat(hit.message || [])[0] || hit.name).slice(0, 300);
+  } catch { return ''; }
 }
 
 // ---- add to the home screen ----

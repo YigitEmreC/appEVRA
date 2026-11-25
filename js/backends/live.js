@@ -555,6 +555,8 @@ export function createLiveBackend(hassUrl) {
       return rest('POST', 'notify.html5', { subscription, browser, name });
     },
     pushUnregister(subscription) { return rest('DELETE', 'notify.html5', { subscription }); },
+    // Home Assistant's log (Settings › System › Logs): errors and warnings, newest first.
+    async systemLog() { return (await send({ type: 'system_log/list' })) || []; },
     // A phone registered just now gets its notify entity when the integration (re)loads.
     async reloadPush() {
       const all = await send({ type: 'config_entries/get' });
