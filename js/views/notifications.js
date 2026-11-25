@@ -10,7 +10,7 @@ import { store } from '../store.js';
 import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
 import { card, toggle } from '../components.js';
-import { pushState, enablePush, disablePush, showHere, pushEntities } from '../push.js';
+import { pushState, enablePush, disablePush, showHere, pushEntities, waitForPushEntity } from '../push.js';
 import { alertsCard } from '../home-care.js';
 import { SCENES, saveScene, loadScenes } from '../scenes.js';
 import { userAutomations, linkedAutomations, automationLink, setAutomationLink, removeAutomationLink, refreshAutomationLinks } from '../notify-links.js';
@@ -52,8 +52,13 @@ export function deviceNotifyCard(cleanup) {
     const message = 'Bildirimler bu cihazda çalışıyor.';
     try {
       if (store.backend?.mode === 'live') {
+        if (!pushEntities().length) {
+          toast('Home Assistant bu cihazı listesine ekliyor…');
+          testBtn.disabled = true;
+          try { await waitForPushEntity(0); } finally { testBtn.disabled = false; }
+        }
         const targets = pushEntities();
-        if (!targets.length) { toast('Home Assistant bu cihazı henüz listelemedi; birazdan tekrar deneyin', 'error'); return; }
+        if (!targets.length) { toast('Home Assistant bu cihazı listeye ekleyemedi. Bildirimleri kapatıp yeniden açın; olmazsa Home Assistant → Ayarlar → Cihazlar ve Servisler → HTML5 → Yeniden yükle', 'error'); return; }
         await store.call('notify', 'send_message', { entity_id: targets }, { title, message });
         toast(targets.length > 1 ? `${targets.length} Evra cihazına gönderildi` : 'Gönderildi');
       } else if (await showHere(title, message)) toast('Gönderildi');

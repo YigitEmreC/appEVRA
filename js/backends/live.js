@@ -555,6 +555,15 @@ export function createLiveBackend(hassUrl) {
       return rest('POST', 'notify.html5', { subscription, browser, name });
     },
     pushUnregister(subscription) { return rest('DELETE', 'notify.html5', { subscription }); },
+    // A phone registered just now gets its notify entity when the integration (re)loads.
+    async reloadPush() {
+      const all = await send({ type: 'config_entries/get' });
+      for (const e of (all || []).filter((x) => x.domain === 'html5')) {
+        try { await rest('POST', `config/config_entries/entry/${e.entry_id}/reload`); } catch {
+          await send({ type: 'call_service', domain: 'homeassistant', service: 'reload_config_entry', service_data: { entry_id: e.entry_id } }, 30000);
+        }
+      }
+    },
 
     // ---- pairing ----
     permitJoin(seconds) {

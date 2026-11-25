@@ -71,9 +71,30 @@ export async function enablePush(name = deviceLabel()) {
     let sub = await reg.pushManager.getSubscription();
     if (sub && !sameKey(sub, key)) { await sub.unsubscribe().catch(() => {}); sub = null; }
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+    const before = pushEntities().length;
     await backend.pushRegister(sub.toJSON(), name);
+    saveSettings({ notifyHere: true });
+    await waitForPushEntity(before);
+    return;
   }
   saveSettings({ notifyHere: true });
+}
+
+// Home Assistant makes a notify entity for each registered device, but a device added while
+// the integration runs may only get it when the integration loads again. So: wait a few
+// seconds for it, and if it doesn't come, reload the integration and wait again.
+const until = async (test, ms) => {
+  for (const end = Date.now() + ms; Date.now() < end;) {
+    if (test()) return true;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  return test();
+};
+export async function waitForPushEntity(before = 0) {
+  const more = () => pushEntities().length > before;
+  if (await until(more, 5000)) return true;
+  try { await store.backend?.reloadPush?.(); } catch { /* not allowed here; it shows up later */ }
+  return until(() => pushEntities().length > 0, 15000);
 }
 
 // Browsers sometimes drop or renew a push subscription; Home Assistant would then
