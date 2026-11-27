@@ -7,6 +7,7 @@ import { mascot } from '../mascot.js';
 import { card } from '../components.js';
 import { deviceCardFor, kindIcon } from '../devices/cards.js';
 import { roomBadges, roomEntities, roomIcon, roomDevices, floorList, roomsByFloor, addFloor } from '../rooms.js';
+import { ambianceCard } from '../ambiance.js';
 
 export function renderDevices(root, cleanup, ctx) {
   const [first, second] = ctx.params;
@@ -263,18 +264,19 @@ function renderRoom(root, cleanup, areaId) {
       try { await store.backend.updateDevice(d.id, { area_id: areaId }); toast(`${deviceName(d)} ${a.name} odasına taşındı`); } catch (err) { toast(`Taşınamadı: ${err.message}`, 'error'); move.value = ''; }
     });
 
-    root.replaceChildren(
+    root.replaceChildren(...[
       backLink('#/devices?tab=rooms', 'Odalar'),
       h('header', { class: 'detail-head' },
         h('span', { class: 'detail-icon' }, icon(roomIcon(a.name), 26)),
         h('div', null, h('h2', null, a.name), h('p', { class: 'muted' }, `${devs.length} cihaz`)),
         h('div', { class: 'room-head-actions' }, rename, del)),
       card({ title: 'Şu an', iconName: 'radar' }, badges),
+      ambianceCard(a, local),
       card({ title: 'Bu odadaki cihazlar', iconName: 'devices' },
         devs.length ? h('div', { class: 'list' }, devs.map(deviceRow)) : h('p', { class: 'muted' }, 'Bu odada henüz cihaz yok.'),
         h('div', { class: 'room-move' }, others.length ? move : null,
           h('a', { class: 'btn small ghost', href: '#/devices/add' }, icon('plus', 14), 'Yeni cihaz ekle'))),
-      roomAdvanced(a));
+      roomAdvanced(a)].filter(Boolean));
   };
   // The room's floor: an advanced setting (most homes have one floor).
   function roomAdvanced(a) {
