@@ -10,7 +10,7 @@ import { accountPanel } from './account-ui.js';
 import { openLegal } from '../legal.js';
 import { locationCard } from './location-ui.js';
 import { backupCard } from '../home-care.js';
-import { updatesCard, systemCard } from './system.js';
+import { updatesCard, systemCard, piTempCard } from './system.js';
 import { wakeAvailable } from '../wake.js';
 import { getLang, setLang } from '../i18n.js';
 import { accountsUrl, useAccountsServer, WEBSITE_ACCOUNTS, LOCAL_ACCOUNTS, member, memberHome, canUseAssistant } from '../account.js';
@@ -156,6 +156,7 @@ export function renderSettings(root, cleanup, { reconnect }) {
     card({ title: 'Bağlantı', iconName: 'home' }, statusLine, homeNote, modeTabs, urlField, liveHelp, h('div', { class: 'btn-row' }, connectBtn, signOutBtn)),
     updatesCard(cleanup),
     systemCard(),
+    piTempCard(cleanup),
     locationCard(cleanup),
     backupCard(),
     lookCard(),

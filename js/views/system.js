@@ -12,7 +12,7 @@
 import { store } from '../store.js';
 import { h, toast } from '../util.js';
 import { icon } from '../icons.js';
-import { card } from '../components.js';
+import { card, lineChart } from '../components.js';
 
 // update.* supported_features (Home Assistant's UpdateEntityFeature)
 const F_INSTALL = 1, F_PROGRESS = 4, F_BACKUP = 8, F_NOTES = 16;
@@ -248,4 +248,121 @@ export function systemCard() {
     } catch { /* no Supervisor (not Home Assistant OS): only the buttons */ }
   });
   return card({ title: 'Sistem', iconName: 'cpu' }, body);
+}
+
+// ---- the Pi's temperature, as a chart ----
+
+const TEMP_RANGES = [{ label: '6 saat', hours: 6 }, { label: '24 saat', hours: 24 }, { label: '7 gün', hours: 168 }];
+
+// What a Raspberry Pi's processor temperature means for it (it slows itself down from 80–85 °C).
+function tempVerdict(t) {
+  if (t == null) return { cls: '', text: 'Okunamadı' };
+  if (t < 60) return { cls: 'ok', text: 'Normal' };
+  if (t < 75) return { cls: 'ok', text: 'Ilık, sorun yok' };
+  if (t < 80) return { cls: 'warn', text: 'Sıcak: kutunun hava almasına bakın' };
+  return { cls: 'bad', text: 'Çok sıcak: Ana Sistem kendini yavaşlatır, havalandırmayı kontrol edin' };
+}
+
+// Made-up but believable history for the demo home: warmer in the day, cooler at night.
+function demoTempRows(start, end) {
+  const rows = [];
+  for (let t = Date.parse(start); t <= Date.parse(end); t += 10 * 60 * 1000) {
+    const hour = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+    const v = 47 + 4 * Math.sin(((hour - 9) / 24) * 2 * Math.PI) + Math.sin(t / 7e5) * 1.2;
+    rows.push([new Date(t).toISOString(), v.toFixed(1)]);
+  }
+  return rows;
+}
+
+export function piTempCard(cleanup) {
+  const now = h('strong', { class: 'pi-temp-now' }, '–');
+  const verdict = h('span', { class: 'pi-temp-verdict' });
+  const head = h('div', { class: 'pi-temp-head' }, now, verdict);
+  const tabs = h('div', { class: 'segmented', role: 'tablist' });
+  const body = h('div', { class: 'pi-temp-chart' }, h('p', { class: 'muted small' }, 'Yükleniyor…'));
+  let range = TEMP_RANGES[1];
+  let sensor = null;
+  let alive = true;
+  let stopWatch = () => {};
+  const b = () => store.backend;
+  const demo = () => b()?.mode !== 'live';
+
+  const showNow = (v) => {
+    const t = Number.isFinite(parseFloat(v)) ? parseFloat(v) : null;
+    now.textContent = t == null ? '–' : `${t.toLocaleString('tr-TR', { maximumFractionDigits: 1 })} °C`;
+    const r = tempVerdict(t);
+    verdict.className = `pi-temp-verdict ${r.cls}`;
+    verdict.textContent = r.text;
+  };
+
+  async function draw() {
+    const end = new Date().toISOString();
+    const start = new Date(Date.now() - range.hours * 3600 * 1000).toISOString();
+    let rows;
+    try {
+      rows = demo() ? demoTempRows(start, end) : (await b().fetchHistory([sensor], start, end))[sensor] || [];
+    } catch (e) {
+      if (alive) body.replaceChildren(h('p', { class: 'muted small' }, `Geçmiş yüklenemedi: ${e.message}`));
+      return;
+    }
+    if (!alive) return;
+    if (demo()) showNow(rows.at(-1)?.[1]);
+    body.replaceChildren(lineChart({ series: [{ rows, cls: 'c-temp' }], start, end, unit: '°C', band: { min: 30, max: 70 }, height: 150 }));
+  }
+
+  const drawTabs = () => tabs.replaceChildren(...TEMP_RANGES.map((r) => h('button', {
+    type: 'button', role: 'tab', 'aria-selected': String(r === range), class: r === range ? 'active' : '',
+    onclick: () => { range = r; drawTabs(); draw(); },
+  }, r.label)));
+  drawTabs();
+
+  // No sensor yet: one button adds System Monitor and switches the temperature on.
+  function offerSetup() {
+    const btn = h('button', { class: 'btn small', type: 'button' }, icon('thermometer', 15), 'Sıcaklık ölçümünü aç');
+    btn.addEventListener('click', async () => {
+      if (!(await isHaAdmin())) { toast(NEED_ADMIN, 'error'); return; }
+      btn.disabled = true;
+      btn.textContent = 'Açılıyor…';
+      try {
+        sensor = await b().piTempSensor(true);
+        toast('Sıcaklık ölçümü açıldı. İlk değerler birkaç dakika içinde gelir.');
+        start();
+      } catch (e) {
+        toast(`Açılamadı: ${e.message}`, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Sıcaklık ölçümünü aç';
+      }
+    });
+    head.hidden = true;
+    body.replaceChildren(
+      h('p', { class: 'muted small' }, 'Ana Sistemin işlemci sıcaklığı henüz ölçülmüyor. Home Assistant içindeki Sistem İzleyici ile açılır; veriler evde kalır.'),
+      h('div', { class: 'btn-row' }, btn));
+  }
+
+  function start() {
+    head.hidden = false;
+    stopWatch();
+    stopWatch = store.watch([sensor], (s) => showNow(s?.state));
+    draw();
+  }
+
+  (async () => {
+    if (demo()) { draw(); return; }
+    if (store.status.state !== 'connected') {
+      body.replaceChildren(h('p', { class: 'muted small' }, 'Sıcaklık, uygulama Ana Sisteme bağlanınca görünür.'));
+      return;
+    }
+    try { sensor = await b()?.piTempSensor?.(false); } catch { sensor = null; }
+    if (!alive) return;
+    if (sensor) start(); else offerSetup();
+  })();
+
+  // The chart moves on by itself every 5 minutes.
+  const timer = setInterval(() => { if (sensor || demo()) draw(); }, 5 * 60 * 1000);
+  cleanup.push(() => { alive = false; clearInterval(timer); stopWatch(); });
+
+  return card({ title: 'Ana Sistem sıcaklığı', iconName: 'thermometer', extra: tabs },
+    head,
+    body,
+    h('p', { class: 'muted small' }, 'Raspberry Pi işlemcisi. 70 °C altı normaldir; 80 °C üstünde kendini yavaşlatır.'));
 }

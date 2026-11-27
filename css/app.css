@@ -2487,3 +2487,13 @@ button.support-opt { font: inherit; text-align: left; cursor: pointer; width: 10
 .amb-range { flex: 1; accent-color: var(--accent); }
 .amb-pct { min-width: 3em; text-align: end; font-variant-numeric: tabular-nums; }
 .amb-status:empty { display: none; }
+
+/* Settings › Ana Sistem sıcaklığı (js/views/system.js piTempCard) */
+.pi-temp-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; margin: 4px 0 10px; }
+.pi-temp-now { font-size: 28px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.pi-temp-verdict { font-size: 13px; font-weight: 650; padding: 3px 10px; border-radius: 999px; background: var(--card-2); color: var(--muted); }
+.pi-temp-verdict.ok { background: rgb(62 200 130 / 0.15); color: #3ec882; }
+.pi-temp-verdict.warn { background: rgb(245 165 36 / 0.18); color: #e0961c; }
+.pi-temp-verdict.bad { background: rgb(230 80 70 / 0.18); color: #e65046; }
+.pi-temp-chart .chart { width: 100%; height: auto; }
+.pi-temp-head[hidden], .pi-temp-verdict:empty { display: none; }

@@ -575,6 +575,31 @@ export function createLiveBackend(hassUrl) {
       if (!core && !os && !host) return null;
       return { core: core?.version, os: os?.version, board: os?.board, disk_total: host?.disk_total, disk_used: host?.disk_used };
     },
+    // The Pi's processor temperature sensor (System Monitor integration). With setup=true it adds the
+    // integration and switches the sensor on when needed (needs an admin login). Returns the entity id or null.
+    async piTempSensor(setup = false) {
+      const isTemp = (e) => e.platform === 'systemmonitor' && /processor_temperature|cpu_temp/i.test(`${e.unique_id} ${e.entity_id}`);
+      const list = async () => (await send({ type: 'config/entity_registry/list' })) || [];
+      let e = (await list()).find(isTemp);
+      if (e && !e.disabled_by) return e.entity_id;
+      if (!setup) return null;
+      if (!e) {
+        const flow = await rest('POST', 'config/config_entries/flow', { handler: 'systemmonitor', show_advanced_options: false });
+        // A form with nothing to fill in; "already_configured" means it was there already.
+        if (flow.type === 'form') await rest('POST', `config/config_entries/flow/${flow.flow_id}`, {});
+        for (let i = 0; i < 10 && !e; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          e = (await list()).find(isTemp);
+        }
+        if (!e) throw new Error('Bu cihaz işlemci sıcaklığını bildirmiyor');
+        if (!e.disabled_by) return e.entity_id;
+      }
+      await send({ type: 'config/entity_registry/update', entity_id: e.entity_id, disabled_by: null });
+      if (e.config_entry_id) {
+        try { await rest('POST', `config/config_entries/entry/${e.config_entry_id}/reload`); } catch { /* Home Assistant reloads it by itself in 30 s */ }
+      }
+      return e.entity_id;
+    },
     // Home Assistant's log (Settings › System › Logs): errors and warnings, newest first.
     async systemLog() { return (await send({ type: 'system_log/list' })) || []; },
     // A phone registered just now gets its notify entity when the integration (re)loads.
